@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cronos · bancada de testes</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+<main>
+  <header><div><span class="eyebrow">ASSISTENTE PESSOAL</span><h1>CRONOS<span class="dot">.</span></h1><p>Converse. Explore. Teste a memória e a voz.</p></div><span class="tag">VERSÃO DE TESTES</span></header>
+  <section class="panel connection" aria-labelledby="connection-title">
+    <div><h2 id="connection-title">Conexão</h2><p>Use o token do seu backend. Ele fica apenas nesta página e é apagado ao recarregar.</p></div>
+    <form id="connect-form"><label for="token">Token de acesso</label><div class="row"><input id="token" type="password" autocomplete="off" placeholder="CRONOS_API_TOKEN" required><button id="connect" type="submit">Verificar conexão</button></div></form>
+    <div id="status" class="status-grid" aria-live="polite"><span>Backend: não verificado</span><span>IA: não verificada</span><span>Voz: não verificada</span><span>Personalidade: não verificada</span></div>
+  </section>
+  <div id="notice" role="status" aria-live="polite" hidden></div>
+  <div class="workspace">
+    <section class="panel chat" aria-labelledby="chat-title">
+      <div class="section-heading"><div><span class="eyebrow">01 / CONVERSA</span><h2 id="chat-title">Fale com o Cronos</h2></div><button id="new-chat" class="secondary" type="button">Nova conversa</button></div>
+      <div id="messages" role="log" aria-live="polite" aria-label="Histórico da conversa"><p id="empty" class="empty">Comece com uma pergunta.<br><small>Exemplo: “O que Sócrates defendia?”</small></p></div>
+      <form id="chat-form"><label for="message">Sua mensagem</label><textarea id="message" maxlength="16000" rows="3" placeholder="Escreva sua mensagem…" required></textarea><div class="composer-footer"><span>Enter envia · Shift + Enter quebra linha</span><button id="send" type="submit">Enviar mensagem</button></div></form>
+    </section>
+    <aside>
+      <section class="panel" aria-labelledby="voice-title"><span class="eyebrow">02 / FISH AUDIO</span><h2 id="voice-title">Teste de voz</h2><p>Grave ou envie áudio para transcrever. Revise o texto antes de enviar à conversa.</p><button id="record" class="secondary" type="button">Gravar pelo microfone</button><label class="file-label" for="audio-file">Ou selecione um arquivo de áudio</label><input id="audio-file" type="file" accept="audio/*"><button id="transcribe" type="button" class="secondary">Transcrever arquivo</button><hr><label for="speech-text">Texto para sintetizar</label><textarea id="speech-text" rows="3" maxlength="5000" placeholder="Olá, sou o Cronos."></textarea><div class="row"><button id="use-reply" class="secondary" type="button">Usar resposta</button><button id="speak" type="button">Gerar voz</button></div><audio id="player" controls hidden></audio><p id="audio-status" class="hint" aria-live="polite">Microfone requer permissão do navegador. Chamadas ao Fish Audio podem consumir créditos.</p></section>
+      <section class="panel" aria-labelledby="memory-title"><span class="eyebrow">03 / OBSIDIAN</span><h2 id="memory-title">Memória da conversa</h2><p>Temas e caminhos das notas criadas pela última resposta. Os arquivos ficam no vault configurado no backend.</p><ul id="notes"><li>Nenhuma nota nesta conversa ainda.</li></ul><label for="session">ID da conversa</label><input id="session" type="text" placeholder="Gerado após a primeira mensagem" autocomplete="off"><button id="history" class="secondary" type="button">Carregar histórico</button><p class="hint">Guarde este ID para retomar a conversa. Carregar o histórico não lista todas as notas anteriores.</p></section>
+    </aside>
+  </div>
+  <footer>Controle do Windows permanece disponível pelo terminal nesta etapa. Esta interface testa conversa, histórico e áudio.</footer>
+</main>
+</body>
+</html>
