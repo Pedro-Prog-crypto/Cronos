@@ -1,3 +1,20 @@
+# Resultado real do teste legado: HTTP 400
+
+O usuário executou o teste isolado no notebook e recebeu HTTP 400. Isso comprova
+rejeição do pedido legado, não identifica sozinho o parâmetro nem comprova falta
+de créditos. A tentativa automática de s2.1-pro-free foi removida; o nome constava
+no código antigo, mas a disponibilidade atual na API não foi demonstrada.
+O exemplo .env voltou a não presumir um modelo.
+
+O teste isolado agora lê no máximo 8 KiB de erro e apresenta apenas os campos
+message/msg/detail/error reconhecidos em JSON. Chave, ID de voz, bearer e cadeias
+longas são ocultados; não mostra campos input nem salva corpo de resposta.
+Isso permite ver se o provedor rejeita modelo, formato ou outro parâmetro sem
+publicar credenciais. Os trechos abaixo registram etapas anteriores e não
+constituem confirmação de acesso ao modelo legado.
+
+---
+
 # Comparação do ZIP reenviado e teste isolado
 
 O arquivo CRONOS_V32_INTEGRADO_CORRIGIDO.zip reenviado contém 109 arquivos,

@@ -252,14 +252,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 return audio
             return await getattr(client.tts, method)(model=selected, **arguments)
 
-        try:
-            return await request(model)
-        except Exception as exc:
-            if getattr(exc, "status", None) != 402 or model == "s2.1-pro-free":
-                raise
-            result = await request("s2.1-pro-free")
-            active_fish_model = "s2.1-pro-free"
-            return result
+        return await request(model)
 
     @app.post("/voice/speech", dependencies=[Depends(authenticate)])
     async def speech(body: SpeechInput, request: Request):

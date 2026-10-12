@@ -53,3 +53,13 @@ def test_isolated_windows_voice_test_does_not_open_ui_or_expose_secrets(monkeypa
     assert state['format']=='wav' and state['reference_id']=='same-voice'
     assert state['played']==(b'wav',4)
     assert messages and 'dummy-secret' not in messages[0]
+
+
+def test_bad_request_exposes_sanitized_reason_not_key_or_voice():
+    def response(request):return httpx.Response(400,json={'detail':[{'msg':'Unsupported model: s2.1-pro-free; key=dummy-secret voice=same-voice','input':'PRIVATE_VALUE'}]})
+    with pytest.raises(APIError) as failure:
+        asyncio.run(synthesize_json('dummy-secret',text='Olá',reference_id='same-voice',transport=httpx.MockTransport(response)))
+    assert failure.value.status==400
+    assert 'Unsupported model: s2.1-pro-free' in failure.value.safe_detail
+    assert 'dummy-secret' not in failure.value.safe_detail and 'same-voice' not in failure.value.safe_detail
+    assert 'PRIVATE_VALUE' not in failure.value.safe_detail

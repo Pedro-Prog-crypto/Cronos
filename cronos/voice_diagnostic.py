@@ -26,7 +26,7 @@ def main():
     except Exception as exc:
         status=getattr(exc,'status',None)
         if status:
-            message=f'O pedido JSON legado com s2.1-pro-free falhou: HTTP {status}. O teste não abriu o holograma. Isso permite separar a falha de acesso à API da lentidão da interface.'
+            message=f'Pedido JSON legado, modelo s2.1-pro-free: HTTP {status}.\n\nMotivo informado pelo provedor: '+getattr(exc,'safe_detail','Motivo não disponível.')+'\n\nO holograma não foi aberto. '+('HTTP 400 indica rejeição do pedido, não confirma falta de créditos.' if status==400 else 'O status informado não permite concluir sozinho a causa ou o saldo da conta.')
         elif isinstance(exc,RuntimeError):
             message=str(exc)
         else:

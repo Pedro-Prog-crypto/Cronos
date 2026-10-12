@@ -63,7 +63,7 @@ def test_microphone_billing_error_identifies_asr_without_claiming_zero_balance(t
         assert 'PRIVATE' not in response.text
 
 
-def test_legacy_free_fallback_once_preserves_voice_and_sticks_after_success(tmp_path):
+def test_billing_error_does_not_guess_another_model(tmp_path):
     calls=[]
     class Fish:
         async def __aenter__(self):return self
@@ -72,18 +72,13 @@ def test_legacy_free_fallback_once_preserves_voice_and_sticks_after_success(tmp_
         def tts(self):return self
         async def convert(self,**kwargs):
             calls.append(kwargs)
-            if kwargs['model']=='s2-pro':raise APIError(402,'private')
-            return b'audio'
+            raise APIError(402,'private')
     settings=replace(Settings.from_env(),vault=tmp_path/'vault',token='test-token',fish_key='dummy',fish_model='s2-pro',fish_reference='same-voice')
     with TestClient(create_app(settings,fish_factory=Fish)) as client:
-        auth={'Authorization':'Bearer test-token'}
-        assert client.post('/voice/speech',headers=auth,json={'text':'Olá'}).status_code==200
-        assert client.get('/status',headers=auth).json()['fish_model_in_use']=='s2.1-pro-free'
-        assert client.post('/voice/speech',headers=auth,json={'text':'Outra fala'}).status_code==200
-    assert [call['model'] for call in calls]==['s2-pro','s2.1-pro-free','s2.1-pro-free']
-    assert calls[0]['reference_id']==calls[1]['reference_id']=='same-voice'
-    assert calls[0]['text']==calls[1]['text']=='Olá'
-    assert calls[0]['format']==calls[1]['format']=='mp3'
+        response=client.post('/voice/speech',headers={'Authorization':'Bearer test-token'},json={'text':'Olá'})
+        assert response.status_code==502
+    assert len(calls)==1 and calls[0]['model']=='s2-pro'
+    assert calls[0]['reference_id']=='same-voice'
 
 
 def test_real_sdk_can_send_legacy_model_identifier():

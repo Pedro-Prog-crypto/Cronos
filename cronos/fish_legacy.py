@@ -1,6 +1,32 @@
 """Compatibilidade limitada com o pedido JSON do cliente Fish legado."""
+import json
+import re
 import httpx
 from fishaudio.exceptions import APIError
+
+
+def safe_error_detail(raw, secrets=()):
+    try:
+        data=json.loads(raw)
+    except (ValueError, UnicodeError):
+        return 'O provedor não retornou um motivo JSON reconhecível.'
+    messages=[]
+    def collect(value, depth=0):
+        if depth>3 or len(messages)>=3:return
+        if isinstance(value,str):messages.append(value)
+        elif isinstance(value,list):
+            for item in value[:3]:collect(item,depth+1)
+        elif isinstance(value,dict):
+            for name in ('message','msg','detail','error'):
+                if name in value:collect(value[name],depth+1)
+    collect(data)
+    text=' | '.join(messages)
+    for secret in secrets:
+        if secret:text=text.replace(secret,'[oculto]')
+    text=re.sub(r'Bearer\s+[^\s"<>]+','Bearer [oculto]',text,flags=re.I)
+    text=re.sub(r'[A-Za-z0-9_-]{24,}(?:\.[A-Za-z0-9_-]+)*','[oculto]',text)
+    text=' '.join(text.split())[:500]
+    return text or 'O provedor não retornou um motivo JSON reconhecível.'
 
 
 async def synthesize_json(api_key, *, text, reference_id=None, format='mp3',
@@ -17,8 +43,13 @@ async def synthesize_json(api_key, *, text, reference_id=None, format='mp3',
             headers={'Authorization':'Bearer '+api_key,'model':'s2.1-pro-free','Content-Type':'application/json'},
             json=payload) as response:
             if response.status_code!=200:
-                # Do not copy server bodies/credentials to errors or logs.
-                raise APIError(response.status_code,'Pedido JSON legado recusado pelo provedor.')
+                raw=bytearray()
+                async for chunk in response.aiter_bytes():
+                    raw.extend(chunk[:max(0,8192-len(raw))])
+                    if len(raw)>=8192:break
+                error=APIError(response.status_code,'Pedido JSON legado recusado pelo provedor.')
+                error.safe_detail=safe_error_detail(bytes(raw),(api_key,reference_id))
+                raise error
             chunks=[];size=0
             async for chunk in response.aiter_bytes():
                 size+=len(chunk)
