@@ -80,7 +80,7 @@ class Gemini:
                     json={
                         "systemInstruction": {"parts": [{"text": system + "\n" + OUTPUT_RULES}]},
                         "contents": [{"role": "model" if m["role"] == "assistant" else "user",
-                                      "parts": [{"text": m["content"]}]} for m in messages],
+                                      "parts": [{"text": m["content"]}] + ([{"inlineData": {"mimeType": m["image"]["mime_type"], "data": m["image"]["data"]}}] if m.get("image") else [])} for m in messages],
                         "generationConfig": {"responseMimeType": "application/json",
                                              **({"maxOutputTokens": self.settings.output_tokens} if self.settings.output_tokens else {})},
                     },

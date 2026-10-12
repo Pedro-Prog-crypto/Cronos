@@ -110,7 +110,7 @@ class SecurityMiddleware:
                 self.failures.append(now)
                 denied()
                 return await JSONResponse({'detail': 'Autenticação necessária.'}, 401)(scope, receive, send)
-        limit = 10 * 1024 * 1024 if path == '/voice/transcribe' else 256 * 1024
+        limit = 10 * 1024 * 1024 if path == '/voice/transcribe' else 3 * 1024 * 1024 if path == '/vision/analyze' else 2 * 1024 * 1024 if path == '/vision/preview' else 256 * 1024
         try:
             length = int(headers.get('content-length', '0'))
             if length < 0:
@@ -126,8 +126,8 @@ class SecurityMiddleware:
                 additions = {
                     'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY',
                     'referrer-policy': 'no-referrer', 'cache-control': 'no-store',
-                    'permissions-policy': 'microphone=(self), camera=(), geolocation=()',
-                    'content-security-policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+                    'permissions-policy': 'microphone=(self), camera=(self), geolocation=()',
+                    'content-security-policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
                 }
                 event['headers'] = [(key, value) for key, value in event.get('headers', []) if key.decode().lower() not in additions]
                 event['headers'] += [(key.encode(), value.encode()) for key, value in additions.items()]

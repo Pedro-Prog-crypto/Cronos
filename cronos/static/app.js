@@ -59,7 +59,7 @@ function clearAudio() {
   audioUrl = null;
 }
 
-function renderTools(results) {
+function renderTools(results, target = $("messages")) {
   const resolved = new Set(results.filter(result => result.status !== "pending_confirmation").map(result => result.approval_id));
   for (const result of results) {
     if (result.status === "pending_confirmation" && resolved.has(result.approval_id)) continue;
@@ -80,14 +80,15 @@ function renderTools(results) {
         run("Processando sua decisão…", async () => {
           const response = await (await api(`/tools/approvals/${result.approval_id}`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({session_id: result.session_id || session, accepted})})).json();
           confirm.disabled = true; cancel.disabled = true;
-          text.textContent = labels[response.status] + (response.error ? `: ${response.error}` : "");
-          notice(response.status === "completed" ? "Ação concluída. Você pode continuar a conversa." : text.textContent, response.status === "failed");
+          if (target === $("module-approvals")) showModuleOutput(response);
+          text.textContent = (response.result?.status === "running" ? "Operação em andamento; consulte o resultado posteriormente" : labels[response.status]) + (response.error ? `: ${response.error}` : "");
+          notice(response.status === "completed" ? "Solicitação atendida. Confira o resultado; uma operação em andamento ainda não terminou." : text.textContent, response.status === "failed");
         });
       };
       confirm.addEventListener("click", () => resolve(true)); cancel.addEventListener("click", () => resolve(false));
       controls.append(confirm, cancel); card.append(controls);
     }
-    $("messages").append(card);
+    target.append(card);
   }
 }
 
@@ -109,6 +110,7 @@ $("connect-form").addEventListener("submit", event => {
     $("alert-voice").disabled = !result.fish_configured;
     if (!result.fish_configured) $("alert-voice").checked = false;
     startMonitor();
+    await loadModules();
     notice("Backend conectado. Envie uma mensagem e teste o áudio para validar os provedores.");
   });
 });
@@ -345,3 +347,180 @@ function startMonitor() {
 $("alert-voice").addEventListener("change", () => { if (!$("alert-voice").checked) { stopAlertAudio(); pendingAlertSpeech.clear(); } });
 document.addEventListener("visibilitychange", () => { if (!document.hidden) pollMonitor(); });
 window.addEventListener("beforeunload", () => { clearInterval(monitorTimer); stopAlertAudio(); });
+
+// Central de funções. Todas as respostas são renderizadas como texto, nunca HTML.
+const moduleNames = [
+  ["processing","Processamento"],["vision","Visão computacional"],["voice","Síntese de voz"],
+  ["language","Entendimento de linguagem"],["planning","Planejamento"],["tools","Ferramentas"],
+  ["integrations","Integrações"],["database","Banco de dados"],["internet","Internet"],
+  ["devices","Dispositivos"],["security","Segurança"],["monitoring","Monitoramento"]
+];
+let moduleCatalog = moduleNames.map(([id,name]) => ({id,name,description:"Conecte para consultar disponibilidade e usar as operações deste módulo."}));
+let selectedModule = null, selectedVision = null, visionUrl = null, toolCatalog = [], providerOptions = [];
+const checkLabels = {passed:"Verificação realizada",failed:"Verificação falhou",unavailable:"Indisponível",configuration_only:"Somente configuração; serviço ainda não testado"};
+const availabilityLabels = {available:"Disponível; valide a operação",configuration_required:"Requer configuração",windows_required:"Requer Windows local",disabled:"Desativado neste modo"};
+function showModuleOutput(result) { $("module-output").textContent = typeof result === "string" ? result : JSON.stringify(result,null,2); }
+function renderModules() {
+  $("modules-grid").replaceChildren();
+  for (const item of moduleCatalog) {
+    const button = document.createElement("button"); button.type="button"; button.className="module-button secondary";
+    button.dataset.moduleId = item.id;
+    const name=document.createElement("strong"); name.textContent=item.name;
+    const state=document.createElement("small"); state.textContent=item.last_check ? checkLabels[item.last_check.status] : availabilityLabels[item.availability] || "Ainda não verificado";
+    button.append(name,state); button.addEventListener("click",()=>{ if (!busy) openModule(item.id); });
+    $("modules-grid").append(button);
+  }
+}
+function openModule(id) {
+  selectedModule=id;
+  const item=moduleCatalog.find(item=>item.id===id);
+  $("module-detail").hidden=false; $("module-title").textContent=item.name; $("module-description").textContent=item.description;
+  document.querySelectorAll("[data-module]").forEach(element=>element.hidden=!element.dataset.module.split(" ").includes(id));
+  showModuleOutput(item.last_check || "Use as ações abaixo ou faça uma verificação. Nenhum sucesso foi presumido.");
+  $("module-check").textContent=["voice","vision"].includes(id) ? "Verificar configuração (sem chamada paga)" : "Verificar este módulo";
+}
+async function loadModules() {
+  moduleCatalog=(await (await api("/modules")).json()).modules; renderModules();
+}
+$("module-check").addEventListener("click",()=>run("Verificando módulo…",async()=>{
+  if (!selectedModule) return;
+  const result=await (await api(`/modules/${selectedModule}/check`,{method:"POST"})).json();
+  showModuleOutput(result); await loadModules();
+  notice(checkLabels[result.status],result.status==="failed" || result.status==="unavailable");
+}));
+function bindOperation(id, label, operation) {
+  $(id).addEventListener("click",()=>run(label,async()=>showModuleOutput(await operation())));
+}
+async function jsonApi(path,method="GET",body) {
+  return (await api(path,{method,...(body===undefined?{}:{headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})})).json();
+}
+bindOperation("module-resources","Consultando diagnóstico…",()=>jsonApi("/monitor"));
+$("module-voice").addEventListener("click",()=>$("voice-title").scrollIntoView({block:"start"}));
+$("module-chat").addEventListener("click",()=>{ $("chat-title").scrollIntoView({block:"start"}); $("message").focus(); });
+
+async function setVision(blob) {
+  selectedVision=null; $("vision-consent").checked=false;
+  if (!blob || !blob.size || blob.size>2*1024*1024) throw new Error("Escolha uma imagem PNG/JPEG de até 2 MiB.");
+  const response=await api("/vision/preview",{method:"POST",headers:{"Content-Type":blob.type||"application/octet-stream"},body:blob});
+  blob=await response.blob(); selectedVision=blob; $("vision-consent").checked=false;
+  if (visionUrl) URL.revokeObjectURL(visionUrl);
+  visionUrl=URL.createObjectURL(blob); $("vision-preview").src=visionUrl; $("vision-preview").hidden=false;
+}
+$("vision-file").addEventListener("change",()=>{
+  selectedVision=null; $("vision-consent").checked=false;
+  run("Validando a imagem localmente, sem envio à IA…",()=>setVision($("vision-file").files[0]));
+});
+$("vision-camera").addEventListener("click",()=>run("Solicitando câmera para uma fotografia…",async()=>{
+  if (!navigator.mediaDevices?.getUserMedia) throw new Error("Câmera indisponível nesta janela. Envie uma imagem.");
+  let stream;
+  try {
+    stream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280},height:{ideal:720}},audio:false});
+    const video=document.createElement("video"); video.srcObject=stream; video.muted=true;
+    await video.play();
+    const canvas=document.createElement("canvas"); canvas.width=video.videoWidth; canvas.height=video.videoHeight;
+    if (!canvas.width || !canvas.height) throw new Error("A câmera não forneceu imagem.");
+    canvas.getContext("2d").drawImage(video,0,0);
+    await setVision(await new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",.85)));
+    video.srcObject=null;
+    showModuleOutput("Fotografia capturada para revisão. A câmera foi desligada; nada foi enviado à IA.");
+  } finally { stream?.getTracks().forEach(track=>track.stop()); }
+}));
+$("vision-screen").addEventListener("click",()=>run("Capturando sua tela local para revisão…",async()=>{
+  const response=await api("/vision/screen",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({consent:true})});
+  await setVision(await response.blob()); showModuleOutput("Captura local disponível para revisão. Nada foi enviado à IA.");
+}));
+$("vision-analyze").addEventListener("click",()=>run("Analisando a imagem pelo Gemini…",async()=>{
+  if (!selectedVision || !$("vision-consent").checked) throw new Error("Escolha a imagem e autorize explicitamente seu envio ao Gemini.");
+  const encoded=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(",")[1]);reader.onerror=reject;reader.readAsDataURL(selectedVision);});
+  const result=await jsonApi("/vision/analyze","POST",{image_base64:encoded,prompt:$("vision-prompt").value,consent:true});
+  showModuleOutput(result); await loadModules(); notice("Imagem analisada. Nenhuma ação no computador foi executada.");
+}));
+
+function renderMissions(missions) {
+  $("missions-list").replaceChildren();
+  for (const mission of missions) {
+    const card=document.createElement("article"); card.className="mission-card";
+    const title=document.createElement("h4"); title.textContent=mission.plan.title;
+    const objective=document.createElement("p"); objective.textContent=mission.objective;
+    card.append(title,objective);
+    mission.plan.steps.forEach((step,index)=>{
+      const label=document.createElement("label"); label.className="monitor-voice";
+      const checkbox=document.createElement("input"); checkbox.type="checkbox"; checkbox.checked=step.done;
+      const text=document.createElement("span"); text.textContent=step.title;
+      checkbox.addEventListener("change",async()=>{
+        checkbox.disabled=true;
+        try { await jsonApi(`/missions/${mission.id}/steps/${index}`,"POST",{done:checkbox.checked}); }
+        catch(error) {checkbox.checked=!checkbox.checked;notice(error.message,true);}
+        finally {checkbox.disabled=false;}
+      });
+      label.append(checkbox,text);card.append(label);
+    });
+    const hint=document.createElement("p");hint.className="hint";hint.textContent="As caixas registram etapas concluídas por você; o plano não executa ações automaticamente.";
+    card.append(hint);$("missions-list").append(card);
+  }
+}
+async function createMission(use_ai) {
+  const result=await jsonApi("/missions","POST",{objective:$("mission-objective").value,
+    steps:$("mission-steps").value.split("\n").filter(value=>value.trim()),use_ai});
+  renderMissions([result]); showModuleOutput("Plano salvo. Retomar planos recupera seu progresso após reiniciar.");await loadModules();
+}
+$("mission-manual").addEventListener("click",()=>run("Salvando plano…",()=>createMission(false)));
+$("mission-ai").addEventListener("click",()=>run("Solicitando plano à IA…",()=>createMission(true)));
+bindOperation("missions-load","Carregando planos…",async()=>{const result=await jsonApi("/missions");renderMissions(result.missions);return `${result.missions.length} plano(s) carregado(s).`;});
+
+function updateToolSchema() {
+  const tool=toolCatalog.find(tool=>tool.name===$("tool-name").value);
+  $("tool-schema").textContent=tool?JSON.stringify(tool.parameters,null,2):"";
+  $("tool-description").textContent=tool?`${tool.description} ${tool.requires_confirmation?"Exige confirmação humana.":""}`:"";
+}
+bindOperation("tools-load","Carregando ferramentas…",async()=>{
+  const result=await jsonApi("/tools");toolCatalog=result.tools;
+  $("tool-name").replaceChildren(...toolCatalog.map(tool=>{const option=document.createElement("option");option.value=tool.name;option.textContent=tool.name;return option;}));
+  updateToolSchema();return `${toolCatalog.length} ferramenta(s) disponíveis.`;
+});
+$("tool-name").addEventListener("change",updateToolSchema);
+async function executeTool(name,args) {
+  const result=await jsonApi("/tools/execute","POST",{name,arguments:args,session_id:session});
+  session=result.session_id;$("session").value=session;showModuleOutput(result);
+  if (result.status==="pending_confirmation") renderTools([result],$("module-approvals"));
+  return result;
+}
+bindOperation("tool-execute","Solicitando ferramenta…",async()=>{
+  let args;try{args=JSON.parse($("tool-arguments").value);}catch{throw new Error("Os argumentos precisam ser JSON válido.");}
+  if (!$("tool-name").value) throw new Error("Carregue e selecione uma ferramenta.");
+  return executeTool($("tool-name").value,args);
+});
+
+bindOperation("providers-load","Consultando provedores…",async()=>{
+  const result=await jsonApi("/providers");
+  providerOptions=result.providers;
+  $("provider-select").replaceChildren(...result.providers.map(provider=>{const option=document.createElement("option");option.value=provider.id;option.textContent=`${provider.id} · ${provider.model}${provider.configured?"":" · falta configuração"}`;option.disabled=!provider.configured||!provider.allowed;return option;}));
+  $("provider-select").value=result.selected;
+  $("provider-model").value=providerOptions.find(item=>item.id===result.selected)?.model || "";
+  return result;
+});
+$("provider-select").addEventListener("change",()=>{ $("provider-model").value=providerOptions.find(item=>item.id===$("provider-select").value)?.model || ""; });
+bindOperation("provider-use","Selecionando provedor…",async()=>{
+  const result=await jsonApi("/providers/select","POST",{provider:$("provider-select").value,...($("provider-model").value.trim()?{model:$("provider-model").value.trim()}:{})});
+  await loadModules();
+  $("status").children[1].textContent=`IA: ${result.selected} · seleção alterada; valide uma geração`;
+  return result;
+});
+bindOperation("provider-models","Consultando catálogo de modelos…",async()=>jsonApi(`/providers/${encodeURIComponent($("provider-select").value)}/models`));
+bindOperation("memory-check","Consultando memória…",()=>jsonApi("/memory/status"));
+bindOperation("memory-sync","Sincronizando notas…",()=>jsonApi("/memory/sync","POST"));
+bindOperation("memory-search","Buscando na memória…",()=>jsonApi("/memory/search","POST",{query:$("memory-query").value,limit:8}));
+bindOperation("memory-read","Lendo nota…",()=>jsonApi(`/memory/note?path=${encodeURIComponent($("memory-path").value)}`));
+bindOperation("web-search","Pesquisando na internet…",()=>executeTool("web_search",{query:$("web-query").value,limit:5}));
+bindOperation("web-browser","Abrindo pesquisa no navegador local…",()=>executeTool("browser_search",{query:$("web-query").value}));
+bindOperation("devices-query","Consultando dispositivos locais…",()=>jsonApi("/devices"));
+bindOperation("browser-devices","Consultando dispositivos disponíveis na janela…",async()=>{
+  if (!navigator.mediaDevices?.enumerateDevices) throw new Error("Enumeração indisponível nesta janela.");
+  return (await navigator.mediaDevices.enumerateDevices()).map(device=>({kind:device.kind,label:device.label||"Nome oculto até autorizar o dispositivo"}));
+});
+bindOperation("wake-status","Consultando ouvinte local…",()=>jsonApi("/wake/status"));
+bindOperation("windows-audit","Auditando Windows sem alterar configurações…",()=>jsonApi("/windows/audit"));
+bindOperation("windows-jobs","Consultando operações…",()=>jsonApi("/windows/jobs"));
+document.querySelectorAll("[data-windows-action]").forEach(button=>button.addEventListener("click",()=>run("Preparando ação para sua confirmação…",()=>executeTool("windows_security_action",{action:button.dataset.windowsAction}))));
+window.addEventListener("beforeunload",()=>{if(visionUrl)URL.revokeObjectURL(visionUrl);});
+renderModules();

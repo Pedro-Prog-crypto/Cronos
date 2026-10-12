@@ -88,10 +88,12 @@ class Monitor:
 
     def response(self, path, status):
         component = {"/chat": "conversation", "/voice/speech": "voice", "/voice/stream": "voice",
-                     "/voice/transcribe": "voice", "/memory/sync": "memory"}.get(path)
+                     "/voice/transcribe": "voice", "/memory/sync": "memory",
+                     "/vision/analyze": "vision", "/missions": "planning"}.get(path)
         if not component or (status < 500 and not 200 <= status < 300):
             return
-        labels = {"conversation": "conversa com a IA", "voice": "voz", "memory": "sincronização da memória"}
+        labels = {"conversation": "conversa com a IA", "voice": "voz", "memory": "sincronização da memória",
+                  "vision": "análise de imagem", "planning": "planejamento"}
         with self.lock:
             self.component_status[component] = "failed" if status >= 500 else "last_request_ok"
             self.update("service_" + component, status >= 500, "warning",

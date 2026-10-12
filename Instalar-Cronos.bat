@@ -9,9 +9,14 @@ if not exist ".venv\Scripts\python.exe" (
     py -m venv .venv
     if errorlevel 1 goto :failed
 )
+".venv\Scripts\python.exe" -c "import struct,sys;sys.exit(0 if sys.version_info >= (3,11) and struct.calcsize('P') == 8 else 1)"
+if errorlevel 1 (
+    echo Instale Python 3.11 ou 3.12 de 64 bits e recrie o ambiente virtual.
+    goto :failed
+)
 ".venv\Scripts\python.exe" -m pip install --upgrade "pip>=26.2"
 if errorlevel 1 goto :failed
-".venv\Scripts\python.exe" -m pip install -e ".[desktop,search]"
+".venv\Scripts\python.exe" -m pip install -e ".[desktop,search,wake]"
 if errorlevel 1 goto :failed
 if not exist ".env" copy ".env.example" ".env" >nul
 echo Instalacao concluida. Configure suas chaves no arquivo .env.

@@ -10,7 +10,7 @@ import time
 from dotenv import load_dotenv
 
 
-def main():
+def _run():
     if sys.platform != "win32":
         raise SystemExit("A janela desktop do Cronos deve ser iniciada no Windows.")
     try:
@@ -59,6 +59,25 @@ def main():
         server.should_exit = True
         thread.join(timeout=5)
         listener.close()
+
+
+def main():
+    from cronos.wake import single_instance
+    with single_instance("CronosDesktop") as acquired:
+        if acquired:
+            _run()
+        elif sys.platform == "win32":
+            import ctypes
+            from ctypes import wintypes
+            user = ctypes.WinDLL("user32", use_last_error=True)
+            user.FindWindowW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR]
+            user.FindWindowW.restype = wintypes.HWND
+            user.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+            user.SetForegroundWindow.argtypes = [wintypes.HWND]
+            window = user.FindWindowW(None, "Cronos")
+            if window:
+                user.ShowWindow(window, 9)
+                user.SetForegroundWindow(window)
 
 
 if __name__ == "__main__":

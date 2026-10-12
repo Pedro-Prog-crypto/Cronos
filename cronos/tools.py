@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 from urllib.parse import quote_plus, urlsplit
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -72,6 +72,20 @@ class Council(Arguments):
     providers: list[str] = Field(min_length=1)
 
 
+class WindowsAction(Arguments):
+    action: Literal["open_security", "open_updates", "update_signatures", "quick_scan", "enable_firewall",
+                    "remove_legacy_rules", "prepare_voice", "start_voice", "stop_voice", "enable_voice_startup", "disable_voice_startup"]
+
+
+class MissionReference(Arguments):
+    id: UUID
+
+
+class MissionProgress(MissionReference):
+    index: int = Field(ge=0, le=29)
+    done: bool
+
+
 class ToolError(Exception):
     pass
 
@@ -128,7 +142,7 @@ class Registry:
             self.pending = {key: value for key, value in self.pending.items() if value["expires"] > time.monotonic()}
             self.pending[approval] = {"tool": tool, "arguments": parsed, "session": str(session), "expires": time.monotonic() + 300}
             return {"name": name, "status": "pending_confirmation", "approval_id": approval,
-                    "arguments": parsed.model_dump(), "session_id": str(session), "expires_in_seconds": 300}
+                    "arguments": parsed.model_dump(mode="json"), "session_id": str(session), "expires_in_seconds": 300}
         return await self._run(tool, parsed)
 
     async def resolve(self, approval, accepted, session):
@@ -150,12 +164,20 @@ def file_path(root, relative):
         raise ToolError(str(exc)) from exc
 
 
-def create_registry(settings, memory, monitor=None):
+def create_registry(settings, memory, monitor=None, windows=None, missions=None):
     registry = Registry()
     root = settings.files_root.resolve()
 
     def add(name, description, schema, handler, confirm=False):
         registry.register(Tool(name, description, schema, handler, confirm))
+
+    if missions is not None:
+        add("missions_list", "Lista planos salvos e etapas declaradas pelo usuário; não afirma que ações foram executadas automaticamente.", Arguments,
+            lambda args: missions.list())
+        add("missions_read", "Lê um plano salvo para ajudar a retomar o objetivo e o progresso real registrado.", MissionReference,
+            lambda args: missions.get(args.id))
+        add("missions_mark_step", "Marca uma etapa por declaração humana após confirmação; não executa o trabalho descrito na etapa.", MissionProgress,
+            lambda args: missions.mark(args.id, args.index, args.done), True)
 
     if monitor is not None:
         def diagnostics(args):
@@ -163,6 +185,15 @@ def create_registry(settings, memory, monitor=None):
             return {key: data[key] for key in ("state", "checked_at", "alerts", "resources", "components", "scope")}
         add("system_diagnostics", "Consulta o diagnóstico local e alertas reais do Cronos. Observe data e escopo: não certifica ausência de invasões e não substitui antivírus.",
             Arguments, diagnostics)
+
+    if windows is not None and windows.platform == "win32":
+        async def windows_audit(args):
+            return await windows.audit()
+        add("windows_audit", "Consulta Defender, firewall e riscos de configuração do Windows local. Apenas leitura, sem garantia de ausência de malware.", Arguments, windows_audit)
+        async def windows_action(args):
+            return await windows.action(args.action)
+        add("windows_security_action", "Ação limitada de segurança ou ouvinte de voz do Windows. Exige confirmação humana. Nunca aceita shell, scripts ou comandos arbitrários; resultados running não significam conclusão.", WindowsAction,
+            windows_action, True)
 
     add("obsidian_search", "Busca por conteúdo em todo o vault Obsidian; retorna fontes e trechos.", Query,
         lambda args: memory.search(args.query, args.limit))
@@ -225,8 +256,24 @@ def create_registry(settings, memory, monitor=None):
             from ddgs import DDGS
         except ImportError:
             raise ToolError('Busca web não instalada. Execute pip install -e ".[search]".')
-        with DDGS(timeout=12) as client:
-            return list(client.text(args.query, max_results=args.limit, backend="duckduckgo"))
+        # DDGS não herda HTTPS_PROXY automaticamente. Preserve o proxy e o
+        # certificado de confiança do ambiente; nunca desative verificação TLS.
+        proxy = os.getenv("DDGS_PROXY") or os.getenv("HTTPS_PROXY") or os.getenv("https_proxy")
+        certificates = os.getenv("SSL_CERT_FILE") or os.getenv("REQUESTS_CA_BUNDLE") or True
+        try:
+            with DDGS(timeout=12, proxy=proxy, verify=certificates) as client:
+                return list(client.text(args.query, max_results=args.limit, backend="duckduckgo"))
+        except Exception as exc:
+            category = str(exc).lower()
+            if any(term in category for term in ("certificate", "tls", "ssl")):
+                message = "Busca: falha de certificado. Confira certificados e proxy do ambiente; a verificação TLS permanece ativa."
+            elif "timeout" in category:
+                message = "Busca: tempo de resposta esgotado. Confira conexão e disponibilidade do buscador."
+            elif "no results" in category:
+                message = "Busca: o buscador não entregou resultados; pode haver bloqueio, limite ou nenhum resultado. Tente outra consulta e confira a rede."
+            else:
+                message = "Busca indisponível. Confira instalação, proxy, conexão e acesso ao DuckDuckGo."
+            raise ToolError(message) from None
 
     if settings.privacy_mode == 'online':
         add("web_search", "Pesquisa informações atuais na web e retorna URLs de fontes; exige o extra search.", Query, search)

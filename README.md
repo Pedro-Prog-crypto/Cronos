@@ -1,4 +1,4 @@
-# Cronos — núcleo reconstruído (v0.2)
+# Cronos — assistente Windows (v0.3)
 
 Programa Windows com backend independente da interface. A versão anterior
 foi analisada como referência de arquitetura; sua interface, imagens, avatar e
@@ -12,7 +12,7 @@ Leia [a análise do pacote antigo](docs/ANALISE_LEGADO.md), o
 ## Instalação Windows
 
 1. Extraia o ZIP inteiro numa pasta gravável.
-2. Abra `Instalar-Cronos.bat`. Ele instala o backend, a janela desktop e a busca.
+2. Abra `Instalar-Cronos.bat`. Ele instala backend, janela desktop, busca, imagens e dependências do ouvinte local.
 3. Configure `.env` no Bloco de Notas, sem compartilhar suas chaves.
 4. Abra `Iniciar-Cronos.bat`. Ele abre uma janela própria, sem navegador externo.
 
@@ -21,7 +21,7 @@ continua dependendo de Python; ainda não é um instalador `.exe` independente.
 O inicializador escolhe uma porta livre no loopback, gera um token temporário
 se necessário e conecta a janela automaticamente. Fechá-la encerra seu backend.
 O microfone na janela desktop ainda precisa de validação no Windows; o upload
-de áudio pode ser usado como alternativa. Não há coleta de áudio em segundo plano.
+de áudio pode ser usado como alternativa. O ouvinte em segundo plano só é ativado explicitamente no módulo Dispositivos; permanece separado da conversa.
 
 Ao atualizar, preserve `.env`, `config/providers.json` e o vault. Instale novamente
 as dependências pelo BAT. A memória da primeira versão é importada automaticamente,
@@ -31,7 +31,7 @@ Comandos equivalentes na pasta que contém `pyproject.toml`:
 
 ```bat
 py -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e ".[desktop,search]"
+.\.venv\Scripts\python.exe -m pip install -e ".[desktop,search,wake]"
 .\.venv\Scripts\python.exe -m cronos.desktop
 ```
 
@@ -117,9 +117,7 @@ conta. Não há fallback automático que esconda falhas ou mude sua voz.
 Há síntese MP3, transcrição e endpoint de áudio em streaming. A interface
 básica usa o MP3 completo; a interface definitiva pode consumir o streaming.
 A API permite selecionar referência e velocidade por solicitação. Ela não
-seleciona uma “voz sombria” com base em palavras do assunto. Gemini Live, wake
-word, interrupção de fala, STT offline e síntese local permanecem adaptações
-futuras; não foram transplantados sem teste do código antigo.
+seleciona uma “voz sombria” com base em palavras do assunto. Gemini Live, interrupção de fala, STT offline de conversa e síntese local permanecem adaptações futuras. O novo ouvinte de abertura é local e separado da conversa; não foi transplantado do código antigo.
 
 ## Ferramentas e integrações
 
@@ -195,9 +193,7 @@ pessoal, e o token permite acessar todo o vault/histórico autorizado.
 Testes cobrem memória grande, migração, arquivos manuais, aliases, falhas de
 exportação, orquestração, permissões, falhas das APIs e contratos de áudio.
 Chamadas de provedores são simuladas para não usar credenciais nem gerar cobranças.
-Validação real exige suas contas e o Windows. Câmera, controle geral de tela,
-WhatsApp, jogos, lembretes do sistema, dashboard remoto e processamento Office/PDF
-estão inventariados, mas não foram portados nem anunciados como funcionais.
+Validação real exige suas contas e o Windows. Foto explícita da câmera, captura de tela para revisão e ouvinte de abertura possuem implementação nova com testes simulados. Controle geral por cliques, WhatsApp, jogos, lembretes, dashboard remoto e processamento Office/PDF continuam fora do escopo implementado.
 
 ## Segurança e privacidade
 
@@ -215,3 +211,7 @@ não uma varredura de invasores. Funciona enquanto o Cronos está aberto e não
 substitui antivírus. A janela oferece a opção de falar novos alertas pelo Fish
 Audio, com possível consumo de créditos. Nenhuma chamada de IA é feita para o
 monitoramento periódico. Veja [o contrato para sua futura interface](docs/API.md#radar-e-alertas).
+
+## Central dos 12 módulos e integração Windows
+
+A bancada expõe os 12 módulos da imagem do usuário. Veja [funções, instalação do comando de voz e roteiro de validação real](docs/MODULOS_WINDOWS.md). Segurança inclui auditoria periódica de leitura e ações restritas com confirmação. Planejamento salva objetivos e etapas em SQLite; não executa os passos automaticamente. Visão analisa uma imagem explicitamente autorizada e não mantém a câmera ligada. O iniciador local reconhece “abrir Cronos” mesmo com a janela fechada, desde que o ouvinte esteja ativo. Prepare e ative pelo módulo Dispositivos; o início com Windows é opcional e removível.

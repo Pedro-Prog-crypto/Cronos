@@ -88,8 +88,10 @@ não autorizam alterações. Nunca executa uma ferramenta só porque uma nota ma
 | Abrir apps, pastas e navegador | Adaptadores Windows; execução gráfica pendente no Windows |
 | Pesquisa web | DDGS instalado; proxy respondeu 403 ao túnel; liberação do domínio salva no rascunho, ainda não aplicada |
 | Plugins | Contrato de entry points, ativação explícita e relatório de erros |
-| Wake word, PTT, interrupção, Gemini Live e áudio offline | Ainda não portados |
-| Tela/câmera, automação de cliques e controle geral do sistema | Ainda não portados |
+| Abertura por voz | Implementação nova opcional, local, em português; validação física Windows pendente |
+| PTT, interrupção, Gemini Live e conversa offline por áudio | Ainda não implementados |
+| Imagem/tela/câmera | Captura explícita para revisão e envio autorizado ao Gemini; testes simulados, validação física pendente |
+| Automação geral de cliques e controle irrestrito do sistema | Não implementados |
 | WhatsApp/Telegram, jogos e lembretes do sistema | Ainda não portados |
 | Processamento Office/PDF, mídia e dashboard remoto | Ainda não portados |
 | Interface, avatar, HUD e imagens antigas | Excluídos do reaproveitamento, conforme pedido |

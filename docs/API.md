@@ -137,7 +137,7 @@ Fish Audio. Transcrição não envia automaticamente o texto à conversa.
 
 Fluxo sugerido: gravar, transcrever, deixar o usuário revisar, enviar a `/chat`,
 sintetizar a resposta e reproduzir. O texto continua disponível se a voz falhar.
-Não há ainda protocolo Gemini Live, wake word ou interrupção de fala.
+Não há protocolo Gemini Live ou interrupção de fala. O comando de abertura por voz usa um ouvinte local separado, configurado em Dispositivos.
 
 ## Status e erros
 
@@ -188,8 +188,7 @@ ficar atrasado ou a conexão falhar. Falhas de autenticação param o polling at
 verificar novamente a conexão.
 
 O serviço monitora enquanto o processo está aberto. Não protege o Windows inteiro,
-não verifica Defender/firewall em tempo real, não monitora câmera/microfone nem
-reconhece perigos físicos. Não há notificações nativas com o programa fechado.
+No Windows, acrescenta consulta de Defender/firewall a cada 120 segundos. Não faz varredura contínua de malware nem reconhece perigos físicos. Câmera e ouvinte de microfone têm controles explícitos separados. Não há notificações nativas com o programa fechado.
 Eventos ficam somente na RAM (últimos 200) e reiniciar perde esse histórico; os
 alertas periódicos são recalculados. A mudança de personalidade precisa ser
 conferida pelo usuário e, após validada, reinício estabelece uma nova referência.
@@ -199,3 +198,32 @@ A ferramenta de leitura `system_diagnostics` permite ao modelo consultar o estad
 alertas ativos, recursos e escopo reais durante uma conversa. Não realiza varredura
 extra nem retorna o histórico inteiro de eventos. Em modo online, esse diagnóstico
 genérico entra no contexto enviado ao provedor quando a ferramenta é utilizada.
+
+## Central de módulos, visão, planos e Windows
+
+Todas as rotas abaixo exigem bearer token e conexão local.
+
+- `GET /modules`: os 12 módulos, disponibilidade e último teste em memória. `POST /modules/{id}/check`: teste explícito; retorna `passed`, `failed`, `unavailable` ou `configuration_only`, timestamp, escopo e evidência. Configuração não é chamada real. Linguagem gera texto; Integrações consulta modelos; Internet pesquisa externamente.
+- `POST /tools/execute`: `{name, arguments, session_id?}` usa exatamente o registro e suas permissões. `pending_confirmation` resolve apenas pelo endpoint humano já existente; argumentos `confirmed` não autorizam nada. Resultados entram no histórico de ferramentas.
+- `POST /providers/select`: `{provider,model?}` escolhe ID registrado/configurado/permitido apenas nesta execução. O modelo opcional altera Gemini/Ollama em RAM; outros adaptadores usam seu manifesto. Reiniciar restaura `.env`. Invalida os últimos testes de linguagem/integrações relativos ao provedor anterior.
+- `POST /vision/preview`: PNG/JPEG binário, até 2 MiB. Valida pixels e normaliza localmente antes de mostrar a imagem na janela; não envia ao provedor.
+- `POST /vision/screen`: `{consent:true}` retorna PNG local para revisão; somente Windows. Não envia à IA.
+- `POST /vision/analyze`: `{image_base64, prompt?, consent:true}`. PNG/JPEG até 2 MiB e seis milhões de pixels; metadados removidos. Requer Gemini em modo online. Retorna `{reply,provider,stored_image:false}`. Não executa ferramentas retornadas pelo modelo nem persiste imagem.
+- `POST /missions`: `{objective, steps:["etapa"], use_ai:false}` ou `{objective,use_ai:true}`. De 1 a 30 passos, planos persistentes em SQLite. Propostas da IA são validadas e todos os passos começam não concluídos.
+- `GET /missions`: até 100 planos recentes. `POST /missions/{uuid}/steps/{index}` com `{done:true|false}` registra declaração humana, sem executar ações.
+- `GET /windows/audit`: relatório de leitura e achados; somente Windows. Há consulta de fundo a cada 120 segundos no Windows.
+- `GET /windows/jobs`: último relatório e operações longas. Estado `running` ainda não terminou; `interrupted` indica acompanhamento encerrado, não cancelamento garantido da ação nativa.
+- `GET /devices`: inventário limitado do Windows; sem número de série, IP ou usuário.
+- `GET /wake/status`: dependências/modelo, estado do ouvinte e início automático. `listening` depende de heartbeat recente; não comprova precisão de reconhecimento.
+
+`windows_audit` é ferramenta de leitura. `windows_security_action` recebe somente
+`action` com uma opção enumerada: `open_security`, `open_updates`,
+`update_signatures`, `quick_scan`, `enable_firewall`, `remove_legacy_rules`,
+`prepare_voice`, `start_voice`, `stop_voice`, `enable_voice_startup`,
+`disable_voice_startup`. Todas passam por confirmação. Nenhuma recebe scripts,
+shell, URL de download ou comandos de IA. Preparação por download é bloqueada em
+modo local. Ações de segurança são delegadas ao Windows, com permissões reais.
+
+Requisitos, limites e teste físico pendente: [MODULOS_WINDOWS.md](MODULOS_WINDOWS.md).
+
+O assistente também pode consultar `missions_list` e `missions_read` para retomar planos. `missions_mark_step` exige confirmação humana; marcar uma etapa não executa o trabalho descrito.

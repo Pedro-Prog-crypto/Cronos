@@ -19,6 +19,10 @@ from cronos.integrations import provider_catalog, available_models
 from cronos.tools import create_registry, ToolError
 from cronos.security import SecurityMiddleware
 from cronos.monitor import Monitor
+from cronos.missions import Missions
+from cronos.features import Features
+from cronos.windows_system import WindowsSystem
+from cronos.control import install_routes
 
 
 class ChatInput(BaseModel):
@@ -42,7 +46,8 @@ class MemoryQuery(BaseModel):
     limit: int = Field(default=8, ge=1, le=100)
 
 
-def create_app(settings: Settings | None = None, provider=None, fish_factory=None):
+def create_app(settings: Settings | None = None, provider=None, fish_factory=None, vision_provider=None,
+               windows_runner=None, windows_platform=None):
     settings = settings or Settings.from_env()
 
     @asynccontextmanager
@@ -50,18 +55,27 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         app.state.memory = Memory(settings.vault)
         app.state.lock = asyncio.Lock()
         app.state.monitor = Monitor(settings, app.state.memory)
-        app.state.registry = create_registry(settings, app.state.memory, app.state.monitor)
+        app.state.windows = WindowsSystem(windows_runner, app.state.monitor, windows_platform, settings.privacy_mode)
+        app.state.missions = Missions(app.state.memory)
+        app.state.registry = create_registry(settings, app.state.memory, app.state.monitor, app.state.windows, app.state.missions)
         app.state.engine = Engine(settings, app.state.memory, app.state.registry, provider)
+        app.state.vision_provider = vision_provider
+        app.state.features = Features(app)
         await asyncio.to_thread(app.state.monitor.collect)
         task = asyncio.create_task(app.state.monitor.run())
+        windows_task = asyncio.create_task(app.state.windows.watch())
         try:
             yield
         finally:
             task.cancel()
             with suppress(asyncio.CancelledError):
                 await task
+            windows_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await windows_task
+            await app.state.windows.close()
 
-    app = FastAPI(title="Cronos", version="0.2.0", lifespan=lifespan, docs_url=None, redoc_url=None)
+    app = FastAPI(title="Cronos", version="0.3.0", lifespan=lifespan, docs_url=None, redoc_url=None)
     static = Path(__file__).parent / "static"
     app.mount("/static", StaticFiles(directory=static), name="static")
 
@@ -96,13 +110,15 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
 
     @app.get("/status", dependencies=[Depends(authenticate)])
     async def status():
+        current = app.state.engine.settings
         warning = None
         try:
-            configured = next((p['configured'] for p in provider_catalog(settings) if p['id'] == settings.provider), False)
+            configured = next((p['configured'] for p in provider_catalog(current) if p['id'] == current.provider), False)
         except ProviderError as exc:
             configured = bool(settings.gemini_key) if settings.provider == 'gemini' else settings.provider == 'ollama'
             warning = str(exc)
-        return {"provider": settings.provider, "gemini_configured": bool(settings.gemini_key),
+        return {"provider": current.provider, "gemini_configured": bool(settings.gemini_key),
+                "provider_model": next((item['model'] for item in provider_catalog(current) if item['id'] == current.provider), None) if warning is None else None,
                 "provider_configured": configured, "configuration_warning": warning,
                 "privacy_mode": settings.privacy_mode,
                 "fish_configured": bool(settings.fish_key) and settings.privacy_mode == 'online',
@@ -124,6 +140,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 raise HTTPException(503, str(exc)) from exc
             except (OSError, ValueError):
                 raise HTTPException(500, "Não foi possível ler ou salvar personalidade/memória.")
+        request.app.state.features.record("language", "passed", "Uma conversa foi processada e salva. Não certifica precisão de todas as respostas.")
         return result
 
     @app.get("/conversations/{session_id}", dependencies=[Depends(authenticate)])
@@ -139,14 +156,14 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
     @app.get("/providers", dependencies=[Depends(authenticate)])
     async def providers():
         try:
-            return {"providers": provider_catalog(settings)}
+            return {"providers": provider_catalog(app.state.engine.settings), "selected": app.state.engine.settings.provider}
         except ProviderError as exc:
             raise HTTPException(503, str(exc)) from exc
 
     @app.get("/providers/{provider_id}/models", dependencies=[Depends(authenticate)])
     async def models(provider_id: str):
         try:
-            return {"provider": provider_id, "models": await available_models(settings, provider_id)}
+            return {"provider": provider_id, "models": await available_models(app.state.engine.settings, provider_id)}
         except ProviderError as exc:
             raise HTTPException(503, str(exc)) from exc
 
@@ -199,7 +216,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         return AsyncFishAudio(api_key=settings.fish_key)
 
     @app.post("/voice/speech", dependencies=[Depends(authenticate)])
-    async def speech(body: SpeechInput):
+    async def speech(body: SpeechInput, request: Request):
         if not body.text.strip():
             raise HTTPException(422, "Informe um texto para sintetizar.")
         reference = body.reference_id or settings.fish_reference
@@ -209,6 +226,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 audio = await client.tts.convert(text=body.text, reference_id=reference or None,
                                                  model=settings.fish_model, format="mp3",
                                                  speed=body.speed or settings.fish_speed, latency=settings.fish_latency)
+            request.app.state.features.record("voice", "passed", "Síntese retornou áudio; reprodução física no dispositivo não foi certificada.")
             return Response(content=audio, media_type="audio/mpeg")
         except Exception as exc:
             raise HTTPException(502, fish_error(exc)) from exc
@@ -262,6 +280,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         except Exception as exc:
             raise HTTPException(502, fish_error(exc)) from exc
 
+    install_routes(app, authenticate)
     return app
 
 

@@ -15,6 +15,69 @@
     <form id="connect-form"><label for="token">Token de acesso</label><div class="row"><input id="token" type="password" autocomplete="off" placeholder="CRONOS_API_TOKEN" required><button id="connect" type="submit">Verificar conexão</button></div></form>
     <div id="status" class="status-grid" aria-live="polite"><span>Backend: não verificado</span><span>IA: não verificada</span><span>Voz: não verificada</span><span>Personalidade: não verificada</span></div>
   </section>
+  <section class="panel" aria-labelledby="modules-title">
+    <span class="eyebrow">CENTRAL DE FUNÇÕES</span><h2 id="modules-title">Os 12 módulos do Kronos</h2>
+    <p>Abra um módulo para usar suas funções. Disponível não significa validado no seu computador. As verificações mostram o que realmente foi testado.</p>
+    <div id="modules-grid" class="modules-grid"></div>
+    <section id="module-detail" hidden aria-labelledby="module-title">
+      <h3 id="module-title"></h3><p id="module-description"></p>
+      <button id="module-check" type="button">Verificar este módulo</button>
+      <p class="hint">Linguagem usa uma geração de IA; Integrações consulta o provedor; Internet faz uma busca. Podem consumir cota ou enviar consultas externas.</p>
+      <div id="module-controls">
+        <div data-module="processing monitoring"><button id="module-resources" class="secondary" type="button">Consultar radar e recursos</button></div>
+        <div data-module="vision">
+          <label for="vision-file">Imagem PNG/JPEG até 2 MiB</label><input id="vision-file" type="file" accept="image/png,image/jpeg">
+          <div class="row"><button id="vision-camera" class="secondary" type="button">Fotografar pela câmera</button><button id="vision-screen" class="secondary" type="button">Capturar tela para revisão (Windows)</button></div>
+          <img id="vision-preview" alt="Imagem escolhida para análise" hidden>
+          <label for="vision-prompt">Pergunta sobre a imagem</label><textarea id="vision-prompt" rows="2" maxlength="3000">Descreva o que observa e explique as incertezas.</textarea>
+          <label class="monitor-voice"><input id="vision-consent" type="checkbox"> Autorizo enviar esta imagem ao Gemini. Pode conter dados privados e consumir cota.</label>
+          <button id="vision-analyze" type="button">Analisar a imagem escolhida</button>
+        </div>
+        <div data-module="voice"><button id="module-voice" class="secondary" type="button">Abrir teste de voz e microfone</button></div>
+        <div data-module="language"><button id="module-chat" class="secondary" type="button">Abrir conversa</button></div>
+        <div data-module="planning">
+          <label for="mission-objective">Objetivo da missão</label><textarea id="mission-objective" maxlength="5000" rows="2" placeholder="Ex.: preparar um texto sobre Platão"></textarea>
+          <label for="mission-steps">Etapas manuais, uma por linha</label><textarea id="mission-steps" rows="3" placeholder="Definir a tese&#10;Pesquisar fontes&#10;Escrever e revisar"></textarea>
+          <div class="row"><button id="mission-manual" type="button">Salvar plano manual</button><button id="mission-ai" type="button">Planejar com IA (usa cota)</button><button id="missions-load" class="secondary" type="button">Retomar planos</button></div>
+          <div id="missions-list"></div>
+        </div>
+        <div data-module="tools">
+          <button id="tools-load" class="secondary" type="button">Carregar ferramentas disponíveis</button>
+          <label for="tool-name">Ferramenta</label><select id="tool-name"></select><p id="tool-description" class="hint"></p>
+          <label for="tool-arguments">Argumentos JSON (consulte o esquema abaixo)</label><textarea id="tool-arguments" rows="4">{}</textarea>
+          <pre id="tool-schema"></pre><button id="tool-execute" type="button">Solicitar ferramenta</button>
+        </div>
+        <div data-module="integrations">
+          <button id="providers-load" class="secondary" type="button">Carregar provedores</button><label for="provider-select">Provedor principal</label><select id="provider-select"></select>
+          <label for="provider-model">ID do modelo (Gemini/Ollama: pode escolher após consultar modelos)</label><input id="provider-model" type="text" maxlength="200">
+          <div class="row"><button id="provider-use" type="button">Usar nesta execução</button><button id="provider-models" class="secondary" type="button">Consultar modelos</button></div>
+          <p class="hint">Use apenas APIs oficiais. A seleção não altera o .env; reiniciar restaura sua configuração. Visão usa Gemini; voz usa Fish Audio.</p>
+        </div>
+        <div data-module="database">
+          <button id="memory-check" class="secondary" type="button">Consultar memória</button><button id="memory-sync" type="button">Sincronizar notas Obsidian</button>
+          <label for="memory-query">Buscar na memória</label><input id="memory-query" type="text" maxlength="3000"><button id="memory-search" type="button">Buscar notas</button>
+          <label for="memory-path">Caminho relativo de uma nota retornada pela busca</label><input id="memory-path" type="text"><button id="memory-read" class="secondary" type="button">Ler nota</button>
+        </div>
+        <div data-module="internet"><label for="web-query">Pesquisar na internet</label><input id="web-query" type="text" maxlength="3000"><button id="web-search" type="button">Pesquisar com fontes</button><button id="web-browser" class="secondary" type="button">Pesquisar no navegador (Windows)</button></div>
+        <div data-module="devices">
+          <button id="devices-query" class="secondary" type="button">Consultar dispositivos do Windows</button><button id="browser-devices" class="secondary" type="button">Consultar dispositivos da janela</button>
+          <hr><h4>Abrir Cronos por voz</h4><p>O ouvinte usa modelo local em português (download inicial de cerca de 31 MB). Escuta somente “abrir Cronos” ou “abrir Kronos”. Não envia áudio à nuvem. Depende do microfone e pode reconhecer incorretamente.</p>
+          <button id="wake-status" class="secondary" type="button">Consultar estado do ouvinte</button>
+          <div class="row"><button data-windows-action="prepare_voice" type="button">Preparar modelo de voz</button><button data-windows-action="start_voice" type="button">Ativar microfone do ouvinte</button><button data-windows-action="stop_voice" class="secondary" type="button">Parar microfone</button></div>
+          <div class="row"><button data-windows-action="enable_voice_startup" class="secondary" type="button">Iniciar ouvinte com Windows</button><button data-windows-action="disable_voice_startup" class="secondary" type="button">Remover início automático</button></div>
+        </div>
+        <div data-module="security">
+          <button id="windows-audit" type="button">Auditar Windows (somente leitura)</button><button id="windows-jobs" class="secondary" type="button">Consultar operações e último relatório</button>
+          <p>Correções sempre exigem confirmação. Não executamos comandos gerados pela IA, não desativamos proteções e não elevamos o Cronos automaticamente.</p>
+          <div class="row"><button data-windows-action="open_security" class="secondary" type="button">Abrir Segurança do Windows</button><button data-windows-action="open_updates" class="secondary" type="button">Abrir Windows Update</button></div>
+          <div class="row"><button data-windows-action="update_signatures" type="button">Atualizar definições do Defender</button><button data-windows-action="quick_scan" type="button">Verificação rápida do Defender</button></div>
+          <div class="row"><button data-windows-action="enable_firewall" class="secondary" type="button">Habilitar firewall (pode bloquear conexões)</button><button data-windows-action="remove_legacy_rules" class="secondary" type="button">Remover três regras do dashboard antigo</button></div>
+        </div>
+      </div>
+      <div id="module-approvals" aria-live="polite"></div>
+      <pre id="module-output" role="status" aria-live="polite"></pre>
+    </section>
+  </section>
   <div id="notice" role="status" aria-live="polite" hidden></div>
   <section class="panel monitor-panel" aria-labelledby="monitor-title">
     <div id="radar" class="radar paused" aria-hidden="true"><div class="radar-sweep"></div><span class="radar-center"></span></div>
@@ -39,7 +102,7 @@
       <section class="panel" aria-labelledby="memory-title"><span class="eyebrow">03 / OBSIDIAN</span><h2 id="memory-title">Memória da conversa</h2><p>Temas e caminhos das notas criadas pela última resposta. Os arquivos ficam no vault configurado no backend.</p><ul id="notes"><li>Nenhuma nota nesta conversa ainda.</li></ul><label for="session">ID da conversa</label><input id="session" type="text" placeholder="Gerado após a primeira mensagem" autocomplete="off"><button id="history" class="secondary" type="button">Carregar histórico</button><p class="hint">Guarde este ID para retomar a conversa. Carregar o histórico não lista todas as notas anteriores.</p></section>
     </aside>
   </div>
-  <footer>Controle do Windows permanece disponível pelo terminal nesta etapa. Esta interface testa conversa, histórico e áudio.</footer>
+  <footer>Janela de testes do Cronos · funções Windows agem no computador que executa o backend, não em um notebook conectado remotamente.</footer>
 </main>
 </body>
 </html>
