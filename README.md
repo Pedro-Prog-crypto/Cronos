@@ -198,3 +198,9 @@ Chamadas de provedores são simuladas para não usar credenciais nem gerar cobra
 Validação real exige suas contas e o Windows. Câmera, controle geral de tela,
 WhatsApp, jogos, lembretes do sistema, dashboard remoto e processamento Office/PDF
 estão inventariados, mas não foram portados nem anunciados como funcionais.
+
+## Segurança e privacidade
+
+Veja [a auditoria e seus limites](docs/SEGURANCA.md). Executáveis e plugins ficam desligados por padrão. `CRONOS_PRIVACY_MODE=local` restringe o assistente a modelos Ollama em loopback e desativa serviços externos, inclusive Fish Audio. A interface continua sendo a janela do programa Windows; a API local serve à comunicação interna.
+
+Com 4 GB de RAM, prefira modelos externos: você pode cadastrar vários provedores e trocar o modelo, mantendo a mesma personalidade e memória. Consultar vários modelos não funde seus parâmetros nem garante melhor resposta. O roteamento automático por tarefa é uma evolução futura; hoje a seleção é configurável e a consulta adicional exige confirmação. Assinaturas de chats não substituem credenciais de APIs oficiais.

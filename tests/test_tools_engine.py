@@ -150,7 +150,8 @@ def test_windows_executable_requires_confirmation_and_no_shell(environment, monk
     calls = []
     monkeypatch.setattr(module, "os", SimpleNamespace(name="nt", environ={}, startfile=lambda value: None))
     monkeypatch.setattr(module, "subprocess", SimpleNamespace(Popen=lambda argv, **kwargs: calls.append((argv, kwargs)) or SimpleNamespace(pid=123)))
-    registry = create_registry(settings, memory)
+    assert "desktop_run_executable" not in create_registry(settings, memory).tools
+    registry = create_registry(replace(settings, allow_executables=True), memory)
     (settings.files_root / "demo.exe").write_bytes(b"test-only-not-an-executable")
     session = uuid4()
     async def scenario():

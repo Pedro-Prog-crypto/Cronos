@@ -29,6 +29,12 @@ class Settings:
     enable_plugins: bool = False
     output_tokens: int | None = None
     provider_timeout: float = 180
+    privacy_mode: str = "online"
+    allow_executables: bool = False
+
+    def __post_init__(self):
+        if self.privacy_mode not in {"online", "local"}:
+            raise ValueError("CRONOS_PRIVACY_MODE deve ser online ou local.")
 
     @classmethod
     def from_env(cls):
@@ -57,4 +63,6 @@ class Settings:
             enable_plugins=os.getenv("CRONOS_ENABLE_PLUGINS", "0").casefold() in {"1", "true", "yes"},
             output_tokens=int(os.getenv("CRONOS_OUTPUT_TOKENS")) if os.getenv("CRONOS_OUTPUT_TOKENS") else None,
             provider_timeout=max(1, float(os.getenv("CRONOS_PROVIDER_TIMEOUT", "180"))),
+            privacy_mode=os.getenv("CRONOS_PRIVACY_MODE", "online"),
+            allow_executables=os.getenv("CRONOS_ALLOW_EXECUTABLES", "0").casefold() in {"1", "true", "yes"},
         )

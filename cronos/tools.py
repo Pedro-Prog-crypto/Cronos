@@ -16,6 +16,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from cronos.windows_agent import safe_extract
+from cronos.security import safe_path, SecurityError
 
 
 class Arguments(BaseModel):
@@ -143,12 +144,10 @@ class Registry:
 
 
 def file_path(root, relative):
-    path = (root / relative).resolve()
-    if not path.is_relative_to(root.resolve()):
-        raise ToolError("Caminho fora da pasta autorizada para arquivos.")
-    if any(part.startswith(".") for part in Path(relative).parts) or path.name.casefold() in {"api_keys.json", "fish_audio.json", "ai_council.json"}:
-        raise ToolError("Arquivos internos e credenciais não são acessíveis por esta ferramenta.")
-    return path
+    try:
+        return safe_path(root, relative)
+    except SecurityError as exc:
+        raise ToolError(str(exc)) from exc
 
 
 def create_registry(settings, memory):
@@ -222,7 +221,8 @@ def create_registry(settings, memory):
         with DDGS(timeout=12) as client:
             return list(client.text(args.query, max_results=args.limit, backend="duckduckgo"))
 
-    add("web_search", "Pesquisa informações atuais na web e retorna URLs de fontes; exige o extra search.", Query, search)
+    if settings.privacy_mode == 'online':
+        add("web_search", "Pesquisa informações atuais na web e retorna URLs de fontes; exige o extra search.", Query, search)
 
     async def council(args):
         from dataclasses import replace
@@ -238,7 +238,8 @@ def create_registry(settings, memory):
         return {"analyses": await asyncio.gather(*(consult(p) for p in dict.fromkeys(args.providers))),
                 "note": "Sem votação por palavras: avalie evidências e divergências. Concordância entre modelos não prova veracidade."}
 
-    add("consult_models", "Consulta modelos configurados para análises independentes. Use somente quando o usuário pedir múltiplas IAs; pode consumir créditos e envia a pergunta aos provedores escolhidos.", Council, council, True)
+    if settings.privacy_mode == 'online':
+        add("consult_models", "Consulta modelos configurados para análises independentes. Use somente quando o usuário pedir múltiplas IAs; pode consumir créditos e envia a pergunta aos provedores escolhidos.", Council, council, True)
     if os.name == "nt":
         def open_url(args):
             url = urlsplit(args.url)
@@ -266,9 +267,10 @@ def create_registry(settings, memory):
                 subprocess.Popen([str(executable)], shell=False)
             return {"opened": args.name}
 
-        add("browser_open", "Abre uma URL no navegador padrão do Windows.", URL, open_url)
-        add("browser_search", "Abre uma pesquisa no navegador padrão do Windows.", Query,
-            lambda args: open_url(URL(url="https://www.google.com/search?q=" + quote_plus(args.query))))
+        if settings.privacy_mode == 'online':
+            add("browser_open", "Abre uma URL no navegador padrão do Windows.", URL, open_url)
+            add("browser_search", "Abre uma pesquisa no navegador padrão do Windows.", Query,
+                lambda args: open_url(URL(url="https://www.google.com/search?q=" + quote_plus(args.query))))
         add("desktop_open_folder", "Abre uma pasta autorizada no Explorador do Windows.", Folder, open_folder)
         add("desktop_open_app", "Abre Notepad, calculadora, Explorador ou o vault no Obsidian.", AppName, open_app)
 
@@ -276,11 +278,17 @@ def create_registry(settings, memory):
             path = file_path(root, args.path)
             if not path.is_file() or path.suffix.casefold() != ".exe":
                 raise ToolError("Escolha um executável .exe existente dentro da pasta autorizada.")
-            process = subprocess.Popen([str(path), *args.arguments], cwd=path.parent, shell=False)
+            from cronos.integrations import specs
+            secret_names = {spec.key_env.upper() for spec in specs(settings) if spec.key_env}
+            secret_names |= {'GEMINI_API_KEY', 'FISH_API_KEY', 'CRONOS_API_TOKEN'}
+            clean_environment = {key: value for key, value in os.environ.items()
+                                 if key.upper() not in secret_names and not any(word in key.upper() for word in ('TOKEN', 'SECRET', 'PASSWORD', 'API_KEY'))}
+            process = subprocess.Popen([str(path), *args.arguments], cwd=path.parent, shell=False, env=clean_environment)
             return {"started": args.path, "pid": process.pid, "note": "Processo iniciado; isso não comprova conclusão da tarefa ou instalação."}
 
-        add("desktop_run_executable", "Inicia um .exe na pasta autorizada após confirmação humana do arquivo e argumentos. Não executa scripts ou shell.", Program, run_program, True)
-    if settings.enable_plugins:
+        if settings.allow_executables and settings.privacy_mode == 'online':
+            add("desktop_run_executable", "Inicia um .exe na pasta autorizada após confirmação humana do arquivo e argumentos. Não executa scripts ou shell.", Program, run_program, True)
+    if settings.enable_plugins and settings.privacy_mode == 'online':
         from importlib.metadata import entry_points
         for entry in entry_points(group="cronos.tools"):
             try:

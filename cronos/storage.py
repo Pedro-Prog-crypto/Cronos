@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID, uuid4
+from cronos.security import safe_path
 
 
 def fold(text):
@@ -73,10 +74,8 @@ class Memory:
             db.close()
 
     def path(self, folder, name):
-        path = self.vault / folder / name
-        if not path.resolve().is_relative_to(self.vault) or path.is_symlink():
-            raise ValueError("Caminho de memória inválido.")
-        return path
+        relative = (Path(folder) / name).as_posix()
+        return safe_path(self.vault, relative, private=True)
 
     def _import_json_sessions(self):
         # Compatibilidade com a primeira base, sem apagar os arquivos originais.
@@ -194,7 +193,7 @@ class Memory:
     def read_note(self, relative):
         if not relative.lower().endswith(".md") or any(part.startswith(".") for part in Path(relative).parts):
             raise ValueError("Informe o caminho relativo de uma nota Markdown pública do vault.")
-        return self.path("", relative).read_text(encoding="utf-8-sig")
+        return safe_path(self.vault, relative).read_text(encoding="utf-8-sig")
 
     def _topic(self, db, title, aliases):
         title = " ".join(title.split())

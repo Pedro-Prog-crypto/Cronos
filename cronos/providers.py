@@ -64,6 +64,8 @@ class Gemini:
         self.settings = settings
 
     async def reply(self, system, messages):
+        if self.settings.privacy_mode != 'online':
+            raise ProviderError("Modo local: Gemini está desabilitado. Selecione um modelo Ollama local.")
         key = self.settings.gemini_key.strip()
         if not key:
             raise ProviderError("Configure GEMINI_API_KEY para usar o Gemini.")
@@ -135,9 +137,17 @@ class Ollama:
         self.settings = settings
 
     async def reply(self, system, messages):
+        from cronos.integrations import checked_url
+        from cronos.security import local_endpoint, SecurityError
+        base = checked_url(self.settings.ollama_url)
+        if self.settings.privacy_mode != 'online':
+            try:
+                local_endpoint(base)
+            except SecurityError as exc:
+                raise ProviderError(str(exc)) from exc
         try:
             async with httpx.AsyncClient(timeout=self.settings.provider_timeout) as client:
-                response = await client.post(self.settings.ollama_url.rstrip("/") + "/api/chat", json={
+                response = await client.post(base + "/api/chat", json={
                     "model": self.settings.ollama_model, "stream": False, "format": "json",
                     **({"options": {"num_predict": self.settings.output_tokens}} if self.settings.output_tokens else {}),
                     "messages": [{"role": "system", "content": system + "\n" + OUTPUT_RULES}, *messages],

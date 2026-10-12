@@ -16,6 +16,7 @@ from cronos.providers import ProviderError
 from cronos.engine import Engine, TurnError
 from cronos.integrations import provider_catalog, available_models
 from cronos.tools import create_registry, ToolError
+from cronos.security import SecurityMiddleware
 
 
 class ChatInput(BaseModel):
@@ -50,7 +51,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         app.state.engine = Engine(settings, app.state.memory, app.state.registry, provider)
         yield
 
-    app = FastAPI(title="Cronos", version="0.2.0", lifespan=lifespan)
+    app = FastAPI(title="Cronos", version="0.2.0", lifespan=lifespan, docs_url=None, redoc_url=None)
     static = Path(__file__).parent / "static"
     app.mount("/static", StaticFiles(directory=static), name="static")
 
@@ -61,11 +62,12 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
     if settings.origins:
         app.add_middleware(CORSMiddleware, allow_origins=list(settings.origins),
                            allow_methods=["GET", "POST"], allow_headers=["Authorization", "Content-Type"])
+    app.add_middleware(SecurityMiddleware, settings=settings)
 
     async def authenticate(authorization: str | None = Header(default=None)):
         if not settings.token:
             raise HTTPException(503, "Configure CRONOS_API_TOKEN antes de acessar os dados.")
-        if not secrets.compare_digest(authorization or "", "Bearer " + settings.token):
+        if not secrets.compare_digest((authorization or "").encode('utf-8'), ("Bearer " + settings.token).encode('utf-8')):
             raise HTTPException(401, "Autenticação necessária.")
 
     @app.get("/health")
@@ -82,7 +84,8 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
             warning = str(exc)
         return {"provider": settings.provider, "gemini_configured": bool(settings.gemini_key),
                 "provider_configured": configured, "configuration_warning": warning,
-                "fish_configured": bool(settings.fish_key),
+                "privacy_mode": settings.privacy_mode,
+                "fish_configured": bool(settings.fish_key) and settings.privacy_mode == 'online',
                 "custom_voice_configured": bool(settings.fish_reference),
                 "personality_available": settings.personality.is_file()}
 
@@ -166,6 +169,8 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         return request.app.state.memory.stats()
 
     async def fish_client():
+        if settings.privacy_mode != 'online':
+            raise HTTPException(503, "Modo local: Fish Audio está desabilitado porque envia áudio/texto a um serviço externo.")
         if not settings.fish_key:
             raise HTTPException(503, "Configure FISH_API_KEY.")
         if fish_factory:

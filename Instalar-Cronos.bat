@@ -9,6 +9,8 @@ if not exist ".venv\Scripts\python.exe" (
     py -m venv .venv
     if errorlevel 1 goto :failed
 )
+".venv\Scripts\python.exe" -m pip install --upgrade "pip>=26.2"
+if errorlevel 1 goto :failed
 ".venv\Scripts\python.exe" -m pip install -e ".[desktop,search]"
 if errorlevel 1 goto :failed
 if not exist ".env" copy ".env.example" ".env" >nul

@@ -69,7 +69,7 @@ function renderTools(results) {
     card.append(title, text);
     if (result.status === "pending_confirmation") {
       const details = document.createElement("pre"); details.textContent = JSON.stringify(result.arguments, null, 2);
-      details.style.whiteSpace = "pre-wrap"; card.append(details);
+      card.append(details);
       const controls = document.createElement("div"); controls.className = "row";
       const confirm = document.createElement("button"); confirm.textContent = "Confirmar ação";
       const cancel = document.createElement("button"); cancel.textContent = "Cancelar"; cancel.className = "secondary";

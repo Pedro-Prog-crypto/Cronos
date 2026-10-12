@@ -6,7 +6,7 @@ from dataclasses import replace
 from urllib.parse import urlsplit
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from cronos.providers import Gemini, Ollama, OUTPUT_RULES, ProviderError, parse_reply
 
@@ -20,6 +20,13 @@ class ProviderSpec(BaseModel):
     key_env: str = Field(default="", pattern=r"^([A-Za-z_][A-Za-z0-9_]*)?$")
     max_output_tokens: int | None = Field(default=None, ge=128)
     timeout_seconds: float = Field(default=180, ge=1)
+
+    @field_validator('key_env')
+    @classmethod
+    def protect_internal_variables(cls, value):
+        if value.upper().startswith('CRONOS_') or value.upper() in {'PATH', 'HOME', 'USERPROFILE', 'SYSTEMROOT'}:
+            raise ValueError('Não use variáveis internas como credencial de um provedor.')
+        return value
 
 
 def specs(settings):
@@ -94,6 +101,8 @@ def configured_provider(settings, provider_id=None):
     spec = next((entry for entry in specs(settings) if entry.id == provider_id), None)
     if not spec:
         raise ProviderError("Provedor não registrado. Configure seu adaptador em config/providers.json.")
+    if settings.privacy_mode != 'online' and spec.kind != 'ollama':
+        raise ProviderError("Modo local: provedores externos estão desabilitados.")
     if spec.kind == "gemini":
         return Gemini(replace(settings, gemini_model=spec.model, gemini_key=os.getenv(spec.key_env, ""),
                               output_tokens=spec.max_output_tokens, provider_timeout=spec.timeout_seconds))
@@ -108,6 +117,9 @@ def provider_catalog(settings):
                {"id": "ollama", "kind": "ollama", "model": settings.ollama_model, "configured": True}]
     entries.extend({"id": spec.id, "kind": spec.kind, "model": spec.model,
                     "configured": not spec.key_env or bool(os.getenv(spec.key_env))} for spec in specs(settings))
+    for entry in entries:
+        entry['allowed'] = settings.privacy_mode == 'online' or entry['kind'] == 'ollama'
+        entry['configured'] = entry['configured'] and entry['allowed']
     return entries
 
 
@@ -128,6 +140,14 @@ async def available_models(settings, provider_id):
             base = "https://generativelanguage.googleapis.com/v1beta"
     if kind in {"gemini", "anthropic"} and not key:
         raise ProviderError("Configure a chave do provedor antes de listar modelos.")
+    if settings.privacy_mode != 'online':
+        if kind != 'ollama':
+            raise ProviderError("Modo local: consulta a provedores externos está desabilitada.")
+        from cronos.security import local_endpoint, SecurityError
+        try:
+            local_endpoint(base)
+        except SecurityError as exc:
+            raise ProviderError(str(exc)) from exc
     headers = ({"x-goog-api-key": key} if kind == "gemini" else
                {"x-api-key": key, "anthropic-version": "2023-06-01"} if kind == "anthropic" else
                {"Authorization": "Bearer " + key} if key else {})

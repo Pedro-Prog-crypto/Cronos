@@ -27,7 +27,7 @@ def main():
     import uvicorn
 
     settings = Settings.from_env()
-    server = uvicorn.Server(uvicorn.Config(create_app(settings), log_level="warning"))
+    server = uvicorn.Server(uvicorn.Config(create_app(settings), log_level="warning", access_log=False))
     # Reservar a porta evita colisões com o servidor usado nos testes anteriores.
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     listener.bind(("127.0.0.1", 0))
