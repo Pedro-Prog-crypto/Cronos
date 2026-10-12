@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 
 from cronos.config import Settings
 from cronos.providers import ProviderError, make_provider
+from cronos.integrations import available_models
 
 
 def main():
@@ -21,6 +22,14 @@ def main():
                                                  [{"role": "user", "content": "Diga olá. Não há temas para memorizar."}]))
     except ProviderError as exc:
         print("FALHA:", str(exc))
+        if settings.provider == 'gemini' and '404' in str(exc):
+            print("Consultando os modelos anunciados para esta chave, sem gerar texto...")
+            try:
+                models=asyncio.run(available_models(settings,'gemini'))
+                for model in models:print("Modelo disponível:",model)
+                print("Escolha um modelo da lista em GEMINI_MODEL no .env e reinicie. A lista não comprova cota gratuita.")
+            except ProviderError as lookup_error:
+                print("Consulta de modelos falhou:",str(lookup_error))
         raise SystemExit(1)
     print("OK: o provedor respondeu no formato esperado. Nenhuma conversa foi salva.")
 
