@@ -1,10 +1,10 @@
-# Cronos — assistente Windows (v0.3)
+# Cronos — assistente Windows (v0.4)
 
 Programa Windows com backend independente da interface. A versão anterior
 foi analisada como referência de arquitetura; sua interface, imagens, avatar e
-prompts rígidos não foram incorporados. A interface definitiva será fornecida
-pelo usuário. A interface básica deste repositório permanece só como bancada
-para testar a API e as confirmações.
+prompts rígidos não foram incorporados. A interface holográfica fornecida pelo usuário agora é a janela principal, com
+animações e controles conectados ao backend. A bancada anterior continua em `/tests`.
+Veja [a integração e atualização Windows](docs/INTERFACE_HOLOGRAFICA.md).
 
 Leia [a análise do pacote antigo](docs/ANALISE_LEGADO.md), o
 [contrato da API](docs/API.md) e o [inventário completo](docs/legacy-inventory.json).

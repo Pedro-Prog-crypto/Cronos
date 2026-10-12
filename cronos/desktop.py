@@ -49,8 +49,12 @@ def _run():
                 return
             # Token local, não gravado em HTML, logs ou armazenamento do navegador.
             window.evaluate_js(
-                "document.getElementById('token').value = " + json.dumps(settings.token) + ";"
-                "document.getElementById('connect-form').requestSubmit();"
+                "(function connectCronos(attempt) {"
+                "if (window.cronosConnect) { window.cronosConnect(" + json.dumps(settings.token) + "); }"
+                "else if (document.getElementById('token')) { document.getElementById('token').value = " + json.dumps(settings.token) + ";"
+                "document.getElementById('connect-form').requestSubmit(); }"
+                "else if (attempt < 100) { window.setTimeout(() => connectCronos(attempt + 1), 50); }"
+                "})(0);"
             )
 
         window.events.loaded += connect

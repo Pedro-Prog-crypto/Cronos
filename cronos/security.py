@@ -94,7 +94,7 @@ class SecurityMiddleware:
             denied()
             return await JSONResponse({'detail': 'Origin não autorizada.'}, 403)(scope, receive, send)
         path = scope.get('path', '')
-        public = path in {'/', '/health', '/docs', '/docs/oauth2-redirect', '/redoc', '/openapi.json'} or path.startswith('/static/')
+        public = path in {'/', '/tests', '/health', '/docs', '/docs/oauth2-redirect', '/redoc', '/openapi.json'} or path.startswith(('/static/', '/ui/'))
         preflight = scope.get('method') == 'OPTIONS' and bool(origin)
         if not public and not preflight:
             now = time.monotonic()
@@ -124,10 +124,10 @@ class SecurityMiddleware:
                 if monitor:
                     monitor.response(path, event['status'])
                 additions = {
-                    'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY',
+                    'x-content-type-options': 'nosniff', 'x-frame-options': 'SAMEORIGIN' if path == '/tests' else 'DENY',
                     'referrer-policy': 'no-referrer', 'cache-control': 'no-store',
                     'permissions-policy': 'microphone=(self), camera=(self), geolocation=()',
-                    'content-security-policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+                    'content-security-policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; frame-src 'self'; object-src 'none'; frame-ancestors " + ("'self'" if path == '/tests' else "'none'") + "; base-uri 'none'; form-action 'self'",
                 }
                 event['headers'] = [(key, value) for key, value in event.get('headers', []) if key.decode().lower() not in additions]
                 event['headers'] += [(key.encode(), value.encode()) for key, value in additions.items()]

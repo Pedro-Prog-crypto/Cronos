@@ -1,0 +1,162 @@
+/** @license SPDX-License-Identifier: Apache-2.0 */
+import React,{useCallback,useEffect,useRef,useState} from 'react';
+import {Mic,MessageSquare,Settings,Volume2,VolumeX,X,Send,Shield,StopCircle} from 'lucide-react';
+import {IntegratedNeuralStage} from './components/IntegratedNeuralStage';
+import {useCronosVoice,useMicrophone} from './hooks/useCronosVoice';
+import {api,jsonApi,connect,getToken,onConnection,ApiError} from './api';
+
+const moduleIds=['processing','vision','voice','language','planning','tools','integrations','database','internet','devices','security','monitoring'];
+const moduleNames=['Processamento','Visão computacional','Síntese de voz','Entendimento de linguagem','Planejamento','Ferramentas','Integrações','Banco de dados','Internet','Dispositivos','Segurança','Monitoramento'];
+type Message={role:string;content:string};
+type ToolResult={name:string;status:string;approval_id?:string;session_id?:string;arguments?:unknown;result?:unknown;error?:string};
+
+export default function App(){
+  const [connected,setConnected]=useState(false),[config,setConfig]=useState<any>(null),[authOpen,setAuthOpen]=useState(false);
+  const [tokenInput,setTokenInput]=useState(''),[notice,setNotice]=useState('Conecte o backend para conversar.'),[error,setError]=useState(false);
+  const [chatOpen,setChatOpen]=useState(false),[module,setModule]=useState<string|null>(null),[menu,setMenu]=useState(false);
+  const [draft,setDraft]=useState(''),[messages,setMessages]=useState<Message[]>([]),[busy,setBusy]=useState(false),[tools,setTools]=useState<ToolResult[]>([]);
+  const [autoVoice,setAutoVoice]=useState(true),[announceAlerts,setAnnounceAlerts]=useState(false),[monitor,setMonitor]=useState<any>(null);
+  const pendingAlerts=useRef(new Map<number,any>());
+  const session=useRef<string|null>(null),iframe=useRef<HTMLIFrameElement|null>(null),cursor=useRef(0),inFlight=useRef(false);
+  const activity=useRef<'IDLE'|'LISTENING'|'SPEAKING'>('IDLE');const [moduleActivity,setModuleActivity]=useState(activity.current);
+  const tell=useCallback((message:string,isError=false)=>{setNotice(message);setError(isError);},[]);
+  const voice=useCronosVoice({onError:message=>tell(message,true)});
+  const microphone=useMicrophone(useCallback(text=>{setDraft(current=>current?`${current}\n${text}`:text);setChatOpen(true);tell('Áudio transcrito. Revise o texto e envie.');},[tell]),useCallback(message=>tell(message,true),[tell]));
+  const state=voice.isSpeaking?'SPEAKING':microphone.recording?'LISTENING':moduleActivity;
+  const audioLevel=voice.isSpeaking?voice.audioLevel:microphone.level;
+  const live=useRef({busy:false,recording:false,transcribing:false,speaking:false,generating:false,module:null as string|null,announce:false,fish:false});
+  live.current={busy,recording:microphone.recording,transcribing:microphone.transcribing,speaking:voice.isSpeaking,generating:voice.isGenerating,module,announce:announceAlerts,fish:Boolean(config?.fish_configured)};
+  const voiceRef=useRef(voice);voiceRef.current=voice;
+  useEffect(()=>{if(!announceAlerts)pendingAlerts.current.clear();},[announceAlerts]);
+
+  const connectBackend=useCallback(async()=>{
+    setConnected(false);
+    try{
+      const status=await jsonApi('/status');setConfig(status);setConnected(true);setAuthOpen(false);
+      tell(`Backend conectado · IA: ${status.provider}${status.provider_configured?'':' — falta configuração'}.`);
+      // Compartilha só com a bancada da própria origem, nunca por URL/storage.
+      iframe.current?.contentWindow?.postMessage({type:'cronos:connect',token:getToken()},window.location.origin);
+    }catch(error){setAuthOpen(true);tell(error instanceof Error?error.message:'Falha de conexão.',true);}
+  },[tell]);
+  useEffect(()=>{const remove=onConnection(()=>{void connectBackend();});if(getToken())void connectBackend();else setAuthOpen(true);return remove;},[connectBackend]);
+
+  useEffect(()=>{
+    const receive=(event:MessageEvent)=>{
+      if(event.origin!==window.location.origin||event.source!==iframe.current?.contentWindow)return;
+      if(event.data?.type==='cronos:activity'&&['IDLE','LISTENING','SPEAKING'].includes(event.data.state))setModuleActivity(event.data.state);
+    };
+    window.addEventListener('message',receive);return()=>window.removeEventListener('message',receive);
+  },[]);
+  useEffect(()=>{
+    if(!connected)return;
+    let alive=true;let polling=false;let controller:AbortController|null=null;
+    const poll=async()=>{
+      if(polling)return;polling=true;controller=new AbortController();const timeout=setTimeout(()=>controller?.abort(),5000);
+      try{
+        const result=await(await api(`/monitor?after=${cursor.current}`,{signal:controller.signal})).json();if(!alive)return;
+        if(result.cursor<cursor.current)cursor.current=0;
+        if(live.current.announce&&live.current.fish){
+          for(const event of result.events||[])if(event.id>cursor.current&&event.status==='active'&&event.code!=='service_voice')pendingAlerts.current.set(event.id,event);
+        }
+        cursor.current=result.cursor;setMonitor(result);
+        for(const id of pendingAlerts.current.keys())if(!result.alerts.some((alert:any)=>alert.id===id&&!alert.acknowledged))pendingAlerts.current.delete(id);
+        const current=live.current;
+        if(current.announce&&current.fish&&!current.busy&&!current.recording&&!current.transcribing&&!current.speaking&&!current.generating&&!current.module){
+          const alerts=[...pendingAlerts.current.values()].sort((a,b)=>Number(b.severity==='critical')-Number(a.severity==='critical'));
+          if(alerts.length){pendingAlerts.current.delete(alerts[0].id);void voiceRef.current.speak(`Atenção. ${alerts[0].message} ${alerts[0].suggestion}`);}
+        }
+      }catch(error){if(alive){setMonitor(null);if(error instanceof ApiError&&[401,403].includes(error.status)){setConnected(false);setAuthOpen(true);}}}
+      finally{clearTimeout(timeout);polling=false;}
+    };
+    void poll();const timer=setInterval(poll,5000);return()=>{alive=false;controller?.abort();clearInterval(timer);};
+  },[connected]);
+
+  const handleMic=()=>{
+    if(!connected){setAuthOpen(true);return;}
+    if(microphone.recording){void microphone.toggle();return;}
+    if(voice.isSpeaking||voice.isGenerating){voice.stop();return;}
+    if(!config?.fish_configured){tell('Configure Fish Audio em modo online para transcrever voz. A conversa por texto continua disponível.',true);setModule('voice');return;}
+    if(moduleActivity!=='IDLE'){
+      (iframe.current?.contentWindow as (Window & {cronosPanelClose?:()=>void})|null)?.cronosPanelClose?.();
+      setModuleActivity('IDLE');return;
+    }
+    if(busy||microphone.transcribing)return;
+    if(autoVoice)voice.prepare();
+    void microphone.toggle();
+  };
+  const send=async(event:React.FormEvent)=>{
+    event.preventDefault();const text=draft.trim();if(!text||inFlight.current)return;
+    if(!connected){setAuthOpen(true);return;}
+    inFlight.current=true;setBusy(true);voice.stop();if(autoVoice)voice.prepare();setMessages(old=>[...old,{role:'user',content:text}]);setDraft('');tell('Cronos está processando sua mensagem…');
+    try{
+      const result=await jsonApi('/chat',{message:text,session_id:session.current});session.current=result.session_id;
+      setMessages(old=>[...old,{role:'assistant',content:result.reply}]);setTools(old=>[...old,...(result.tool_results||[])]);
+      tell(result.warnings?.length?result.warnings.join('\n'):'Resposta recebida e conversa salva.',Boolean(result.warnings?.length));
+      if(autoVoice&&config?.fish_configured)void voice.speak(result.reply);
+    }catch(error){
+      if(error instanceof ApiError&&error.detail?.tool_results){session.current=error.detail.session_id;setTools(old=>[...old,...error.detail.tool_results]);}
+      tell(error instanceof Error?error.message:'Não foi possível conversar.',true);
+      setDraft(text); // Falha não elimina a pergunta; não repetir ações automaticamente.
+    }finally{setBusy(false);inFlight.current=false;}
+  };
+  const approve=async(result:ToolResult,accepted:boolean)=>{
+    if(inFlight.current)return;inFlight.current=true;setBusy(true);
+    try{const outcome=await jsonApi(`/tools/approvals/${result.approval_id}`,{session_id:result.session_id||session.current,accepted});
+      setTools(old=>old.map(item=>item===result?outcome:item));tell(outcome.status==='completed'?'Solicitação atendida; confira seu resultado.':outcome.error||outcome.status,outcome.status==='failed');
+    }catch(error){tell(error instanceof Error?error.message:'Falha na confirmação.',true);}finally{setBusy(false);inFlight.current=false;}
+  };
+  const openModule=(index:number)=>{if(index===3){setChatOpen(true);return;}setModule(moduleIds[index]);setMenu(false);setModuleActivity('IDLE');};
+  useEffect(()=>{document.documentElement.dataset.cronosPanel=module?'true':'false';return()=>{delete document.documentElement.dataset.cronosPanel;};},[module]);
+  const closeModule=()=>{(iframe.current?.contentWindow as (Window & {cronosPanelClose?:()=>void})|null)?.cronosPanelClose?.();setModule(null);setModuleActivity('IDLE');if(connected)void jsonApi('/status').then(setConfig).catch(()=>{});};
+  const activeAlerts=monitor?.alerts||[];
+  const fresh=monitor?.checked_at&&Date.now()-Date.parse(monitor.checked_at)<45000;
+  const diagnostic=!connected?'DESCONECTADO':!monitor||!fresh?'DIAGNÓSTICO INDISPONÍVEL':activeAlerts.length?`${activeAlerts.length} ALERTA(S)`:'SEM ALERTAS NOS SINAIS MONITORADOS';
+  const lastReply=[...messages].reverse().find(message=>message.role==='assistant')?.content;
+  return <div className="relative h-screen w-screen overflow-hidden bg-black text-slate-100 flex flex-col select-none">
+    <main className="absolute inset-0"><IntegratedNeuralStage state={state} audioLevel={audioLevel} onOrbClick={handleMic} onMicToggle={handleMic} onModuleClick={openModule}/></main>
+    <header className="integration-hud">
+      <button onClick={()=>openModule(11)} className={activeAlerts.length?'diagnostic alert':'diagnostic'} aria-label="Abrir monitoramento"><span className={`radar-dot ${fresh?'active':''}`}/><Shield size={14}/>{diagnostic}</button>
+      <div className="hud-actions"><span className="state-badge">{busy?'PROCESSANDO':voice.isGenerating?'GERANDO VOZ':microphone.transcribing?'TRANSCREVENDO':state==='LISTENING'?'GRAVANDO':state==='SPEAKING'?'FALANDO':'EM ESPERA'}</span>
+        <button onClick={()=>setChatOpen(true)} aria-label="Abrir conversa"><MessageSquare size={18}/></button>
+        <button onClick={()=>setMenu(!menu)} aria-label="Abrir módulos"><Settings size={18}/></button>
+        <button onClick={()=>setAuthOpen(true)} aria-label="Configurar conexão">{connected?'CONECTADO':'CONECTAR'}</button>
+      </div>
+    </header>
+    {menu&&<nav className="module-menu" aria-label="Módulos do Cronos">{moduleNames.map((name,index)=><button key={name} onClick={()=>openModule(index)}>{String(index+1).padStart(2,'0')} / {name}</button>)}</nav>}
+    <footer className="integration-footer">
+      <div role="status" aria-live="polite" className={error?'status-message error':'status-message'}>{notice}</div>
+      <div className="footer-actions">
+        <button aria-label={microphone.recording?'Parar e transcrever':'Gravar pelo microfone'} onClick={handleMic} disabled={microphone.transcribing||(busy&&!microphone.recording)} className={`voice-button ${state.toLowerCase()}`}>
+          {microphone.recording?<StopCircle size={20}/>:<Mic size={20}/>}<span>{microphone.recording?'PARAR':'VOZ'}</span>
+        </button>
+        <button onClick={()=>{setAutoVoice(!autoVoice);if(autoVoice)voice.stop();}} aria-label="Alternar respostas faladas" aria-pressed={autoVoice}>{autoVoice?<Volume2 size={16}/>:<VolumeX size={16}/>}</button>
+        <button onClick={()=>setChatOpen(true)}>CONVERSAR</button>
+        {(voice.isSpeaking||voice.isGenerating)&&<button onClick={voice.stop}>Parar fala</button>}
+      </div>
+    </footer>
+    {chatOpen&&<section className="conversation-drawer" aria-label="Conversa com Cronos">
+      <div className="drawer-heading"><h2>Conversa / Cronos</h2><button onClick={()=>setChatOpen(false)} aria-label="Fechar conversa"><X size={19}/></button></div>
+      <div className="chat-history" role="log" aria-live="polite">{!messages.length&&<p>Faça sua pergunta. A personalidade e a memória vêm do backend.</p>}
+        {messages.map((message,index)=><article key={index} className={`chat-message ${message.role}`}><strong>{message.role==='user'?'VOCÊ':'CRONOS'}</strong><p>{message.content}</p></article>)}
+        {tools.map((result,index)=><article className="tool-result" key={index}><strong>{result.name} · {result.status}</strong>
+          <pre>{JSON.stringify(result.arguments||result.result||result.error,null,2)}</pre>
+          {result.status==='pending_confirmation'&&<div className="footer-actions"><button disabled={busy} onClick={()=>approve(result,true)}>Confirmar ação</button><button disabled={busy} onClick={()=>approve(result,false)}>Cancelar</button></div>}
+        </article>)}
+      </div>
+      <form onSubmit={send}><label htmlFor="chat-input">Sua mensagem ou transcrição para revisar</label><textarea id="chat-input" value={draft} onChange={event=>setDraft(event.target.value)} maxLength={16000} rows={3}/>
+        <div className="footer-actions"><button type="submit" disabled={busy||microphone.recording||microphone.transcribing||!draft.trim()}><Send size={15}/>Enviar mensagem</button>{lastReply&&<button type="button" onClick={()=>void voice.speak(lastReply)} disabled={!connected}>Ouvir resposta</button>}
+          <button type="button" disabled={busy} onClick={()=>{session.current=null;setMessages([]);setTools([]);setDraft('');voice.stop();}}>Nova conversa</button></div>
+      </form><p className="small-note">Áudio e texto enviados aos provedores podem consumir cota. Gravação limitada a 60 segundos; transcrições não são enviadas à conversa sem sua revisão.</p>
+    </section>}
+    {module&&<section className="module-window" role="dialog" aria-label={moduleNames[moduleIds.indexOf(module)]}>
+      <div className="drawer-heading"><h2>{moduleNames[moduleIds.indexOf(module)]}</h2><button onClick={closeModule} aria-label="Fechar módulo"><X size={19}/></button></div>
+      <iframe ref={iframe} title={`Módulo ${module}`} src={`/tests#module=${module}`} onLoad={()=>{if(connected)iframe.current?.contentWindow?.postMessage({type:'cronos:connect',token:getToken()},window.location.origin);}}/>
+    </section>}
+    {authOpen&&<section className="connection-dialog" role="dialog" aria-label="Conexão com backend"><div className="drawer-heading"><h2>Conexão local</h2>{connected&&<button onClick={()=>setAuthOpen(false)} aria-label="Fechar conexão"><X size={19}/></button>}</div>
+      <p>A janela Windows conecta automaticamente. Para testes manuais, informe o token local. Ele permanece apenas na memória desta janela.</p>
+      <form onSubmit={event=>{event.preventDefault();connect(tokenInput);}}><label htmlFor="access-token">Token de acesso</label><input id="access-token" type="password" autoComplete="off" value={tokenInput} onChange={event=>setTokenInput(event.target.value)} required/><button type="submit">Conectar</button></form>
+      <label className="alert-voice-option"><input type="checkbox" checked={announceAlerts} disabled={!config?.fish_configured} onChange={event=>setAnnounceAlerts(event.target.checked)}/> Falar novos alertas pelo Fish Audio (pode consumir créditos)</label>
+      {config&&<p>IA: {config.provider} · {config.provider_configured?'configurada, valide uma conversa':'falta configuração'} / Fish Audio: {config.fish_configured?'configurado':'indisponível'}</p>}
+    </section>}
+  </div>;
+}

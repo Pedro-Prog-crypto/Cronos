@@ -1,0 +1,65 @@
+@import "tailwindcss";
+@import "@fontsource/plus-jakarta-sans/300.css";
+@import "@fontsource/plus-jakarta-sans/400.css";
+@import "@fontsource/plus-jakarta-sans/500.css";
+@import "@fontsource/plus-jakarta-sans/600.css";
+@import "@fontsource/plus-jakarta-sans/700.css";
+@import "@fontsource/space-grotesk/400.css";
+@import "@fontsource/space-grotesk/500.css";
+@import "@fontsource/space-grotesk/600.css";
+@import "@fontsource/space-grotesk/700.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+@import "@fontsource/jetbrains-mono/700.css";
+
+@layer base {
+  body {
+    background-color: #000000;
+    /* Pure black from the edges up to halfway (50%), then smoothly turning to deep navy/dark blue approaching the center hologram */
+    background-image: radial-gradient(
+      circle at 50% 50%,
+      rgba(8, 36, 115, 0.60) 0%,
+      rgba(6, 26, 85, 0.48) 22%,
+      rgba(3, 14, 52, 0.38) 36%,
+      rgba(1, 6, 22, 0.50) 46%,
+      #000000 52%,
+      #000000 100%
+    );
+    overflow: hidden;
+    user-select: none;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  }
+}
+
+@keyframes dock-pulse {
+  0%, 100% {
+    transform: scale(0.92);
+    opacity: 0.4;
+  }
+  50% {
+    transform: scale(1.22);
+    opacity: 0.9;
+  }
+}
+
+.animate-dock-pulse {
+  animation: dock-pulse 3.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Filament continuous glow */
+.filament-glow {
+  filter: drop-shadow(0 0 16px rgba(0, 119, 255, 0.85)) drop-shadow(0 0 35px rgba(0, 229, 255, 0.45));
+  transition: filter 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.filament-glow.speaking {
+  filter: drop-shadow(0 0 26px rgba(0, 229, 255, 0.95)) drop-shadow(0 0 55px rgba(29, 140, 248, 0.85)) drop-shadow(0 0 90px rgba(0, 119, 255, 0.45));
+}
+
+/* Controles sobrepostos; o palco holográfico original permanece intacto. */
+.integration-hud{position:absolute;inset:16px 18px auto;z-index:40;display:flex;justify-content:space-between;align-items:center;gap:12px;font:10px/1.5 'JetBrains Mono',monospace}.hud-actions,.footer-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.integration-hud button,.integration-footer button,.module-menu button,.conversation-drawer button,.connection-dialog button,.module-window button{border:1px solid #12608166;background:#04142bd9;color:#b8efff;border-radius:8px;padding:9px 12px;display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-size:12px}.integration-hud button:hover,.integration-footer button:hover{border-color:#00e5ff;box-shadow:0 0 16px #00e5ff40}.diagnostic{font-size:9px!important;letter-spacing:.08em}.diagnostic.alert{color:#ffb8c5;border-color:#ff2255aa}.radar-dot{width:8px;height:8px;border-radius:50%;border:1px solid #00e5ff}.radar-dot.active{animation:dock-pulse 3.2s ease-in-out infinite;background:#00e5ff;box-shadow:0 0 8px #00e5ff}.integration-footer{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);z-index:40;display:flex;align-items:center;flex-direction:column;gap:9px;width:min(640px,90vw)}.status-message{font-size:11px;line-height:1.4;text-align:center;color:#91b5d2;text-shadow:0 0 10px #000;background:#0009;border-radius:8px;padding:5px 10px;white-space:pre-wrap}.status-message.error{color:#ffb8c5}.voice-button{border-radius:999px!important;box-shadow:0 0 15px #126cff55}.voice-button.listening{border-color:#38bdf8;box-shadow:0 0 24px #38bdf880}.voice-button.speaking{border-color:#00e5ff;box-shadow:0 0 28px #00e5ff80}.module-menu{position:absolute;right:18px;top:68px;z-index:50;max-height:70vh;overflow:auto;display:grid;gap:6px;background:#020b1bed;border:1px solid #126081;padding:12px;border-radius:14px}.conversation-drawer,.connection-dialog,.module-window{position:absolute;z-index:60;background:#020d20f0;border:1px solid #18749699;border-radius:16px;box-shadow:0 0 45px #00bfff22;color:#d8edff;user-select:text}.conversation-drawer{left:18px;top:80px;bottom:105px;width:min(470px,calc(100vw - 36px));padding:16px;display:flex;flex-direction:column;gap:12px}.drawer-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.drawer-heading h2{font:600 14px 'Space Grotesk',sans-serif;letter-spacing:.04em;margin:0}.chat-history{overflow:auto;flex:1;min-height:70px}.chat-history>p{font-size:13px;color:#7fa7c1}.chat-message,.tool-result{border:1px solid #14476980;background:#031126;padding:12px;border-radius:10px;margin-bottom:10px;overflow-wrap:anywhere}.chat-message.user{margin-left:20px;border-color:#16899280}.chat-message strong,.tool-result strong{font:10px 'JetBrains Mono',monospace;color:#6ddafb}.chat-message p,.tool-result pre{white-space:pre-wrap;font-size:13px;line-height:1.6;margin:8px 0 0}.tool-result pre{font-size:11px;max-height:180px;overflow:auto}.conversation-drawer label,.connection-dialog label{display:block;font-size:11px;margin-bottom:5px}.conversation-drawer textarea,.connection-dialog input{width:100%;background:#010918;color:#e1f5ff;border:1px solid #126081;border-radius:8px;padding:10px;font:13px/1.5 system-ui;resize:vertical;user-select:text}.conversation-drawer form .footer-actions{margin-top:9px}.small-note{font-size:10px;color:#7ca3bd;line-height:1.4;margin:0}.connection-dialog{width:min(430px,calc(100vw - 36px));left:50%;top:50%;transform:translate(-50%,-50%);padding:24px}.connection-dialog p{font-size:13px;line-height:1.7;color:#87b0cc;margin:12px 0}.connection-dialog form button{margin-top:12px}.module-window{inset:76px 20px 100px;display:flex;flex-direction:column;padding:12px;gap:10px}.module-window iframe{border:0;border-radius:10px;width:100%;flex:1;min-height:0;background:#0c1017}.state-badge{color:#5fcae8;font-size:10px;letter-spacing:.1em}button:disabled{opacity:.4;cursor:wait}button:focus-visible,[role=button]:focus-visible{outline:2px solid #6ceaff;outline-offset:4px}@media(max-width:640px){.integration-hud{inset:12px 10px auto;align-items:flex-start}.diagnostic{max-width:145px;white-space:normal;text-align:left}.hud-actions{justify-content:flex-end;gap:5px}.hud-actions button{padding:7px}.state-badge{display:none}.module-window{inset:68px 8px 90px}.conversation-drawer{left:8px;width:calc(100vw - 16px);top:68px;bottom:90px}.integration-footer{bottom:12px}.status-message{max-height:45px;overflow:auto}.integration-footer button{font-size:10px}.integration-footer .footer-actions{gap:6px}}
+
+@media(max-width:640px){.cronos-central-hologram{scale:.78}}
+
+.connection-dialog .alert-voice-option{display:flex;gap:8px;align-items:center;margin-top:14px}.connection-dialog .alert-voice-option input{width:auto}
+.diagnostic.alert .radar-dot{background:#ff2255;border-color:#ff2255;box-shadow:0 0 8px #ff2255}

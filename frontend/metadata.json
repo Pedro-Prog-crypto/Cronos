@@ -1,0 +1,6 @@
+{
+  "name": "CRONOS - Interface Holográfica e Assistente de Voz",
+  "description": "Interface futurista do assistente CRONOS com núcleo holográfico neural de filamentos azuis, cards dinâmicos sincronizados e resposta reativa à voz.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

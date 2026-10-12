@@ -111,6 +111,7 @@ $("connect-form").addEventListener("submit", event => {
     if (!result.fish_configured) $("alert-voice").checked = false;
     startMonitor();
     await loadModules();
+    openEmbeddedModule();
     notice("Backend conectado. Envie uma mensagem e teste o áudio para validar os provedores.");
   });
 });
@@ -524,3 +525,43 @@ bindOperation("windows-jobs","Consultando operações…",()=>jsonApi("/windows/
 document.querySelectorAll("[data-windows-action]").forEach(button=>button.addEventListener("click",()=>run("Preparando ação para sua confirmação…",()=>executeTool("windows_security_action",{action:button.dataset.windowsAction}))));
 window.addEventListener("beforeunload",()=>{if(visionUrl)URL.revokeObjectURL(visionUrl);});
 renderModules();
+
+// A janela holográfica transmite apenas o token em memória, para esta origem.
+window.addEventListener("message", event => {
+  if (window.parent === window || event.origin !== window.location.origin || event.source !== window.parent) return;
+  if (event.data?.type !== "cronos:connect" || typeof event.data.token !== "string") return;
+  $("token").value = event.data.token;
+  $("connect-form").requestSubmit();
+});
+function openEmbeddedModule() {
+  const id = new URLSearchParams(window.location.hash.slice(1)).get("module");
+  if (!id || !moduleNames.some(([name]) => name === id)) return;
+  openModule(id);
+  if (window.parent !== window) {
+    document.body.classList.add("module-embedded");
+    document.body.classList.toggle("monitor-view", id === "monitoring");
+    document.body.classList.toggle("voice-view", id === "voice");
+  }
+}
+openEmbeddedModule();
+function moduleActivity() {
+  if (window.parent === window) return;
+  const state = recorder?.state === "recording" ? "LISTENING" : !$("player").paused || !$("alert-player").paused ? "SPEAKING" : "IDLE";
+  window.parent.postMessage({type:"cronos:activity",state},window.location.origin);
+}
+$("player").addEventListener("playing", moduleActivity); $("player").addEventListener("ended", moduleActivity);
+$("player").addEventListener("pause", moduleActivity);
+$("alert-player").addEventListener("playing", moduleActivity); $("alert-player").addEventListener("ended", moduleActivity);
+const activityObserver = new MutationObserver(moduleActivity);
+activityObserver.observe($("record"), {childList:true});
+window.addEventListener("beforeunload",()=>activityObserver.disconnect());
+
+window.cronosPanelClose = () => {
+  if (recorder?.state === "recording") { recorder.onstop = null; recorder.stop(); }
+  releaseMicrophone(); recorder = null;
+  busy = false; buttons.forEach(button => button.disabled = false);
+  $("record").textContent = "Gravar pelo microfone";
+  $("player").pause(); $("alert-player").pause(); stopAlertAudio();
+  clearInterval(monitorTimer); monitorConnected = false;
+};
+window.addEventListener("pagehide", window.cronosPanelClose);

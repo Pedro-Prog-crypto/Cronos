@@ -75,12 +75,19 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 await windows_task
             await app.state.windows.close()
 
-    app = FastAPI(title="Cronos", version="0.3.0", lifespan=lifespan, docs_url=None, redoc_url=None)
+    app = FastAPI(title="Cronos", version="0.4.0", lifespan=lifespan, docs_url=None, redoc_url=None)
     static = Path(__file__).parent / "static"
     app.mount("/static", StaticFiles(directory=static), name="static")
+    ui = Path(__file__).parent / "ui"
+    if ui.is_dir():
+        app.mount("/ui", StaticFiles(directory=ui), name="ui")
 
     @app.get("/", include_in_schema=False)
     async def interface():
+        return FileResponse(ui / "index.html" if (ui / "index.html").is_file() else static / "index.html", headers={"Cache-Control": "no-store"})
+
+    @app.get("/tests", include_in_schema=False)
+    async def workbench():
         return FileResponse(static / "index.html", headers={"Cache-Control": "no-store"})
 
     if settings.origins:

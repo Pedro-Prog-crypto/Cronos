@@ -31,7 +31,8 @@ def test_interface_and_assets(settings):
         page = client.get("/")
         assert page.status_code == 200
         assert 'lang="pt-BR"' in page.text
-        assert 'id="chat-form"' in page.text
+        assert 'id="root"' in page.text
+        assert 'id="chat-form"' in client.get('/tests').text
         assert client.get("/static/app.js").status_code == 200
         assert client.get("/static/styles.css").status_code == 200
         # Interface pública não concede acesso ao histórico.
