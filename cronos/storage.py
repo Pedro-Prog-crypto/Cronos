@@ -35,7 +35,7 @@ class Memory:
     def __init__(self, vault: Path):
         self.vault = vault.resolve()
         self.warnings = []
-        for folder in ("Conversas", "Temas", ".cronos"):
+        for folder in ("Conversas", "Temas", "Memorias", ".cronos"):
             self.path(folder, "").mkdir(parents=True, exist_ok=True)
         self.database = self.path(".cronos", "memory.sqlite3")
         with self.connect() as db:
@@ -53,6 +53,7 @@ class Memory:
                 CREATE TABLE IF NOT EXISTS tool_events (id INTEGER PRIMARY KEY, session TEXT NOT NULL,
                     payload TEXT NOT NULL, created TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS notes (path TEXT PRIMARY KEY, title TEXT NOT NULL, fingerprint TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS note_links (source TEXT NOT NULL, target TEXT NOT NULL, PRIMARY KEY(source,target));
                 CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(path UNINDEXED,title,body, tokenize='unicode61 remove_diacritics 2');
             ''')
         self._import_json_sessions()
@@ -125,7 +126,7 @@ class Memory:
                 relative = path.relative_to(self.vault).as_posix()
                 found.add(relative)
                 stat = path.stat()
-                fingerprint = f"chunks2:{stat.st_mtime_ns}:{stat.st_size}"
+                fingerprint = f"chunks3:{stat.st_mtime_ns}:{stat.st_size}"
                 previous = db.execute("SELECT fingerprint FROM notes WHERE path=?", (relative,)).fetchone()
                 if previous and previous[0] == fingerprint:
                     continue
@@ -134,6 +135,8 @@ class Memory:
                 aliases = [row[0] for row in db.execute("SELECT a.name FROM aliases a JOIN topics t ON a.topic=t.id WHERE t.path=?", (relative,))]
                 indexed = re.sub(r"<!--.*?-->", "", content, flags=re.S)
                 indexed = re.sub(r"\A---\s*\n.*?\n---\s*\n", "", indexed, count=1, flags=re.S)
+                db.execute("DELETE FROM note_links WHERE source=?", (relative,))
+                db.executemany("INSERT OR IGNORE INTO note_links(source,target) VALUES(?,?)", [(relative, link.split("|",1)[0].split("#",1)[0].strip()) for link in re.findall(r"\[\[([^\]]+)\]\]", content) if link.split("|",1)[0].split("#",1)[0].strip()])
                 db.execute("DELETE FROM notes_fts WHERE path=?", (relative,))
                 chunks = []
                 sections = re.split(r"(?m)(?=^## )", indexed)
@@ -153,6 +156,25 @@ class Memory:
                 if row[0] not in found:
                     db.execute("DELETE FROM notes WHERE path=?", (row[0],))
                     db.execute("DELETE FROM notes_fts WHERE path=?", (row[0],))
+
+    def graph(self, offset=0, limit=600):
+        with self.connect() as db:
+            rows = db.execute("SELECT path,title FROM notes ORDER BY path LIMIT ? OFFSET ?", (limit, offset)).fetchall()
+            all_notes = db.execute("SELECT path,title FROM notes ORDER BY path").fetchall()
+            lookup = {}
+            for note in all_notes:
+                for alias in (note['path'], note['path'][:-3], Path(note['path']).stem, note['title']):
+                    lookup.setdefault(fold(alias), []).append(note['path'])
+            visible = {row["path"] for row in rows}
+            valid = {row["path"] for row in all_notes}
+            edges = set()
+            for link in db.execute("SELECT source,target FROM note_links"):
+                matches = list(dict.fromkeys(lookup.get(fold(link['target']), [])))
+                if link['source'] in valid and len(matches) == 1 and matches[0] != link['source']:
+                    edges.add(tuple(sorted((link['source'], matches[0]))))
+            return {"nodes": [dict(row) for row in rows],
+                    "edges": [{"source": a, "target": b} for a,b in sorted(edges) if a in visible or b in visible],
+                    "total": len(all_notes), "next_offset": offset + len(rows) if offset + len(rows) < len(all_notes) else None}
 
     def search(self, query, limit=8):
         self.sync_notes()
@@ -242,6 +264,11 @@ class Memory:
                 index_body = f"- [[{target['path'][:-3]}|{target['title'].replace(']', '').replace('|', '-')}]]\n"
                 db.execute("INSERT OR IGNORE INTO exports(path,marker,header,body) VALUES(?,?,?,?)",
                            ("Mapa de Conhecimento.md", "index:" + target["path"], "# Mapa de Conhecimento\n\n", index_body))
+            knowledge = f"Memorias/{event}.md"
+            links = " · ".join(f"[[{path[:-3]}]]" for path in files)
+            db.execute("INSERT INTO exports(path,marker,header,body) VALUES(?,?,?,?)",
+                       (knowledge, event + ':memory', f"# {message[:100].replace(chr(10), ' ')}\n",
+                        f"\nCriada: {stamp}\n\nOrigem: [[Conversas/{session}]]\n\nTemas: {links}\n\n### Você\n{quoted(message)}\n\n### Resposta de IA, não verificada\n{quoted(reply)}\n"))
         self.flush_exports()
         try:
             self.sync_notes()

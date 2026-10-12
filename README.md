@@ -1,4 +1,4 @@
-# Cronos — assistente Windows (v0.4)
+# Cronos — assistente Windows (v0.5)
 
 Programa Windows com backend independente da interface. A versão anterior
 foi analisada como referência de arquitetura; sua interface, imagens, avatar e
@@ -215,3 +215,5 @@ monitoramento periódico. Veja [o contrato para sua futura interface](docs/API.m
 ## Central dos 12 módulos e integração Windows
 
 A bancada expõe os 12 módulos da imagem do usuário. Veja [funções, instalação do comando de voz e roteiro de validação real](docs/MODULOS_WINDOWS.md). Segurança inclui auditoria periódica de leitura e ações restritas com confirmação. Planejamento salva objetivos e etapas em SQLite; não executa os passos automaticamente. Visão analisa uma imagem explicitamente autorizada e não mantém a câmera ligada. O iniciador local reconhece “abrir Cronos” mesmo com a janela fechada, desde que o ouvinte esteja ativo. Prepare e ative pelo módulo Dispositivos; o início com Windows é opcional e removível.
+
+Interface e memória atualizadas: [Olho de Deus e Obsidian](docs/OLHO_DE_DEUS_OBSIDIAN.md).

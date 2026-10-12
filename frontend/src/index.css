@@ -63,3 +63,20 @@
 
 .connection-dialog .alert-voice-option{display:flex;gap:8px;align-items:center;margin-top:14px}.connection-dialog .alert-voice-option input{width:auto}
 .diagnostic.alert .radar-dot{background:#ff2255;border-color:#ff2255;box-shadow:0 0 8px #ff2255}
+/* Reference composition: no added HUD or footer controls. */
+.memory-slot{position:absolute;left:0;top:2%;width:45%;height:94%;z-index:21;transition:left .9s ease,top .9s ease,width .9s ease,height .9s ease}
+.memory-slot.small{left:60%;top:30%;width:19%;height:38%;z-index:22}
+.memory-spiral{width:100%;height:100%;overflow:visible;touch-action:none}
+.memory-node{cursor:pointer}.memory-node:hover circle{stroke:white;stroke-width:2}
+.memory-flow{animation:memory-shimmer 9s ease-in-out infinite}.memory-center-light{animation:memory-shimmer 4s ease-in-out infinite}
+@keyframes memory-shimmer{50%{opacity:.35}}
+.eye-slot{position:absolute;left:59%;top:29%;width:20%;height:40%;z-index:22;transition:left .9s ease,top .9s ease,width .9s ease,height .9s ease}
+.eye-slot.expanded{left:1%;top:5%;width:43%;height:86%;border-radius:50%;overflow:hidden;box-shadow:0 0 24px #00baff40,inset 0 0 14px #00cfff55;border:1px solid #00cfff55;background:#000a10}
+.holographic-globe{width:100%;height:100%;cursor:pointer;overflow:visible}.earth-grid{animation:earth-shimmer 8s ease-in-out infinite}.earth-beacons{animation:earth-shimmer 3s ease-in-out infinite}
+@keyframes earth-shimmer{50%{opacity:.4}}
+.world-map,.world-canvas{position:absolute;inset:0}.world-credits{position:absolute;bottom:10%;left:15%;right:15%;font-size:9px;z-index:2;color:#afeeff}.world-credits a{color:inherit}
+.reference-mic{position:absolute;left:50%;bottom:2.5%;transform:translateX(-50%);z-index:35;width:34px;height:34px;border:1px solid #178bd188;border-radius:50%;background:#041321;box-shadow:0 0 14px #006eff55;display:grid;place-items:center;color:#8ee6ff;padding:0}.reference-mic.recording{box-shadow:0 0 20px #00eaffbb}
+.scene-notice{position:absolute;left:50%;top:3%;transform:translateX(-50%);z-index:60;color:#8deaff;background:#001323cc;padding:8px 14px;border-radius:6px;max-width:65%;font-size:13px}
+.note-window{position:absolute;z-index:60;left:3%;top:8%;width:40%;height:80%;background:#031320ed;border:1px solid #00bfff55;border-radius:16px;padding:20px;overflow:auto}.note-window pre{white-space:pre-wrap;font:inherit;user-select:text}.note-window button{float:right}
+@media(max-width:900px){.memory-slot{width:43%;height:70%;top:15%}.eye-slot{left:68%;width:27%}.memory-slot.small{left:68%;width:27%}.eye-slot.expanded{width:43%}.cronos-central-hologram{transform:translate(-50%,-50%) scale(.65)}}
+.world-map-frame{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000b14}

@@ -1,3 +1,7 @@
+# Histórico v0.4 — substituído na v0.5
+
+Para controles atuais e atualização, consulte [Olho de Deus e Obsidian](OLHO_DE_DEUS_OBSIDIAN.md). Os controles extras descritos abaixo foram removidos.
+
 # Integração da interface holográfica (v0.4)
 
 O pacote de interface fornecido pelo usuário agora é a janela principal. As

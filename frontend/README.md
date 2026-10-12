@@ -47,3 +47,7 @@ usa o build servido pelo próprio FastAPI na mesma origem, dentro do WebView2.
 Fontes antes referenciadas no Google Fonts agora são empacotadas localmente,
 com suas licenças. Não há SDK Gemini, chave de provedor nem chamadas diretas a
 provedores no navegador. Os serviços continuam no backend.
+
+## v0.5
+
+Sem HUD/formulário manual de conexão. A ponte pywebviewready resolve a conexão automaticamente. `/world/view` é um contexto gráfico separado criado apenas durante uso do mapa. Consulte docs/OLHO_DE_DEUS_OBSIDIAN.md para o escopo geográfico e limites. O build inclui recursos Cesium locais e licenças; não inicie o projeto upstream nem importe suas credenciais.

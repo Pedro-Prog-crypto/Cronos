@@ -31,6 +31,7 @@ def test_desktop_starts_private_server_and_connects_window(tmp_path, monkeypatch
         assert title == "Cronos"
         assert url.startswith("http://127.0.0.1:")
         state["url"] = url
+        state["bridge"] = kwargs["js_api"]
         state["window"] = Window()
         return state["window"]
 
@@ -45,6 +46,10 @@ def test_desktop_starts_private_server_and_connects_window(tmp_path, monkeypatch
         response = httpx.get(state["url"] + "/status", headers={"Authorization": "Bearer " + token})
         assert response.status_code == 200
         assert "requestSubmit" in state["script"]
+        assert state["bridge"].connection()=={"token":token}
+        original=state["url"];state["url"]="https://example.org"
+        assert state["bridge"].connection() is None
+        state["url"]=original
 
     monkeypatch.setitem(sys.modules, "webview", SimpleNamespace(create_window=create_window, start=start))
     desktop.main()

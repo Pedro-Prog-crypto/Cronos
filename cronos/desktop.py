@@ -41,7 +41,14 @@ def _run():
                 raise SystemExit("O backend não iniciou. Confira o arquivo .env e a pasta de memória.")
             time.sleep(.05)
         address = f"http://127.0.0.1:{port}"
-        window = webview.create_window("Cronos", address,
+        class DesktopBridge:
+            def connection(self):
+                # Only the exact trusted local document may request its credential.
+                if (window.get_current_url() or "").rstrip("/") != address:
+                    return None
+                return {"token": settings.token}
+
+        window = webview.create_window("Cronos", address, js_api=DesktopBridge(),
                                        width=1200, height=850, min_size=(700, 600))
 
         def connect():
@@ -69,7 +76,14 @@ def main():
     from cronos.wake import single_instance
     with single_instance("CronosDesktop") as acquired:
         if acquired:
-            _run()
+            try:
+                _run()
+            except BaseException as exc:
+                if sys.platform == "win32" and (getattr(sys, "stderr", False) is None or getattr(sys, "stdout", False) is None):
+                    import ctypes
+                    ctypes.windll.user32.MessageBoxW(None, "Não foi possível iniciar o Cronos. Confira a instalação, .env e WebView2.\n" + str(exc)[:350], "Cronos", 0x10)
+                else:
+                    raise
         elif sys.platform == "win32":
             import ctypes
             from ctypes import wintypes

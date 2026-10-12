@@ -22,6 +22,7 @@ from cronos.monitor import Monitor
 from cronos.missions import Missions
 from cronos.features import Features
 from cronos.windows_system import WindowsSystem
+from cronos.geography import install_geography
 from cronos.control import install_routes
 
 
@@ -75,7 +76,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 await windows_task
             await app.state.windows.close()
 
-    app = FastAPI(title="Cronos", version="0.4.0", lifespan=lifespan, docs_url=None, redoc_url=None)
+    app = FastAPI(title="Cronos", version="0.5.0", lifespan=lifespan, docs_url=None, redoc_url=None)
     static = Path(__file__).parent / "static"
     app.mount("/static", StaticFiles(directory=static), name="static")
     ui = Path(__file__).parent / "ui"
@@ -85,6 +86,10 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
     @app.get("/", include_in_schema=False)
     async def interface():
         return FileResponse(ui / "index.html" if (ui / "index.html").is_file() else static / "index.html", headers={"Cache-Control": "no-store"})
+
+    @app.get("/world/view", include_in_schema=False)
+    async def world_view():
+        return FileResponse(ui / "world.html", headers={"Cache-Control": "no-store"})
 
     @app.get("/tests", include_in_schema=False)
     async def workbench():
@@ -193,6 +198,10 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         async with request.app.state.lock:
             return {"notes": request.app.state.memory.search(body.query, body.limit)}
 
+    @app.get("/memory/graph", dependencies=[Depends(authenticate)])
+    async def memory_graph(request: Request, offset: int = Query(0, ge=0), limit: int = Query(600, ge=1, le=1000)):
+        return await asyncio.to_thread(request.app.state.memory.graph, offset, limit)
+
     @app.get("/memory/note", dependencies=[Depends(authenticate)])
     async def memory_note(path: str, request: Request):
         try:
@@ -204,9 +213,11 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
     async def memory_sync(request: Request):
         async with request.app.state.lock:
             memory = request.app.state.memory
-            memory.flush_exports()
-            memory.sync_notes()
-            return {**memory.stats(), "warnings": memory.warnings}
+            def sync():
+                memory.flush_exports()
+                memory.sync_notes()
+                return {**memory.stats(), "warnings": memory.warnings}
+            return await asyncio.to_thread(sync)
 
     @app.get("/memory/status", dependencies=[Depends(authenticate)])
     async def memory_status(request: Request):
@@ -288,6 +299,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
             raise HTTPException(502, fish_error(exc)) from exc
 
     install_routes(app, authenticate)
+    install_geography(app, authenticate)
     return app
 
 

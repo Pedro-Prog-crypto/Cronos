@@ -42,8 +42,11 @@ export const StellarCore: React.FC<StellarCoreProps> = ({
     function schedule(delay = 16) {
       timer = window.setTimeout(() => { if (active) animId = requestAnimationFrame(render); }, delay);
     }
-    const width = (canvas.width = 600);
-    const height = (canvas.height = 600);
+    const width = 600, height = 600;
+    // Match bitmap to displayed size; preserve original geometry in logical coordinates.
+    const renderScale = Math.min(600, Math.ceil(size * Math.min(window.devicePixelRatio || 1, 1.25))) / 600;
+    canvas.width = Math.ceil(width * renderScale);canvas.height = Math.ceil(height * renderScale);
+    ctx.setTransform(renderScale,0,0,renderScale,0,0);
     const cx = width / 2;
     const cy = height / 2;
 
@@ -136,7 +139,7 @@ export const StellarCore: React.FC<StellarCoreProps> = ({
         ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
         ctx.fillStyle = `rgba(225, 248, 255, ${p.alpha * twinkle * light})`;
         ctx.shadowColor = '#00f0ff';
-        ctx.shadowBlur = 4;
+        ctx.shadowBlur = (4) * renderScale;
         ctx.fill();
       });
       ctx.restore();
@@ -182,7 +185,7 @@ export const StellarCore: React.FC<StellarCoreProps> = ({
         ctx.strokeStyle = `rgba(235, 252, 255, ${Math.min(1, dynamicAlpha)})`;
         ctx.lineWidth = ray.width;
         ctx.shadowColor = '#7dd3fc';
-        ctx.shadowBlur = 8;
+        ctx.shadowBlur = (8) * renderScale;
         ctx.stroke();
       });
 
@@ -194,7 +197,7 @@ export const StellarCore: React.FC<StellarCoreProps> = ({
       ctx.strokeStyle = `rgba(255, 255, 255, ${0.85 * light})`;
       ctx.lineWidth = 2.0;
       ctx.shadowColor = '#38bdf8';
-      ctx.shadowBlur = 14 * light;
+      ctx.shadowBlur = (14 * light) * renderScale;
       ctx.stroke();
 
       // Soft second outer rim
@@ -235,7 +238,7 @@ export const StellarCore: React.FC<StellarCoreProps> = ({
       ctx.strokeStyle = `rgba(255, 255, 255, ${light})`;
       ctx.lineWidth = 2.0;
       ctx.shadowColor = '#00f0ff';
-      ctx.shadowBlur = 18 * light;
+      ctx.shadowBlur = (18 * light) * renderScale;
       ctx.stroke();
 
       // Vertical spike
@@ -262,7 +265,7 @@ export const StellarCore: React.FC<StellarCoreProps> = ({
       ctx.strokeStyle = `rgba(255, 255, 255, ${light})`;
       ctx.lineWidth = 1.5;
       ctx.shadowColor = '#00f0ff';
-      ctx.shadowBlur = 15 * light;
+      ctx.shadowBlur = (15 * light) * renderScale;
       ctx.stroke();
 
       // Softer 45-degree diagonal star rays
@@ -281,7 +284,7 @@ export const StellarCore: React.FC<StellarCoreProps> = ({
       ctx.strokeStyle = `rgba(210, 248, 255, ${0.68 * light})`;
       ctx.lineWidth = 1.2;
       ctx.shadowColor = '#38bdf8';
-      ctx.shadowBlur = 10;
+      ctx.shadowBlur = (10) * renderScale;
       ctx.stroke();
 
       // ============================================================
@@ -298,7 +301,7 @@ export const StellarCore: React.FC<StellarCoreProps> = ({
       ctx.arc(cx, cy, 21, 0, Math.PI * 2);
       ctx.fillStyle = innerCoreGrad;
       ctx.shadowColor = '#ffffff';
-      ctx.shadowBlur = 25 * light;
+      ctx.shadowBlur = (25 * light) * renderScale;
       ctx.fill();
 
       // Diamond focal point at the absolute center

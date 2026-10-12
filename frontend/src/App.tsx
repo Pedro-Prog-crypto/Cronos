@@ -1,9 +1,14 @@
 /** @license SPDX-License-Identifier: Apache-2.0 */
-import React,{useCallback,useEffect,useRef,useState} from 'react';
-import {Mic,MessageSquare,Settings,Volume2,VolumeX,X,Send,Shield,StopCircle} from 'lucide-react';
+import React,{Suspense,lazy,useCallback,useEffect,useRef,useState} from 'react';
+import {Mic,X,Send} from 'lucide-react';
 import {IntegratedNeuralStage} from './components/IntegratedNeuralStage';
 import {useCronosVoice,useMicrophone} from './hooks/useCronosVoice';
-import {api,jsonApi,connect,getToken,onConnection,ApiError} from './api';
+import {api,jsonApi,getToken,onConnection,ApiError} from './api';
+
+import {MemorySpiral,MemoryGraph} from './components/MemorySpiral';
+import {HolographicGlobe} from './components/HolographicGlobe';
+import {localCommand} from './commands';
+const WorldMap=lazy(()=>import('./components/WorldMap'));
 
 const moduleIds=['processing','vision','voice','language','planning','tools','integrations','database','internet','devices','security','monitoring'];
 const moduleNames=['Processamento','Visão computacional','Síntese de voz','Entendimento de linguagem','Planejamento','Ferramentas','Integrações','Banco de dados','Internet','Dispositivos','Segurança','Monitoramento'];
@@ -11,17 +16,19 @@ type Message={role:string;content:string};
 type ToolResult={name:string;status:string;approval_id?:string;session_id?:string;arguments?:unknown;result?:unknown;error?:string};
 
 export default function App(){
-  const [connected,setConnected]=useState(false),[config,setConfig]=useState<any>(null),[authOpen,setAuthOpen]=useState(false);
-  const [tokenInput,setTokenInput]=useState(''),[notice,setNotice]=useState('Conecte o backend para conversar.'),[error,setError]=useState(false);
-  const [chatOpen,setChatOpen]=useState(false),[module,setModule]=useState<string|null>(null),[menu,setMenu]=useState(false);
+  const [connected,setConnected]=useState(false),[config,setConfig]=useState<any>(null);
+  const [notice,setNotice]=useState(''),[error,setError]=useState(false);
+  const [chatOpen,setChatOpen]=useState(false),[module,setModule]=useState<string|null>(null);
   const [draft,setDraft]=useState(''),[messages,setMessages]=useState<Message[]>([]),[busy,setBusy]=useState(false),[tools,setTools]=useState<ToolResult[]>([]);
   const [autoVoice,setAutoVoice]=useState(true),[announceAlerts,setAnnounceAlerts]=useState(false),[monitor,setMonitor]=useState<any>(null);
+  const [eyeOpen,setEyeOpen]=useState(false),[placeQuery,setPlaceQuery]=useState(''),[graph,setGraph]=useState<MemoryGraph>({nodes:[],edges:[],total:0}),[graphRevision,setGraphRevision]=useState(0),[note,setNote]=useState<{path:string;content:string}|null>(null);
+  const commandRef=useRef<(text:string)=>boolean>(()=>false),eyeAnnouncement=useRef(false);
   const pendingAlerts=useRef(new Map<number,any>());
   const session=useRef<string|null>(null),iframe=useRef<HTMLIFrameElement|null>(null),cursor=useRef(0),inFlight=useRef(false);
   const activity=useRef<'IDLE'|'LISTENING'|'SPEAKING'>('IDLE');const [moduleActivity,setModuleActivity]=useState(activity.current);
   const tell=useCallback((message:string,isError=false)=>{setNotice(message);setError(isError);},[]);
   const voice=useCronosVoice({onError:message=>tell(message,true)});
-  const microphone=useMicrophone(useCallback(text=>{setDraft(current=>current?`${current}\n${text}`:text);setChatOpen(true);tell('Áudio transcrito. Revise o texto e envie.');},[tell]),useCallback(message=>tell(message,true),[tell]));
+  const microphone=useMicrophone(useCallback(text=>{if(commandRef.current(text))return;setDraft(current=>current?`${current}\n${text}`:text);setChatOpen(true);tell('Áudio transcrito. Revise o texto e envie.');},[tell]),useCallback(message=>tell(message,true),[tell]));
   const state=voice.isSpeaking?'SPEAKING':microphone.recording?'LISTENING':moduleActivity;
   const audioLevel=voice.isSpeaking?voice.audioLevel:microphone.level;
   const live=useRef({busy:false,recording:false,transcribing:false,speaking:false,generating:false,module:null as string|null,announce:false,fish:false});
@@ -32,13 +39,13 @@ export default function App(){
   const connectBackend=useCallback(async()=>{
     setConnected(false);
     try{
-      const status=await jsonApi('/status');setConfig(status);setConnected(true);setAuthOpen(false);
-      tell(`Backend conectado · IA: ${status.provider}${status.provider_configured?'':' — falta configuração'}.`);
+      const status=await jsonApi('/status');setConfig(status);setConnected(true);setNotice('');
+
       // Compartilha só com a bancada da própria origem, nunca por URL/storage.
       iframe.current?.contentWindow?.postMessage({type:'cronos:connect',token:getToken()},window.location.origin);
-    }catch(error){setAuthOpen(true);tell(error instanceof Error?error.message:'Falha de conexão.',true);}
+    }catch(error){tell('Não consegui iniciar a conexão automática. Feche e abra o Kronos novamente.',true);}
   },[tell]);
-  useEffect(()=>{const remove=onConnection(()=>{void connectBackend();});if(getToken())void connectBackend();else setAuthOpen(true);return remove;},[connectBackend]);
+  useEffect(()=>{const remove=onConnection(()=>{void connectBackend();});if(getToken())void connectBackend();return remove;},[connectBackend]);
 
   useEffect(()=>{
     const receive=(event:MessageEvent)=>{
@@ -65,14 +72,40 @@ export default function App(){
           const alerts=[...pendingAlerts.current.values()].sort((a,b)=>Number(b.severity==='critical')-Number(a.severity==='critical'));
           if(alerts.length){pendingAlerts.current.delete(alerts[0].id);void voiceRef.current.speak(`Atenção. ${alerts[0].message} ${alerts[0].suggestion}`);}
         }
-      }catch(error){if(alive){setMonitor(null);if(error instanceof ApiError&&[401,403].includes(error.status)){setConnected(false);setAuthOpen(true);}}}
+      }catch(error){if(alive){setMonitor(null);if(error instanceof ApiError&&[401,403].includes(error.status)){setConnected(false);}}}
       finally{clearTimeout(timeout);polling=false;}
     };
     void poll();const timer=setInterval(poll,5000);return()=>{alive=false;controller?.abort();clearInterval(timer);};
   },[connected]);
 
+  useEffect(()=>{
+    if(!connected)return;const controller=new AbortController();let alive=true;
+    void(async()=>{try{
+      await api('/memory/sync',{method:'POST',signal:controller.signal});
+      const nodes:MemoryGraph['nodes']=[],edges:MemoryGraph['edges']=[];let offset:number|null=0;let total=0;
+      while(offset!==null){const data=await(await api(`/memory/graph?offset=${offset}&limit=1000`,{signal:controller.signal})).json();nodes.push(...data.nodes);edges.push(...data.edges);total=data.total;offset=data.next_offset;}
+      const unique=new Map(edges.map(edge=>[edge.source+'|'+edge.target,edge]));
+      if(alive)setGraph({nodes,edges:[...unique.values()],total});
+    }catch(error){if(alive)tell('Não consegui carregar as notas da memória.',true);}})();
+    return()=>{alive=false;controller.abort();};
+  },[connected,graphRevision,tell]);
+  useEffect(()=>{if(!connected)return;const timer=setInterval(()=>{if(!document.hidden&&!live.current.busy&&!live.current.recording&&!live.current.transcribing)setGraphRevision(value=>value+1);},60000);return()=>clearInterval(timer);},[connected]);
+  const runCommand=(text:string)=>{
+    const command=localCommand(text,eyeOpen);if(!command)return false;
+    if((command.type==='eye'||command.type==='place')&&config?.privacy_mode==='local'){tell('O mapa mundial está desativado em modo local.',true);return true;}
+    if(command.type==='eye'){voice.prepare();eyeAnnouncement.current=true;setEyeOpen(true);setChatOpen(false);setModule(null);setNote(null);}
+    else if(command.type==='memory'){setEyeOpen(false);setGraphRevision(value=>value+1);}
+    else if(command.type==='panel')setChatOpen(true);
+    else if(command.type==='place'){setPlaceQuery(command.query);setEyeOpen(true);setChatOpen(false);}
+    return true;
+  };commandRef.current=runCommand;
+  const selectNote=useCallback(async(path:string)=>{if(eyeOpen){setEyeOpen(false);return;}try{setNote(await jsonApi(`/memory/note?path=${encodeURIComponent(path)}`));}catch(error){tell('Não foi possível abrir essa nota.',true);}},[eyeOpen,tell]);
+  const worldReady=()=>{if(eyeAnnouncement.current){eyeAnnouncement.current=false;if(config?.fish_configured)void voice.speak('Ampliando sua perspectiva. Olho de Deus aberto.');}};
+  useEffect(()=>{const key=(event:KeyboardEvent)=>{if(event.key==='Escape'){setEyeOpen(false);setNote(null);setChatOpen(false);}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);},[]);
+  useEffect(()=>{if(!notice)return;const timer=setTimeout(()=>setNotice(''),8000);return()=>clearTimeout(timer);},[notice]);
+
   const handleMic=()=>{
-    if(!connected){setAuthOpen(true);return;}
+    if(!connected){tell('A conexão automática ainda não está disponível. Feche e abra o Kronos novamente.',true);return;}
     if(microphone.recording){void microphone.toggle();return;}
     if(voice.isSpeaking||voice.isGenerating){voice.stop();return;}
     if(!config?.fish_configured){tell('Configure Fish Audio em modo online para transcrever voz. A conversa por texto continua disponível.',true);setModule('voice');return;}
@@ -85,13 +118,13 @@ export default function App(){
     void microphone.toggle();
   };
   const send=async(event:React.FormEvent)=>{
-    event.preventDefault();const text=draft.trim();if(!text||inFlight.current)return;
-    if(!connected){setAuthOpen(true);return;}
+    event.preventDefault();const text=draft.trim();if(!text||inFlight.current)return;if(runCommand(text)){setDraft('');return;}
+    if(!connected){tell('A conexão automática ainda não está disponível. Feche e abra o Kronos novamente.',true);return;}
     inFlight.current=true;setBusy(true);voice.stop();if(autoVoice)voice.prepare();setMessages(old=>[...old,{role:'user',content:text}]);setDraft('');tell('Cronos está processando sua mensagem…');
     try{
-      const result=await jsonApi('/chat',{message:text,session_id:session.current});session.current=result.session_id;
+      const result=await jsonApi('/chat',{message:text,session_id:session.current});session.current=result.session_id;setGraphRevision(value=>value+1);
       setMessages(old=>[...old,{role:'assistant',content:result.reply}]);setTools(old=>[...old,...(result.tool_results||[])]);
-      tell(result.warnings?.length?result.warnings.join('\n'):'Resposta recebida e conversa salva.',Boolean(result.warnings?.length));
+      if(result.warnings?.length)tell(result.warnings.join('\n'),true);else setNotice('');
       if(autoVoice&&config?.fish_configured)void voice.speak(result.reply);
     }catch(error){
       if(error instanceof ApiError&&error.detail?.tool_results){session.current=error.detail.session_id;setTools(old=>[...old,...error.detail.tool_results]);}
@@ -105,35 +138,22 @@ export default function App(){
       setTools(old=>old.map(item=>item===result?outcome:item));tell(outcome.status==='completed'?'Solicitação atendida; confira seu resultado.':outcome.error||outcome.status,outcome.status==='failed');
     }catch(error){tell(error instanceof Error?error.message:'Falha na confirmação.',true);}finally{setBusy(false);inFlight.current=false;}
   };
-  const openModule=(index:number)=>{if(index===3){setChatOpen(true);return;}setModule(moduleIds[index]);setMenu(false);setModuleActivity('IDLE');};
+  const openModule=(index:number)=>{if(index===7){setEyeOpen(false);setGraphRevision(value=>value+1);return;}if(index===3){setChatOpen(true);return;}setModule(moduleIds[index]);setModuleActivity('IDLE');};
   useEffect(()=>{document.documentElement.dataset.cronosPanel=module?'true':'false';return()=>{delete document.documentElement.dataset.cronosPanel;};},[module]);
-  const closeModule=()=>{(iframe.current?.contentWindow as (Window & {cronosPanelClose?:()=>void})|null)?.cronosPanelClose?.();setModule(null);setModuleActivity('IDLE');if(connected)void jsonApi('/status').then(setConfig).catch(()=>{});};
+  const closeModule=()=>{(iframe.current?.contentWindow as (Window & {cronosPanelClose?:()=>void})|null)?.cronosPanelClose?.();setModule(null);setModuleActivity('IDLE');setGraphRevision(value=>value+1);if(connected)void jsonApi('/status').then(setConfig).catch(()=>{});};
   const activeAlerts=monitor?.alerts||[];
   const fresh=monitor?.checked_at&&Date.now()-Date.parse(monitor.checked_at)<45000;
   const diagnostic=!connected?'DESCONECTADO':!monitor||!fresh?'DIAGNÓSTICO INDISPONÍVEL':activeAlerts.length?`${activeAlerts.length} ALERTA(S)`:'SEM ALERTAS NOS SINAIS MONITORADOS';
   const lastReply=[...messages].reverse().find(message=>message.role==='assistant')?.content;
   return <div className="relative h-screen w-screen overflow-hidden bg-black text-slate-100 flex flex-col select-none">
     <main className="absolute inset-0"><IntegratedNeuralStage state={state} audioLevel={audioLevel} onOrbClick={handleMic} onMicToggle={handleMic} onModuleClick={openModule}/></main>
-    <header className="integration-hud">
-      <button onClick={()=>openModule(11)} className={activeAlerts.length?'diagnostic alert':'diagnostic'} aria-label="Abrir monitoramento"><span className={`radar-dot ${fresh?'active':''}`}/><Shield size={14}/>{diagnostic}</button>
-      <div className="hud-actions"><span className="state-badge">{busy?'PROCESSANDO':voice.isGenerating?'GERANDO VOZ':microphone.transcribing?'TRANSCREVENDO':state==='LISTENING'?'GRAVANDO':state==='SPEAKING'?'FALANDO':'EM ESPERA'}</span>
-        <button onClick={()=>setChatOpen(true)} aria-label="Abrir conversa"><MessageSquare size={18}/></button>
-        <button onClick={()=>setMenu(!menu)} aria-label="Abrir módulos"><Settings size={18}/></button>
-        <button onClick={()=>setAuthOpen(true)} aria-label="Configurar conexão">{connected?'CONECTADO':'CONECTAR'}</button>
-      </div>
-    </header>
-    {menu&&<nav className="module-menu" aria-label="Módulos do Cronos">{moduleNames.map((name,index)=><button key={name} onClick={()=>openModule(index)}>{String(index+1).padStart(2,'0')} / {name}</button>)}</nav>}
-    <footer className="integration-footer">
-      <div role="status" aria-live="polite" className={error?'status-message error':'status-message'}>{notice}</div>
-      <div className="footer-actions">
-        <button aria-label={microphone.recording?'Parar e transcrever':'Gravar pelo microfone'} onClick={handleMic} disabled={microphone.transcribing||(busy&&!microphone.recording)} className={`voice-button ${state.toLowerCase()}`}>
-          {microphone.recording?<StopCircle size={20}/>:<Mic size={20}/>}<span>{microphone.recording?'PARAR':'VOZ'}</span>
-        </button>
-        <button onClick={()=>{setAutoVoice(!autoVoice);if(autoVoice)voice.stop();}} aria-label="Alternar respostas faladas" aria-pressed={autoVoice}>{autoVoice?<Volume2 size={16}/>:<VolumeX size={16}/>}</button>
-        <button onClick={()=>setChatOpen(true)}>CONVERSAR</button>
-        {(voice.isSpeaking||voice.isGenerating)&&<button onClick={voice.stop}>Parar fala</button>}
-      </div>
-    </footer>
+    <div className={`memory-slot ${eyeOpen?'small':''}`}><MemorySpiral graph={graph} small={eyeOpen} onSelect={selectNote}/></div>
+    <div className={`eye-slot ${eyeOpen?'expanded':''}`}>
+      {eyeOpen?<Suspense fallback={<HolographicGlobe onOpen={()=>{}}/>}><WorldMap query={placeQuery} onError={message=>tell(message,true)} onReady={worldReady}/></Suspense>:<HolographicGlobe onOpen={()=>{if(config?.privacy_mode==='local'){tell('O mapa mundial usa serviços externos e está desativado em modo local.',true);return;}voice.prepare();eyeAnnouncement.current=true;setEyeOpen(true);setNote(null);}}/>}
+    </div>
+    <button className={`reference-mic ${microphone.recording?'recording':''}`} aria-label={microphone.recording?'Parar e transcrever':'Gravar pelo microfone'} onClick={handleMic} disabled={microphone.transcribing||(busy&&!microphone.recording)}><Mic size={16}/></button>
+    {notice&&error&&<div className="scene-notice" role="status">{notice}</div>}
+    {note&&<section className="note-window" aria-label="Nota Obsidian"><button onClick={()=>setNote(null)} aria-label="Fechar nota"><X size={18}/></button><pre>{note.content}</pre></section>}
     {chatOpen&&<section className="conversation-drawer" aria-label="Conversa com Cronos">
       <div className="drawer-heading"><h2>Conversa / Cronos</h2><button onClick={()=>setChatOpen(false)} aria-label="Fechar conversa"><X size={19}/></button></div>
       <div className="chat-history" role="log" aria-live="polite">{!messages.length&&<p>Faça sua pergunta. A personalidade e a memória vêm do backend.</p>}
@@ -152,11 +172,6 @@ export default function App(){
       <div className="drawer-heading"><h2>{moduleNames[moduleIds.indexOf(module)]}</h2><button onClick={closeModule} aria-label="Fechar módulo"><X size={19}/></button></div>
       <iframe ref={iframe} title={`Módulo ${module}`} src={`/tests#module=${module}`} onLoad={()=>{if(connected)iframe.current?.contentWindow?.postMessage({type:'cronos:connect',token:getToken()},window.location.origin);}}/>
     </section>}
-    {authOpen&&<section className="connection-dialog" role="dialog" aria-label="Conexão com backend"><div className="drawer-heading"><h2>Conexão local</h2>{connected&&<button onClick={()=>setAuthOpen(false)} aria-label="Fechar conexão"><X size={19}/></button>}</div>
-      <p>A janela Windows conecta automaticamente. Para testes manuais, informe o token local. Ele permanece apenas na memória desta janela.</p>
-      <form onSubmit={event=>{event.preventDefault();connect(tokenInput);}}><label htmlFor="access-token">Token de acesso</label><input id="access-token" type="password" autoComplete="off" value={tokenInput} onChange={event=>setTokenInput(event.target.value)} required/><button type="submit">Conectar</button></form>
-      <label className="alert-voice-option"><input type="checkbox" checked={announceAlerts} disabled={!config?.fish_configured} onChange={event=>setAnnounceAlerts(event.target.checked)}/> Falar novos alertas pelo Fish Audio (pode consumir créditos)</label>
-      {config&&<p>IA: {config.provider} · {config.provider_configured?'configurada, valide uma conversa':'falta configuração'} / Fish Audio: {config.fish_configured?'configurado':'indisponível'}</p>}
-    </section>}
+
   </div>;
 }

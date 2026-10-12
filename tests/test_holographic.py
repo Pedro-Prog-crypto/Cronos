@@ -30,4 +30,5 @@ def test_production_interface_keeps_animation_and_no_browser_ai_keys():
     for file in (package/'cronos/ui').rglob('*.js'):
         content=file.read_text()
         assert 'GEMINI_API_KEY' not in content and 'FISH_API_KEY' not in content
-        assert 'localStorage' not in content
+        if file.parent.name == 'assets':
+            assert 'localStorage' not in content  # App never stores its token; Cesium's optional help preference is vendor code.

@@ -73,8 +73,13 @@ export const CronosOrb: React.FC<CronosOrbProps> = ({
     function schedule(delay = 16) {
       timer = window.setTimeout(() => { if (active) animId = requestAnimationFrame(render); }, delay);
     }
-    const width = (canvas.width = 1200);
-    const height = (canvas.height = 1200);
+    const width = 1200, height = 1200;
+    // Match bitmap to displayed size; preserve original geometry in logical coordinates.
+    const renderScale = Math.min(1200, Math.ceil(size * Math.min(window.devicePixelRatio || 1, 1.25))) / 1200;
+    canvas.width = Math.ceil(width * renderScale);canvas.height = Math.ceil(height * renderScale);
+    ctx.setTransform(renderScale,0,0,renderScale,0,0);
+    const glowCanvas = document.createElement('canvas');glowCanvas.width=canvas.width;glowCanvas.height=canvas.height;
+    const glowCtx=glowCanvas.getContext('2d')!;glowCtx.setTransform(renderScale,0,0,renderScale,0,0);
     const centerX = width / 2;
     const centerY = height / 2;
 
@@ -390,7 +395,7 @@ export const CronosOrb: React.FC<CronosOrbProps> = ({
           ? 'rgba(0, 220, 255, 0.40)'
           : 'rgba(20, 120, 255, 0.25)';
       ctx.lineWidth = currentState === 'SPEAKING' ? 3.5 : 2.0;
-      ctx.shadowBlur = 18 * currentGlow;
+      ctx.shadowBlur = (18 * currentGlow) * renderScale;
       ctx.shadowColor = '#00d0ff';
       ctx.stroke();
 
@@ -407,7 +412,7 @@ export const CronosOrb: React.FC<CronosOrbProps> = ({
           ? 'rgba(0, 180, 255, 0.28)'
           : 'rgba(10, 80, 220, 0.16)';
       ctx.lineWidth = currentState === 'SPEAKING' ? 4.0 : 2.5;
-      ctx.shadowBlur = 24 * currentGlow;
+      ctx.shadowBlur = (24 * currentGlow) * renderScale;
       ctx.shadowColor = '#0077ff';
       ctx.stroke();
 
@@ -449,26 +454,30 @@ export const CronosOrb: React.FC<CronosOrbProps> = ({
 
       // 5. RENDER ALL INTERWOVEN STRANDS (Dual-Pass Bloom)
       // Pass A: Soft luminous blurred glow hugging each undulating strand
+      glowCtx.clearRect(0,0,width,height);
       for (let sIdx = 0; sIdx < strands.length; sIdx++) {
         const strand = strands[sIdx];
         const pts = strandPoints[sIdx];
         if (!pts) continue;
 
-        ctx.beginPath();
+        glowCtx.beginPath();
         for (let i = 0; i <= steps; i++) {
           const pt = pts[i];
-          if (i === 0) ctx.moveTo(pt.x, pt.y);
-          else ctx.lineTo(pt.x, pt.y);
+          if (i === 0) glowCtx.moveTo(pt.x, pt.y);
+          else glowCtx.lineTo(pt.x, pt.y);
         }
-        ctx.closePath();
+        glowCtx.closePath();
 
         const [r, g, b] = strand.colorRGB;
-        ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${strand.baseAlpha * 0.35})`;
-        ctx.lineWidth = strand.strokeWidth * 2.8;
-        ctx.shadowBlur = 16 * currentGlow;
-        ctx.shadowColor = sIdx % 2 === 0 ? '#00e5ff' : '#0077ff';
-        ctx.stroke();
+        glowCtx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${strand.baseAlpha * 0.35})`;
+        glowCtx.lineWidth = strand.strokeWidth * 2.8;
+        glowCtx.shadowBlur = 0;
+        glowCtx.shadowColor = sIdx % 2 === 0 ? '#00e5ff' : '#0077ff';
+        glowCtx.stroke();
       }
+
+      ctx.save();ctx.shadowBlur=0;ctx.filter=`blur(${5*renderScale}px)`;
+      ctx.drawImage(glowCanvas,0,0,width,height);ctx.restore();
 
       // Pass B: Sharp crisp core beam of each strand
       for (let sIdx = 0; sIdx < strands.length; sIdx++) {
@@ -506,7 +515,7 @@ export const CronosOrb: React.FC<CronosOrbProps> = ({
         }
 
         ctx.lineWidth = strokeW;
-        ctx.shadowBlur = glowBlur;
+        ctx.shadowBlur = 0;
         ctx.stroke();
       }
 
@@ -538,11 +547,11 @@ export const CronosOrb: React.FC<CronosOrbProps> = ({
 
         if (currentState === 'SPEAKING') {
           ctx.fillStyle = `rgba(240, 255, 255, ${depthAlpha})`;
-          ctx.shadowBlur = 22;
+          ctx.shadowBlur = (22) * renderScale;
           ctx.shadowColor = '#00f0ff';
         } else {
           ctx.fillStyle = `rgba(186, 230, 253, ${depthAlpha * 0.85})`;
-          ctx.shadowBlur = 12;
+          ctx.shadowBlur = (12) * renderScale;
           ctx.shadowColor = '#38bdf8';
         }
         ctx.fill();

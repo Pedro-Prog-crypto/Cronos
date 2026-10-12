@@ -1,7 +1,7 @@
 {
   "name": "cronos-holographic-interface",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.5.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,21 +9,22 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
-    "lucide-react": "0.546.0",
+    "@fontsource/jetbrains-mono": "5.3.0",
     "@fontsource/plus-jakarta-sans": "5.3.0",
     "@fontsource/space-grotesk": "5.3.0",
-    "@fontsource/jetbrains-mono": "5.3.0"
+    "cesium": "1.124.0",
+    "lucide-react": "0.546.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   },
   "devDependencies": {
-    "vite": "8.3.4",
-    "@vitejs/plugin-react": "6.1.2",
     "@tailwindcss/vite": "4.3.3",
-    "tailwindcss": "4.3.3",
-    "typescript": "7.0.2",
+    "@types/node": "22.14.0",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
-    "@types/node": "22.14.0"
+    "@vitejs/plugin-react": "6.1.2",
+    "tailwindcss": "4.3.3",
+    "typescript": "7.0.2",
+    "vite": "8.3.4"
   }
 }

@@ -21,3 +21,12 @@ export async function api(path: string, options: RequestInit = {}) {
 export async function jsonApi(path: string, body?: unknown) {
   return (await api(path, body === undefined ? {} : {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)})).json();
 }
+
+// The native bridge may become ready before or after React loads.
+async function nativeConnection(){
+ const bridge=(window as any).pywebview?.api;
+ if(!bridge?.connection)return;
+ try{const result=await bridge.connection();if(result?.token)connect(result.token);}catch{/* Startup injection remains a fallback. */}
+}
+window.addEventListener('pywebviewready',()=>void nativeConnection());
+void nativeConnection();
