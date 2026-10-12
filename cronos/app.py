@@ -240,14 +240,24 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
     async def fish_tts(client, method, **arguments):
         nonlocal active_fish_model
         model = active_fish_model
+
+        async def request(selected):
+            if selected == 's2.1-pro-free' and fish_factory is None:
+                from cronos.fish_legacy import synthesize_json
+                audio = await synthesize_json(settings.fish_key, **arguments)
+                if method == 'stream':
+                    async def chunks():
+                        yield audio
+                    return chunks()
+                return audio
+            return await getattr(client.tts, method)(model=selected, **arguments)
+
         try:
-            return await getattr(client.tts, method)(model=model, **arguments)
+            return await request(model)
         except Exception as exc:
             if getattr(exc, "status", None) != 402 or model == "s2.1-pro-free":
                 raise
-            # Legacy compatibility requested by the user: one retry to the old
-            # free-labelled identifier, preserving voice/format/text. Never escalate.
-            result = await getattr(client.tts, method)(model="s2.1-pro-free", **arguments)
+            result = await request("s2.1-pro-free")
             active_fish_model = "s2.1-pro-free"
             return result
 

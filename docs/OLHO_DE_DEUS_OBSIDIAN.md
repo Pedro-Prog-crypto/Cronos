@@ -1,3 +1,27 @@
+# Comparação do ZIP reenviado e teste isolado
+
+O arquivo CRONOS_V32_INTEGRADO_CORRIGIDO.zip reenviado contém 109 arquivos,
+mas não contém .env nem config/fish_audio.json. DEFAULT_REFERENCE_ID está vazio.
+GUIA_VOZ_JARVIS.md contém sugestões comunitárias, não uma configuração salva;
+a sugestão Jarvis é diferente do ID informado pelo usuário. Não foi importada
+como se fosse a voz configurada. O reconhecimento antigo era local (Vosk/Whisper).
+
+No modo s2.1-pro-free, o adaptador agora usa JSON com endpoint fixo, TLS,
+credenciais locais, timeout de 30 s, resposta limitada a 16 MiB e sem redirects,
+reproduzindo o formato de pedido legado. Outros modelos continuam no SDK.
+Streaming nesse modo compatível aguarda o áudio completo antes de entregá-lo.
+O corpo de erro do provedor não é registrado ou enviado à interface.
+
+`Testar-Voz-Isolada.bat` faz uma única chamada curta ao modo legado e reproduz
+WAV pelo Windows, sem iniciar holograma/mapa/IA. Exige a chave e a voz já presentes
+no .env local e modo online. Pode consumir créditos conforme a conta. Não migra
+credenciais nem altera o .env. Se ele falhar com 402, a interface não estava
+aberta nesse teste: há uma recusa da API a esclarecer. Se ele tocar, permite
+investigar reprodução/interface separadamente. Não é teste de microfone.
+A execução física desse BAT no Windows não foi verificada na nuvem.
+
+---
+
 # Compatibilidade Fish Audio com o Jarvis anterior
 
 A comparação estática do pacote fornecido identificou o modelo padrão
