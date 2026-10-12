@@ -250,7 +250,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
             request.app.state.features.record("voice", "passed", "Síntese retornou áudio; reprodução física no dispositivo não foi certificada.")
             return Response(content=audio, media_type="audio/mpeg")
         except Exception as exc:
-            raise HTTPException(502, fish_error(exc)) from exc
+            raise HTTPException(502, fish_error(exc, "síntese")) from exc
 
     @app.post("/voice/stream", dependencies=[Depends(authenticate)])
     async def speech_stream(body: SpeechInput):
@@ -271,7 +271,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         except Exception as exc:
             if entered:
                 await client.__aexit__(None, None, None)
-            raise HTTPException(502, fish_error(exc)) from None
+            raise HTTPException(502, fish_error(exc, "síntese em streaming")) from None
 
         async def chunks():
             try:
@@ -301,7 +301,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 result = await client.asr.transcribe(audio=b"".join(chunks), language="pt")
             return {"text": result.text}
         except Exception as exc:
-            raise HTTPException(502, fish_error(exc)) from exc
+            raise HTTPException(502, fish_error(exc, "transcrição do microfone")) from exc
 
     install_routes(app, authenticate)
     install_geography(app, authenticate)
@@ -311,12 +311,13 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
 app = create_app()
 
 
-def fish_error(exc):
+def fish_error(exc, operation="voz"):
+    prefix = f"Fish Audio — {operation}: "
     from fishaudio.exceptions import AuthenticationError, RateLimitError, NotFoundError, PermissionError, ValidationError
     if isinstance(exc, AuthenticationError):
         return "Fish Audio: chave rejeitada. Confira FISH_API_KEY e reinicie o Cronos."
     if isinstance(exc, RateLimitError):
-        return "Fish Audio: limite de chamadas ou créditos atingido. Confira sua conta."
+        return prefix + "HTTP 429: limite de chamadas atingido. Aguarde antes de tentar novamente."
     if isinstance(exc, NotFoundError):
         return "Fish Audio: voz ou recurso não encontrado. Confira o ID da voz e o modelo."
     if isinstance(exc, PermissionError):
@@ -324,5 +325,5 @@ def fish_error(exc):
     if isinstance(exc, ValidationError):
         return "Fish Audio: parâmetros ou áudio não aceitos. Confira formato, voz e velocidade."
     if getattr(exc, "status", None) == 402:
-        return "Fish Audio: pagamento ou créditos necessários para este modelo. Confira sua conta; o Cronos não troca automaticamente para outro modelo."
+        return prefix + "HTTP 402: o provedor recusou esta chamada por cobrança ou acesso. Isso não confirma saldo zerado. Confira se a chave pertence à conta com créditos e se esse recurso da API está liberado."
     return "Fish Audio indisponível; confira conexão, voz, modelo e conta."
