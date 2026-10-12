@@ -7,8 +7,9 @@ O núcleo mantém movimento, mas passa de 32 para 20 fios e de 240 para 120 amos
 por fio (aproximadamente 69% menos pontos calculados por quadro, não medida de CPU).
 A captura histórica ao fim desta página mostra o esqueleto anterior, agora removido.
 
-Fish Audio não seleciona mais um modelo por padrão. `s2-pro` é recusado inclusive
-se estiver no `.env` antigo. Configure `FISH_MODEL` somente depois de verificar
+Fish Audio não seleciona um modelo por padrão. Após o usuário informar acesso
+a S2 Pro no plano gratuito, o bloqueio geral foi removido: `FISH_MODEL=s2-pro`
+permite seleção explícita. O nome Pro não determina o plano da conta. Configure `FISH_MODEL` somente depois de verificar
 um modelo liberado na sua conta para API. `s1` é aceito pelo SDK, mas isso NÃO
 comprova gratuidade. Não há troca automática, assinatura ou compra de créditos.
 Sem modelo elegível, respostas automáticas de voz ficam desligadas; conversa e

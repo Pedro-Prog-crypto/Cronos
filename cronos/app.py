@@ -134,7 +134,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 "provider_configured": configured, "configuration_warning": warning,
                 "privacy_mode": settings.privacy_mode,
                 "fish_configured": bool(settings.fish_key) and settings.privacy_mode == 'online',
-                "fish_speech_configured": bool(settings.fish_key and settings.fish_model) and settings.fish_model != "s2-pro" and settings.privacy_mode == "online",
+                "fish_speech_configured": bool(settings.fish_key and settings.fish_model) and settings.privacy_mode == "online",
                 "custom_voice_configured": bool(settings.fish_reference),
                 "personality_available": settings.personality.is_file()}
 
@@ -239,8 +239,8 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         if not body.text.strip():
             raise HTTPException(422, "Informe um texto para sintetizar.")
         reference = body.reference_id or settings.fish_reference
-        if not settings.fish_model or settings.fish_model == 's2-pro':
-            raise HTTPException(503, "Nenhum modelo de voz elegível selecionado. Configure FISH_MODEL com um modelo disponível na sua conta; s2-pro foi desativado nesta configuração. Plano gratuito do site não comprova acesso gratuito à API.")
+        if not settings.fish_model:
+            raise HTTPException(503, "Configure FISH_MODEL com o modelo liberado para API na sua conta Fish Audio.")
         client = await fish_client()
         try:
             async with client:
@@ -256,8 +256,8 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
     async def speech_stream(body: SpeechInput):
         if not body.text.strip():
             raise HTTPException(422, "Informe um texto para sintetizar.")
-        if not settings.fish_model or settings.fish_model == 's2-pro':
-            raise HTTPException(503, "Selecione em FISH_MODEL um modelo disponível na sua conta. s2-pro está desativado; a API pode exigir créditos.")
+        if not settings.fish_model:
+            raise HTTPException(503, "Configure FISH_MODEL com o modelo liberado para API na sua conta Fish Audio.")
         client = await fish_client()
         entered = False
         try:
