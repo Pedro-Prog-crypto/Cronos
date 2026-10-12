@@ -42,7 +42,7 @@ def test_isolated_windows_voice_test_does_not_open_ui_or_expose_secrets(monkeypa
     from types import SimpleNamespace
     from cronos import voice_diagnostic
     state={};messages=[]
-    monkeypatch.setattr(voice_diagnostic,'load_dotenv',lambda *args:None)
+    monkeypatch.setattr(voice_diagnostic,'load_dotenv',lambda *args,**kwargs:None)
     monkeypatch.setattr(voice_diagnostic,'sys',SimpleNamespace(platform='win32'))
     monkeypatch.setattr(voice_diagnostic.Settings,'from_env',lambda:SimpleNamespace(privacy_mode='online',fish_key='dummy-secret',fish_reference='same-voice'))
     async def synthesize(key,**kwargs):state.update(kwargs);return b'wav'

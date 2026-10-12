@@ -30,7 +30,7 @@ async def report(settings, factory=AsyncFishAudio):
 
 
 def main():
-    load_dotenv('.env')
+    load_dotenv('.env', override=True)
     try:
         for line in asyncio.run(report(Settings.from_env())):print(line)
     except Exception:

@@ -1,4 +1,6 @@
 """Compatibilidade limitada com o pedido JSON do cliente Fish legado."""
+import io
+import wave
 import json
 import re
 import httpx
@@ -27,6 +29,21 @@ def safe_error_detail(raw, secrets=()):
     text=re.sub(r'[A-Za-z0-9_-]{24,}(?:\.[A-Za-z0-9_-]+)*','[oculto]',text)
     text=' '.join(text.split())[:500]
     return text or 'O provedor não retornou um motivo JSON reconhecível.'
+
+
+def finalize_wav(audio):
+    # Fish streaming WAV may advertise 0xffffffff data bytes until closed.
+    # Preserve PCM samples, rebuild finite RIFF lengths for browser/Windows players.
+    try:
+        with wave.open(io.BytesIO(audio),'rb') as reader:
+            channels,width,rate=reader.getnchannels(),reader.getsampwidth(),reader.getframerate()
+            frames=reader.readframes(len(audio)//max(1,channels*width))
+        output=io.BytesIO()
+        with wave.open(output,'wb') as writer:
+            writer.setnchannels(channels);writer.setsampwidth(width);writer.setframerate(rate);writer.writeframes(frames)
+        return output.getvalue()
+    except (wave.Error,EOFError,ValueError,OverflowError):
+        raise ValueError('O provedor retornou WAV inválido.') from None
 
 
 async def synthesize_json(api_key, *, text, reference_id=None, format='mp3',
@@ -58,4 +75,5 @@ async def synthesize_json(api_key, *, text, reference_id=None, format='mp3',
                 chunks.append(chunk)
             if not size:
                 raise ValueError('O provedor retornou áudio vazio.')
-            return b''.join(chunks)
+            audio=b''.join(chunks)
+            return finalize_wav(audio) if format=='wav' else audio

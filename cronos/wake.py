@@ -22,6 +22,12 @@ from cronos.windows_agent import safe_extract
 MODEL_NAME = "vosk-model-small-pt-0.3"
 MODEL_URL = "https://alphacephei.com/vosk/models/" + MODEL_NAME + ".zip"
 PHRASES = {"abrir cronos", "abrir kronos"}
+MODEL_LAYOUTS = (("am/final.mdl", "conf/model.conf"),
+                 ("final.mdl", "mfcc.conf", "HCLr.fst", "Gr.fst"))
+
+
+def model_present(folder):
+    return any(all((folder / name).is_file() for name in layout) for layout in MODEL_LAYOUTS)
 
 
 def root():
@@ -31,7 +37,7 @@ def root():
 
 def status():
     folder = root()
-    installed = (folder / MODEL_NAME / "am/final.mdl").is_file() and (folder / "model-hashes.json").is_file()
+    installed = model_present(folder / MODEL_NAME) and (folder / "model-hashes.json").is_file()
     result = {"model_installed": installed,
               "dependencies_installed": all(importlib.util.find_spec(name) is not None for name in ("vosk", "sounddevice")),
               "state": "stopped", "local_only": True, "phrases": sorted(PHRASES)}
@@ -83,7 +89,7 @@ def prepare_model(cancel=None):
         extracted = Path(temporary) / "extracted"
         safe_extract(archive, extracted)
         model = extracted / MODEL_NAME
-        if not (model / "am/final.mdl").is_file() or not (model / "conf/model.conf").is_file():
+        if not model_present(model):
             raise ValueError("Pacote não contém o modelo de português esperado.")
         hashes = {}
         for file in model.rglob("*"):
@@ -106,7 +112,7 @@ def verify_model():
         hashes = json.loads((folder / "model-hashes.json").read_text())
         if not isinstance(hashes, dict) or not 1 <= len(hashes) <= 1000:
             raise ValueError()
-        if "am/final.mdl" not in hashes or "conf/model.conf" not in hashes:
+        if not any(all(name in hashes for name in layout) for layout in MODEL_LAYOUTS):
             raise ValueError()
         actual = {file.relative_to(model).as_posix() for file in model.rglob("*") if file.is_file()}
         if actual != set(hashes):

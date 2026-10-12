@@ -50,6 +50,8 @@ class MemoryQuery(BaseModel):
 def create_app(settings: Settings | None = None, provider=None, fish_factory=None, vision_provider=None,
                windows_runner=None, windows_platform=None):
     settings = settings or Settings.from_env()
+    from cronos.recognition import LocalRecognizer
+    local_recognizer=LocalRecognizer()
 
     @asynccontextmanager
     async def lifespan(app):
@@ -134,6 +136,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 "provider_configured": configured, "configuration_warning": warning,
                 "privacy_mode": settings.privacy_mode,
                 "fish_configured": bool(settings.fish_key) and settings.privacy_mode == 'online',
+                "transcription_provider": settings.transcription_provider,
                 "fish_model_in_use": active_fish_model,
                 "fish_speech_configured": bool(settings.fish_key and settings.fish_model) and settings.privacy_mode == "online",
                 "custom_voice_configured": bool(settings.fish_reference),
@@ -265,10 +268,10 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         try:
             async with client:
                 audio = await fish_tts(client, "convert", text=body.text, reference_id=reference or None,
-                                                 format="mp3",
+                                                 format=settings.fish_format,
                                                  speed=body.speed or settings.fish_speed, latency=settings.fish_latency)
             request.app.state.features.record("voice", "passed", "Síntese retornou áudio; reprodução física no dispositivo não foi certificada.")
-            return Response(content=audio, media_type="audio/mpeg")
+            return Response(content=audio, media_type="audio/wav" if settings.fish_format == "wav" else "audio/mpeg")
         except Exception as exc:
             raise HTTPException(502, fish_error(exc, "síntese")) from exc
 
@@ -284,7 +287,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
             await client.__aenter__()
             entered = True
             audio = await fish_tts(client, "stream", text=body.text, reference_id=body.reference_id or settings.fish_reference or None,
-                                           format="mp3",
+                                           format=settings.fish_format,
                                            speed=body.speed or settings.fish_speed, latency=settings.fish_latency)
             iterator = audio.__aiter__()
             first = await anext(iterator)
@@ -302,7 +305,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 raise RuntimeError("O fluxo de áudio foi interrompido pelo provedor.") from None
             finally:
                 await client.__aexit__(None, None, None)
-        return StreamingResponse(chunks(), media_type="audio/mpeg", headers={"Cache-Control": "no-store"})
+        return StreamingResponse(chunks(), media_type="audio/wav" if settings.fish_format == "wav" else "audio/mpeg", headers={"Cache-Control": "no-store"})
 
     @app.post("/voice/transcribe", dependencies=[Depends(authenticate)])
     async def transcribe(request: Request):
@@ -315,6 +318,11 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
             chunks.append(chunk)
         if not size:
             raise HTTPException(422, "Envie um arquivo de áudio no corpo da requisição.")
+        if settings.transcription_provider == 'vosk':
+            try:
+                return {'text':await asyncio.to_thread(local_recognizer.transcribe,b''.join(chunks))}
+            except ValueError as exc:
+                raise HTTPException(503,str(exc)) from None
         client = await fish_client()
         try:
             async with client:

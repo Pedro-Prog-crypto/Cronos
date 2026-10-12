@@ -31,8 +31,14 @@ class Settings:
     provider_timeout: float = 180
     privacy_mode: str = "online"
     allow_executables: bool = False
+    fish_format: str = "mp3"
+    transcription_provider: str = "fish"
 
     def __post_init__(self):
+        if self.transcription_provider not in {"fish", "vosk"}:
+            raise ValueError("CRONOS_TRANSCRIPTION_PROVIDER deve ser fish ou vosk.")
+        if self.fish_format not in {"mp3", "wav"}:
+            raise ValueError("FISH_FORMAT deve ser mp3 ou wav.")
         if self.privacy_mode not in {"online", "local"}:
             raise ValueError("CRONOS_PRIVACY_MODE deve ser online ou local.")
 
@@ -59,6 +65,8 @@ class Settings:
             tool_rounds=max(1, int(os.getenv("CRONOS_TOOL_ROUNDS", "6"))),
             files_root=Path(os.getenv("CRONOS_FILES_ROOT") or str(Path.home() / "Downloads")).expanduser().resolve(),
             fish_speed=float(os.getenv("FISH_SPEED", "1.0")),
+            transcription_provider=os.getenv("CRONOS_TRANSCRIPTION_PROVIDER", "fish").strip().lower(),
+            fish_format=os.getenv("FISH_FORMAT", "mp3").strip().lower(),
             fish_latency=os.getenv("FISH_LATENCY", "balanced"),
             enable_plugins=os.getenv("CRONOS_ENABLE_PLUGINS", "0").casefold() in {"1", "true", "yes"},
             output_tokens=int(os.getenv("CRONOS_OUTPUT_TOKENS")) if os.getenv("CRONOS_OUTPUT_TOKENS") else None,

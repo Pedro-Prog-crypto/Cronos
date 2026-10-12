@@ -29,7 +29,7 @@ export default function App(){
   const activity=useRef<'IDLE'|'LISTENING'|'SPEAKING'>('IDLE');const [moduleActivity,setModuleActivity]=useState(activity.current);
   const tell=useCallback((message:string,isError=false)=>{setNotice(message);setError(isError);},[]);
   const voice=useCronosVoice({onError:message=>tell(message,true)});
-  const microphone=useMicrophone(useCallback(text=>{if(!text.trim()){tell('Não consegui entender a fala. Tente novamente.',true);return;}if(commandRef.current(text))return;setChatOpen(true);void sendRef.current(text);},[tell]),useCallback(message=>tell(message,true),[tell]));
+  const microphone=useMicrophone(useCallback(text=>{if(!text.trim()){tell('Não consegui entender a fala. Tente novamente.',true);return;}if(commandRef.current(text))return;setChatOpen(true);void sendRef.current(text);},[tell]),useCallback(message=>tell(message,true),[tell]),config?.transcription_provider==='vosk');
   const state=voice.isSpeaking?'SPEAKING':microphone.recording?'LISTENING':moduleActivity;
   const audioLevel=voice.isSpeaking?voice.audioLevel:microphone.level;
   const live=useRef({busy:false,recording:false,transcribing:false,speaking:false,generating:false,module:null as string|null,announce:false,fish:false});
@@ -109,7 +109,7 @@ export default function App(){
     if(!connected){tell('A conexão automática ainda não está disponível. Feche e abra o Kronos novamente.',true);return;}
     if(microphone.recording){void microphone.toggle();return;}
     if(voice.isSpeaking||voice.isGenerating){voice.stop();return;}
-    if(!config?.fish_configured){tell('Configure Fish Audio em modo online para transcrever voz. A conversa por texto continua disponível.',true);setModule('voice');return;}
+    if(config?.transcription_provider!=='vosk'&&!config?.fish_configured){tell('Configure Fish Audio em modo online para transcrever voz. A conversa por texto continua disponível.',true);setModule('voice');return;}
     if(moduleActivity!=='IDLE'){
       (iframe.current?.contentWindow as (Window & {cronosPanelClose?:()=>void})|null)?.cronosPanelClose?.();
       setModuleActivity('IDLE');return;

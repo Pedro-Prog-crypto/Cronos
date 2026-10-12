@@ -1,3 +1,4 @@
+import asyncio
 import json
 from typing import Protocol
 
@@ -74,17 +75,22 @@ class Gemini:
             raise ProviderError("GEMINI_MODEL inválido.")
         try:
             async with httpx.AsyncClient(timeout=self.settings.provider_timeout) as client:
-                response = await client.post(
-                    f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-                    headers={"x-goog-api-key": key},
-                    json={
-                        "systemInstruction": {"parts": [{"text": system + "\n" + OUTPUT_RULES}]},
-                        "contents": [{"role": "model" if m["role"] == "assistant" else "user",
-                                      "parts": [{"text": m["content"]}] + ([{"inlineData": {"mimeType": m["image"]["mime_type"], "data": m["image"]["data"]}}] if m.get("image") else [])} for m in messages],
-                        "generationConfig": {"responseMimeType": "application/json",
-                                             **({"maxOutputTokens": self.settings.output_tokens} if self.settings.output_tokens else {})},
-                    },
-                )
+                for attempt in range(2):
+                    response = await client.post(
+                        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                        headers={"x-goog-api-key": key},
+                        json={
+                            "systemInstruction": {"parts": [{"text": system + "\n" + OUTPUT_RULES}]},
+                            "contents": [{"role": "model" if m["role"] == "assistant" else "user",
+                                          "parts": [{"text": m["content"]}] + ([{"inlineData": {"mimeType": m["image"]["mime_type"], "data": m["image"]["data"]}}] if m.get("image") else [])} for m in messages],
+                            "generationConfig": {"responseMimeType": "application/json",
+                                                 **({"maxOutputTokens": self.settings.output_tokens} if self.settings.output_tokens else {})},
+                        },
+                    )
+                    if response.status_code != 503 or attempt:
+                        break
+                    await response.aclose()
+                    await asyncio.sleep(.75)
                 response.raise_for_status()
                 data = response.json()
                 if data.get("promptFeedback", {}).get("blockReason"):

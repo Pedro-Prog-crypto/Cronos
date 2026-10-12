@@ -24,7 +24,7 @@ def test_gemini_404_lists_models_without_a_second_generation(settings,monkeypatc
     class Provider:
         async def reply(self,*args):raise ProviderError('modelo HTTP 404')
     async def models(*args):return ['modelo-real-flash']
-    monkeypatch.setattr(diagnostics,'load_dotenv',lambda *args:None)
+    monkeypatch.setattr(diagnostics,'load_dotenv',lambda *args,**kwargs:None)
     monkeypatch.setattr(diagnostics.Settings,'from_env',lambda:settings)
     monkeypatch.setattr(diagnostics,'make_provider',lambda settings:Provider())
     monkeypatch.setattr(diagnostics,'available_models',models)

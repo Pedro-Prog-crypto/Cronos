@@ -9,7 +9,7 @@ from cronos.integrations import available_models
 
 
 def main():
-    load_dotenv(".env")
+    load_dotenv(".env", override=True)
     settings = Settings.from_env()
     print("Diagnóstico de conexão do Cronos")
     print("Provedor:", settings.provider)

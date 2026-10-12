@@ -11,7 +11,7 @@ def test_desktop_starts_private_server_and_connects_window(tmp_path, monkeypatch
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("CRONOS_API_TOKEN", "")
     monkeypatch.setenv("CRONOS_VAULT", str(tmp_path / "vault"))
-    monkeypatch.setattr(desktop, "load_dotenv", lambda *args: None)
+    monkeypatch.setattr(desktop, "load_dotenv", lambda *args, **kwargs: None)
     monkeypatch.setattr(desktop, "sys", SimpleNamespace(platform="win32"))
     state = {}
 

@@ -1,3 +1,11 @@
+# Atualização: configuração original validada
+
+O ZIP original com a configuração real permitiu uma chamada Fish bem-sucedida.
+Consulte [Voz original](VOZ_ORIGINAL.md) para importação e evidências atuais.
+As hipóteses e falhas de compatibilidade abaixo registram etapas anteriores.
+
+---
+
 # Resultado real do teste legado: HTTP 400
 
 O usuário executou o teste isolado no notebook e recebeu HTTP 400. Isso comprova

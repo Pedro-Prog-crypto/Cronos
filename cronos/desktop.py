@@ -19,7 +19,7 @@ def _run():
         raise SystemExit('Instale o modo desktop: python -m pip install -e ".[desktop]"')
 
     # Carregar configurações antes de importar a aplicação.
-    load_dotenv(".env")
+    load_dotenv(".env", override=True)
     if not os.getenv("CRONOS_API_TOKEN", "").strip():
         os.environ["CRONOS_API_TOKEN"] = secrets.token_urlsafe(32)
     from cronos.app import create_app

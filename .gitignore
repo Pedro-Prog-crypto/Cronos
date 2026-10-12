@@ -13,3 +13,5 @@ config/ai_council.json
 frontend/node_modules/
 frontend/.env*
 build/
+
+.cronos-local/

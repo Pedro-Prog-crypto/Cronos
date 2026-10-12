@@ -7,7 +7,7 @@ from cronos.fish_legacy import synthesize_json
 
 
 def main():
-    load_dotenv('.env')
+    load_dotenv('.env', override=True)
     settings=Settings.from_env()
     try:
         if sys.platform!='win32':

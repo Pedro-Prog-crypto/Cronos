@@ -51,7 +51,21 @@ export function useCronosVoice({onSpeechStart,onSpeechEnd,onError}: VoiceProps =
   return {isSpeaking,isGenerating,audioLevel,speak,stop,prepare};
 }
 
-export function useMicrophone(onTranscript:(text:string)=>void,onError:(message:string)=>void) {
+async function localWave(blob:Blob){
+  const decoder=new AudioContext();let decoded:AudioBuffer;
+  try{decoded=await decoder.decodeAudioData(await blob.arrayBuffer());}finally{await decoder.close();}
+  const renderer=new OfflineAudioContext(1,Math.ceil(decoded.duration*16000),16000),input=renderer.createBufferSource();
+  input.buffer=decoded;input.connect(renderer.destination);input.start();
+  const samples=(await renderer.startRendering()).getChannelData(0),bytes=new ArrayBuffer(44+samples.length*2),view=new DataView(bytes);
+  const write=(offset:number,value:string)=>{for(let i=0;i<value.length;i++)view.setUint8(offset+i,value.charCodeAt(i));};
+  write(0,'RIFF');view.setUint32(4,36+samples.length*2,true);write(8,'WAVE');write(12,'fmt ');view.setUint32(16,16,true);
+  view.setUint16(20,1,true);view.setUint16(22,1,true);view.setUint32(24,16000,true);view.setUint32(28,32000,true);view.setUint16(32,2,true);view.setUint16(34,16,true);
+  write(36,'data');view.setUint32(40,samples.length*2,true);
+  for(let i=0;i<samples.length;i++){const v=Math.max(-1,Math.min(1,samples[i]));view.setInt16(44+i*2,v<0?v*32768:v*32767,true);}
+  return new Blob([bytes],{type:'audio/wav'});
+}
+
+export function useMicrophone(onTranscript:(text:string)=>void,onError:(message:string)=>void,local=false) {
   const [recording,setRecording]=useState(false),[transcribing,setTranscribing]=useState(false),[level,setLevel]=useState(0);
   const refs=useRef<{recorder?:MediaRecorder;stream?:MediaStream;context?:AudioContext;timer?:ReturnType<typeof setTimeout>;frame?:number;abort?:AbortController}>({});
   const mounted=useRef(true), requesting=useRef(false);
@@ -81,14 +95,14 @@ export function useMicrophone(onTranscript:(text:string)=>void,onError:(message:
         if(size>10*1024*1024){onError('A gravação ultrapassou 10 MiB. Grave um trecho menor.');return;}
         if(!size){onError('A gravação não contém áudio.');return;}
         setTranscribing(true);const abort=new AbortController();r.abort=abort;
-        try {const response=await api('/voice/transcribe',{method:'POST',headers:{'Content-Type':recorder.mimeType},body:new Blob(parts,{type:recorder.mimeType}),signal:abort.signal});const result=await response.json();if(mounted.current)onTranscript(result.text);}
+        try {const original=new Blob(parts,{type:recorder.mimeType});const audio=local?await localWave(original):original;if(!mounted.current||abort.signal.aborted)return;const response=await api('/voice/transcribe',{method:'POST',headers:{'Content-Type':audio.type},body:audio,signal:abort.signal});const result=await response.json();if(mounted.current)onTranscript(result.text);}
         catch(error){if(mounted.current&&!abort.signal.aborted)onError(error instanceof Error?error.message:'Transcrição indisponível.');}
         finally{if(mounted.current)setTranscribing(false);}
       };
       recorder.start(1000);setRecording(true);r.frame=requestAnimationFrame(measure);r.timer=setTimeout(()=>{if(recorder.state==='recording')recorder.stop();},60000);
     } catch(error){release();onError(error instanceof Error?error.message:'Não foi possível acessar o microfone.');}
     finally{requesting.current=false;}
-  },[onTranscript,onError,release,transcribing]);
+  },[onTranscript,onError,release,transcribing,local]);
   useEffect(()=>()=>{mounted.current=false;refs.current.abort?.abort();if(refs.current.recorder?.state==='recording')refs.current.recorder.stop();refs.current.stream?.getTracks().forEach(track=>track.stop());refs.current.context?.close();if(refs.current.frame)cancelAnimationFrame(refs.current.frame);if(refs.current.timer)clearTimeout(refs.current.timer);},[]);
   return {recording,transcribing,level,toggle};
 }
