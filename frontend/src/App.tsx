@@ -22,13 +22,14 @@ export default function App(){
   const [draft,setDraft]=useState(''),[messages,setMessages]=useState<Message[]>([]),[busy,setBusy]=useState(false),[tools,setTools]=useState<ToolResult[]>([]);
   const [autoVoice,setAutoVoice]=useState(true),[announceAlerts,setAnnounceAlerts]=useState(false),[monitor,setMonitor]=useState<any>(null);
   const [eyeOpen,setEyeOpen]=useState(false),[placeQuery,setPlaceQuery]=useState(''),[graph,setGraph]=useState<MemoryGraph>({nodes:[],edges:[],total:0}),[graphRevision,setGraphRevision]=useState(0),[note,setNote]=useState<{path:string;content:string}|null>(null);
+  const sendRef=useRef<(text:string)=>Promise<void>>(async()=>{});
   const commandRef=useRef<(text:string)=>boolean>(()=>false),eyeAnnouncement=useRef(false);
   const pendingAlerts=useRef(new Map<number,any>());
   const session=useRef<string|null>(null),iframe=useRef<HTMLIFrameElement|null>(null),cursor=useRef(0),inFlight=useRef(false);
   const activity=useRef<'IDLE'|'LISTENING'|'SPEAKING'>('IDLE');const [moduleActivity,setModuleActivity]=useState(activity.current);
   const tell=useCallback((message:string,isError=false)=>{setNotice(message);setError(isError);},[]);
   const voice=useCronosVoice({onError:message=>tell(message,true)});
-  const microphone=useMicrophone(useCallback(text=>{if(commandRef.current(text))return;setDraft(current=>current?`${current}\n${text}`:text);setChatOpen(true);tell('Áudio transcrito. Revise o texto e envie.');},[tell]),useCallback(message=>tell(message,true),[tell]));
+  const microphone=useMicrophone(useCallback(text=>{if(!text.trim()){tell('Não consegui entender a fala. Tente novamente.',true);return;}if(commandRef.current(text))return;setChatOpen(true);void sendRef.current(text);},[tell]),useCallback(message=>tell(message,true),[tell]));
   const state=voice.isSpeaking?'SPEAKING':microphone.recording?'LISTENING':moduleActivity;
   const audioLevel=voice.isSpeaking?voice.audioLevel:microphone.level;
   const live=useRef({busy:false,recording:false,transcribing:false,speaking:false,generating:false,module:null as string|null,announce:false,fish:false});
@@ -117,8 +118,8 @@ export default function App(){
     if(autoVoice)voice.prepare();
     void microphone.toggle();
   };
-  const send=async(event:React.FormEvent)=>{
-    event.preventDefault();const text=draft.trim();if(!text||inFlight.current)return;if(runCommand(text)){setDraft('');return;}
+  const sendText=async(value:string)=>{
+    const text=value.trim();if(!text||inFlight.current)return;if(runCommand(text)){setDraft('');return;}
     if(!connected){tell('A conexão automática ainda não está disponível. Feche e abra o Kronos novamente.',true);return;}
     inFlight.current=true;setBusy(true);voice.stop();if(autoVoice)voice.prepare();setMessages(old=>[...old,{role:'user',content:text}]);setDraft('');tell('Cronos está processando sua mensagem…');
     try{
@@ -126,12 +127,15 @@ export default function App(){
       setMessages(old=>[...old,{role:'assistant',content:result.reply}]);setTools(old=>[...old,...(result.tool_results||[])]);
       if(result.warnings?.length)tell(result.warnings.join('\n'),true);else setNotice('');
       if(autoVoice&&config?.fish_speech_configured)void voice.speak(result.reply);
+      else if(autoVoice)tell('A resposta está escrita, mas a voz não está configurada. Confira a configuração da voz no arquivo .env.',true);
     }catch(error){
       if(error instanceof ApiError&&error.detail?.tool_results){session.current=error.detail.session_id;setTools(old=>[...old,...error.detail.tool_results]);}
       tell(error instanceof Error?error.message:'Não foi possível conversar.',true);
       setDraft(text); // Falha não elimina a pergunta; não repetir ações automaticamente.
     }finally{setBusy(false);inFlight.current=false;}
   };
+  sendRef.current=sendText;
+  const send=(event:React.FormEvent)=>{event.preventDefault();void sendText(draft);};
   const approve=async(result:ToolResult,accepted:boolean)=>{
     if(inFlight.current)return;inFlight.current=true;setBusy(true);
     try{const outcome=await jsonApi(`/tools/approvals/${result.approval_id}`,{session_id:result.session_id||session.current,accepted});
@@ -166,7 +170,7 @@ export default function App(){
       <form onSubmit={send}><label htmlFor="chat-input">Sua mensagem ou transcrição para revisar</label><textarea id="chat-input" value={draft} onChange={event=>setDraft(event.target.value)} maxLength={16000} rows={3}/>
         <div className="footer-actions"><button type="submit" disabled={busy||microphone.recording||microphone.transcribing||!draft.trim()}><Send size={15}/>Enviar mensagem</button>{lastReply&&<button type="button" onClick={()=>void voice.speak(lastReply)} disabled={!connected}>Ouvir resposta</button>}
           <button type="button" disabled={busy} onClick={()=>{session.current=null;setMessages([]);setTools([]);setDraft('');voice.stop();}}>Nova conversa</button></div>
-      </form><p className="small-note">Áudio e texto enviados aos provedores podem consumir cota. Gravação limitada a 60 segundos; transcrições não são enviadas à conversa sem sua revisão.</p>
+      </form><p className="small-note">Áudio e texto enviados aos provedores podem consumir cota. Gravação limitada a 60 segundos; ao terminar uma fala, a transcrição é enviada à conversa. Ações sensíveis continuam exigindo confirmação.</p>
     </section>}
     {module&&<section className="module-window" role="dialog" aria-label={moduleNames[moduleIds.indexOf(module)]}>
       <div className="drawer-heading"><h2>{moduleNames[moduleIds.indexOf(module)]}</h2><button onClick={closeModule} aria-label="Fechar módulo"><X size={19}/></button></div>

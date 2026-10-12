@@ -69,12 +69,15 @@ export function useMicrophone(onTranscript:(text:string)=>void,onError:(message:
       const recorder=new MediaRecorder(r.stream,type?{mimeType:type}:undefined);r.recorder=recorder;
       const parts:BlobPart[]=[];let size=0,failed=false;
       r.context=new AudioContext();const meter=r.context.createAnalyser();meter.fftSize=256;r.context.createMediaStreamSource(r.stream).connect(meter);
-      const values=new Uint8Array(256);let last=0;
-      const measure=(time:number)=>{if(recorder.state!=='recording')return;if(time-last>50){meter.getByteTimeDomainData(values);let sum=0;for(const value of values)sum+=((value-128)/128)**2;setLevel(Math.min(1,Math.sqrt(sum/values.length)*4));last=time;}r.frame=requestAnimationFrame(measure);};
+      const values=new Uint8Array(256);let last=0,lastSpeech=performance.now(),heardSpeech=false;const started=lastSpeech;
+      const measure=(time:number)=>{if(recorder.state!=='recording')return;if(time-last>50){meter.getByteTimeDomainData(values);let sum=0;for(const value of values)sum+=((value-128)/128)**2;const rms=Math.sqrt(sum/values.length);setLevel(Math.min(1,rms*4));last=time;
+        if(rms>.012){heardSpeech=true;lastSpeech=time;}
+        if(!heardSpeech&&time-started>8000){failed=true;onError('Não detectei fala no microfone. Tente novamente ou confira o dispositivo de entrada.');recorder.stop();return;}
+        if(heardSpeech&&time-lastSpeech>1400&&time-started>1000){recorder.stop();return;}}r.frame=requestAnimationFrame(measure);};
       recorder.ondataavailable=event=>{parts.push(event.data);size+=event.data.size;if(size>10*1024*1024&&recorder.state==='recording')recorder.stop();};
       recorder.onerror=()=>{failed=true;release();setRecording(false);onError('Falha na gravação do microfone.');};
       recorder.onstop=async()=>{
-        release();r.recorder=undefined;if(!mounted.current||failed)return;setRecording(false);
+        release();r.recorder=undefined;if(!mounted.current)return;setRecording(false);if(failed)return;
         if(size>10*1024*1024){onError('A gravação ultrapassou 10 MiB. Grave um trecho menor.');return;}
         if(!size){onError('A gravação não contém áudio.');return;}
         setTranscribing(true);const abort=new AbortController();r.abort=abort;

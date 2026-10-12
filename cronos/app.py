@@ -232,7 +232,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         if fish_factory:
             return fish_factory()
         from fishaudio import AsyncFishAudio
-        return AsyncFishAudio(api_key=settings.fish_key)
+        return AsyncFishAudio(api_key=settings.fish_key, timeout=30.0)
 
     @app.post("/voice/speech", dependencies=[Depends(authenticate)])
     async def speech(body: SpeechInput, request: Request):

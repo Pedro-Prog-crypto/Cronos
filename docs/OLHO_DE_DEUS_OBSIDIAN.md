@@ -1,3 +1,25 @@
+# Correção do fluxo de voz
+
+O microfone agora encerra a gravação depois de aproximadamente 1,4 segundo de
+silêncio após detectar fala, ou por novo clique. Ruído contínuo pode impedir o
+encerramento automático; use o clique nesse caso. Sem fala detectada em oito
+segundos, não envia uma transcrição desnecessária. A gravação continua limitada
+a 60 segundos. Após transcrever, perguntas vão para a IA e a resposta tenta tocar
+pelo Fish, sem exigir clicar Enviar. Texto e memória ficam disponíveis se a voz
+falhar. Ações sensíveis continuam exigindo confirmação humana.
+
+O SDK Fish agora usa timeout de 30 segundos por requisição, em vez do padrão de
+240 segundos. Isso não promete resposta em 30 segundos nem altera acesso/cota.
+A captura mover o núcleo confirma somente sinal do microfone, não transcrição,
+resposta da IA ou reprodução. HTTP 402 identifica a etapa recusada pelo provedor;
+a causa real ainda exige teste com a conta/API do usuário.
+
+Chromium verificou silêncio automático → transcrição → IA → síntese → evento real
+de reprodução, com serviços e entrada de áudio simulados. Windows físico e API
+real continuam pendentes. Não foi feita troca de voz/provedor ou de renderizador.
+
+---
+
 # Ajuste posterior à v0.5
 
 A área de memória agora não exibe esqueleto, linhas decorativas ou brilho central.
@@ -52,8 +74,7 @@ são apresentados por mensagem Windows. Sem console não significa sem processos
   retornam à espiral. O iframe é removido, destruindo o visualizador, workers e
   seu contexto JavaScript. As notas ficam preservadas.
 - **Abrir painel** abre conversa. Comandos reconhecidos de navegação transcritos
-  executam a navegação local; outras transcrições continuam para revisão antes
-  do envio à IA. Fish ausente impede transcrição; texto continua disponível.
+  executam a navegação local; outras transcrições seguem para a conversa automaticamente. Fish ausente impede transcrição; texto continua disponível.
 
 ## O que está integrado
 
