@@ -183,3 +183,33 @@ def test_ollama_http_contract(settings, monkeypatch):
         return httpx.Response(200, json={"message": {"content": '{"reply":"Local","topics":[]}'}})
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: original_client(transport=httpx.MockTransport(handler)))
     assert asyncio.run(Ollama(settings).reply("Personalidade", [{"role": "user", "content": "Olá"}]))["reply"] == "Local"
+
+
+@pytest.mark.parametrize("status,reason,expected", [
+    (400, "API_KEY_INVALID", "chave rejeitada"),
+    (403, "SERVICE_DISABLED", "API está desativada"),
+    (401, "", "chave rejeitada"),
+    (403, "", "acesso negado"),
+    (404, "", "modelo não encontrado"),
+    (429, "", "cota esgotada"),
+    (400, "", "solicitação rejeitada"),
+    (503, "", "falha no serviço Google"),
+])
+def test_gemini_error_diagnosis_without_secret_leak(settings, monkeypatch, status, reason, expected):
+    original_client = httpx.AsyncClient
+    def handler(request):
+        return httpx.Response(status, json={"error": {"message": "PRIVATE_KEY_AND_PROMPT", "details": [{"reason": reason}]}})
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: original_client(transport=httpx.MockTransport(handler)))
+    with pytest.raises(ProviderError, match=expected) as error:
+        asyncio.run(Gemini(replace(settings, gemini_key="dummy")).reply("Test", [{"role": "user", "content": "Olá"}]))
+    assert "PRIVATE_KEY_AND_PROMPT" not in str(error.value)
+
+
+@pytest.mark.parametrize("failure,expected", [(httpx.ConnectError, "conectar"), (httpx.ReadTimeout, "tempo de resposta")])
+def test_gemini_network_diagnosis(settings, monkeypatch, failure, expected):
+    original_client = httpx.AsyncClient
+    def handler(request):
+        raise failure("sensitive error", request=request)
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: original_client(transport=httpx.MockTransport(handler)))
+    with pytest.raises(ProviderError, match=expected):
+        asyncio.run(Gemini(replace(settings, gemini_key="dummy")).reply("Test", [{"role": "user", "content": "Olá"}]))

@@ -24,6 +24,13 @@ Windows; a transcrição por arquivo continua disponível.
 Esta versão desktop usa Python e scripts de inicialização; ainda não é um
 instalador `.exe` independente. Fechar a janela encerra o backend dessa execução.
 
+Se a conversa falhar, abra `Diagnosticar-Cronos.bat`. Ele faz uma chamada mínima
+ao provedor e mostra o diagnóstico sem imprimir chaves ou salvar conversas.
+A chamada pode consumir cota. Erros do Gemini agora distinguem chave rejeitada,
+API desativada, acesso negado, modelo indisponível, cota e conexão. A configuração
+presente na interface não comprova que a chave foi aceita. Após editar `.env`,
+feche e reabra o Cronos para carregar as alterações.
+
 Comandos equivalentes, executados na pasta do projeto:
 
 ```bat
