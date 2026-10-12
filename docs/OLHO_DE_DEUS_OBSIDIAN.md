@@ -1,3 +1,23 @@
+# Compatibilidade Fish Audio com o Jarvis anterior
+
+A comparação estática do pacote fornecido identificou o modelo padrão
+`s2.1-pro-free` e uma tentativa nesse modelo após HTTP 402. O Kronos agora faz
+uma única tentativa equivalente na síntese, mantendo texto, voz, formato e
+velocidade; não muda para um modelo mais caro. Depois de sucesso, conserva esse
+modelo durante a execução. `/status` informa `fish_model_in_use`.
+Para selecionar diretamente, use `FISH_MODEL=s2.1-pro-free` no `.env` local,
+preservando sua chave e ID de voz. Não foram copiados arquivos de credenciais
+nem executado o código legado. O endpoint continua `https://api.fish.audio/v1/tts`.
+O SDK usa MessagePack, enquanto o cliente antigo usava JSON; o envio do novo
+identificador pelo SDK foi validado com transporte HTTP simulado.
+
+O nome “free” foi encontrado no código antigo, não confirmado por chamada real
+hoje. A disponibilidade/cota atual da conta continua dependendo do provedor.
+Transcrição é outro endpoint e não troca de modelo TTS. O tratamento de 402 não
+significa que o saldo exibido pelo usuário seja zero.
+
+---
+
 # Correção do fluxo de voz
 
 O microfone agora encerra a gravação depois de aproximadamente 1,4 segundo de

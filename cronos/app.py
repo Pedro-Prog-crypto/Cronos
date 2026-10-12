@@ -134,6 +134,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 "provider_configured": configured, "configuration_warning": warning,
                 "privacy_mode": settings.privacy_mode,
                 "fish_configured": bool(settings.fish_key) and settings.privacy_mode == 'online',
+                "fish_model_in_use": active_fish_model,
                 "fish_speech_configured": bool(settings.fish_key and settings.fish_model) and settings.privacy_mode == "online",
                 "custom_voice_configured": bool(settings.fish_reference),
                 "personality_available": settings.personality.is_file()}
@@ -234,6 +235,22 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         from fishaudio import AsyncFishAudio
         return AsyncFishAudio(api_key=settings.fish_key, timeout=30.0)
 
+    active_fish_model = settings.fish_model
+
+    async def fish_tts(client, method, **arguments):
+        nonlocal active_fish_model
+        model = active_fish_model
+        try:
+            return await getattr(client.tts, method)(model=model, **arguments)
+        except Exception as exc:
+            if getattr(exc, "status", None) != 402 or model == "s2.1-pro-free":
+                raise
+            # Legacy compatibility requested by the user: one retry to the old
+            # free-labelled identifier, preserving voice/format/text. Never escalate.
+            result = await getattr(client.tts, method)(model="s2.1-pro-free", **arguments)
+            active_fish_model = "s2.1-pro-free"
+            return result
+
     @app.post("/voice/speech", dependencies=[Depends(authenticate)])
     async def speech(body: SpeechInput, request: Request):
         if not body.text.strip():
@@ -244,8 +261,8 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         client = await fish_client()
         try:
             async with client:
-                audio = await client.tts.convert(text=body.text, reference_id=reference or None,
-                                                 model=settings.fish_model, format="mp3",
+                audio = await fish_tts(client, "convert", text=body.text, reference_id=reference or None,
+                                                 format="mp3",
                                                  speed=body.speed or settings.fish_speed, latency=settings.fish_latency)
             request.app.state.features.record("voice", "passed", "Síntese retornou áudio; reprodução física no dispositivo não foi certificada.")
             return Response(content=audio, media_type="audio/mpeg")
@@ -263,8 +280,8 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         try:
             await client.__aenter__()
             entered = True
-            audio = await client.tts.stream(text=body.text, reference_id=body.reference_id or settings.fish_reference or None,
-                                           model=settings.fish_model, format="mp3",
+            audio = await fish_tts(client, "stream", text=body.text, reference_id=body.reference_id or settings.fish_reference or None,
+                                           format="mp3",
                                            speed=body.speed or settings.fish_speed, latency=settings.fish_latency)
             iterator = audio.__aiter__()
             first = await anext(iterator)

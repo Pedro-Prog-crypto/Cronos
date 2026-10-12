@@ -61,3 +61,43 @@ def test_microphone_billing_error_identifies_asr_without_claiming_zero_balance(t
         assert 'transcrição do microfone' in response.text and 'HTTP 402' in response.text
         assert 'não confirma saldo zerado' in response.text
         assert 'PRIVATE' not in response.text
+
+
+def test_legacy_free_fallback_once_preserves_voice_and_sticks_after_success(tmp_path):
+    calls=[]
+    class Fish:
+        async def __aenter__(self):return self
+        async def __aexit__(self,*args):pass
+        @property
+        def tts(self):return self
+        async def convert(self,**kwargs):
+            calls.append(kwargs)
+            if kwargs['model']=='s2-pro':raise APIError(402,'private')
+            return b'audio'
+    settings=replace(Settings.from_env(),vault=tmp_path/'vault',token='test-token',fish_key='dummy',fish_model='s2-pro',fish_reference='same-voice')
+    with TestClient(create_app(settings,fish_factory=Fish)) as client:
+        auth={'Authorization':'Bearer test-token'}
+        assert client.post('/voice/speech',headers=auth,json={'text':'Olá'}).status_code==200
+        assert client.get('/status',headers=auth).json()['fish_model_in_use']=='s2.1-pro-free'
+        assert client.post('/voice/speech',headers=auth,json={'text':'Outra fala'}).status_code==200
+    assert [call['model'] for call in calls]==['s2-pro','s2.1-pro-free','s2.1-pro-free']
+    assert calls[0]['reference_id']==calls[1]['reference_id']=='same-voice'
+    assert calls[0]['text']==calls[1]['text']=='Olá'
+    assert calls[0]['format']==calls[1]['format']=='mp3'
+
+
+def test_real_sdk_can_send_legacy_model_identifier():
+    import asyncio,httpx,ormsgpack
+    from fishaudio import AsyncFishAudio
+    captured=[]
+    def request(request):
+        captured.append(request)
+        return httpx.Response(200,content=b'audio',headers={'Content-Type':'audio/mpeg'})
+    async def run():
+        async with httpx.AsyncClient(base_url="https://api.fish.audio",transport=httpx.MockTransport(request)) as transport:
+            async with AsyncFishAudio(api_key='dummy-test',httpx_client=transport) as fish:
+                assert await fish.tts.convert(text='Olá',model='s2.1-pro-free',reference_id='same-voice',format='mp3')==b'audio'
+    asyncio.run(run())
+    assert captured[0].url.path=='/v1/tts'
+    assert captured[0].headers['model']=='s2.1-pro-free'
+    assert ormsgpack.unpackb(captured[0].content)['reference_id']=='same-voice'
