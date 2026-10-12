@@ -40,10 +40,13 @@ def main():
             if not thread.is_alive() or time.monotonic() > deadline:
                 raise SystemExit("O backend não iniciou. Confira o arquivo .env e a pasta de memória.")
             time.sleep(.05)
-        window = webview.create_window("Cronos", f"http://127.0.0.1:{port}",
+        address = f"http://127.0.0.1:{port}"
+        window = webview.create_window("Cronos", address,
                                        width=1200, height=850, min_size=(700, 600))
 
         def connect():
+            if (window.get_current_url() or "").rstrip("/") != address:
+                return
             # Token local, não gravado em HTML, logs ou armazenamento do navegador.
             window.evaluate_js(
                 "document.getElementById('token').value = " + json.dumps(settings.token) + ";"

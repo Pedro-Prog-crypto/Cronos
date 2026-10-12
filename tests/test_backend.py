@@ -59,7 +59,8 @@ def test_chat_persists_reuses_context_and_separates_notes(settings):
         assert len(result["notes"]) == 2
         first = settings.vault / result["notes"][0]
         assert "Sócrates" in first.read_text()
-        assert "equações" not in first.read_text()
+        assert "O usuário perguntou sobre equações." not in first.read_text()
+        assert "Relacionadas:" in first.read_text()
         second = client.post("/chat", headers=AUTH, json={"message": "E Sócrates?", "session_id": result["session_id"]})
         assert second.status_code == 200
         assert len(provider.calls[1][1]) == 3

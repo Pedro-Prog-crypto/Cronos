@@ -23,6 +23,7 @@ def test_desktop_starts_private_server_and_connects_window(tmp_path, monkeypatch
 
     class Window:
         events = SimpleNamespace(loaded=Loaded())
+        def get_current_url(self): return state["url"]
         def evaluate_js(self, script):
             state["script"] = script
 

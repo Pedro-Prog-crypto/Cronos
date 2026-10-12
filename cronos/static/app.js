@@ -16,6 +16,11 @@ async function api(path, options = {}) {
   if (!response.ok) {
     let detail;
     try { detail = (await response.json()).detail; } catch { /* erro sem JSON */ }
+    if (detail && typeof detail === "object" && detail.message) {
+      if (detail.session_id) { session = detail.session_id; $("session").value = session; }
+      renderTools(detail.tool_results || []);
+      throw new Error(detail.message);
+    }
     throw new Error(typeof detail === "string" ? detail : `A requisição falhou (HTTP ${response.status}).`);
   }
   return response;
@@ -52,6 +57,38 @@ function clearAudio() {
   audioUrl = null;
 }
 
+function renderTools(results) {
+  const resolved = new Set(results.filter(result => result.status !== "pending_confirmation").map(result => result.approval_id));
+  for (const result of results) {
+    if (result.status === "pending_confirmation" && resolved.has(result.approval_id)) continue;
+    const card = document.createElement("div"); card.className = "message";
+    const title = document.createElement("strong"); title.textContent = `FERRAMENTA · ${result.name}`;
+    const text = document.createElement("span");
+    const labels = {completed: "Concluída", failed: "Falhou", pending_confirmation: "Aguardando sua confirmação", cancelled: "Cancelada", expired: "Confirmação expirada", resolved: "Confirmação já respondida"};
+    text.textContent = (labels[result.status] || result.status) + (result.error ? `: ${result.error}` : "");
+    card.append(title, text);
+    if (result.status === "pending_confirmation") {
+      const details = document.createElement("pre"); details.textContent = JSON.stringify(result.arguments, null, 2);
+      details.style.whiteSpace = "pre-wrap"; card.append(details);
+      const controls = document.createElement("div"); controls.className = "row";
+      const confirm = document.createElement("button"); confirm.textContent = "Confirmar ação";
+      const cancel = document.createElement("button"); cancel.textContent = "Cancelar"; cancel.className = "secondary";
+      const resolve = accepted => {
+        if (busy) return;
+        run("Processando sua decisão…", async () => {
+          const response = await (await api(`/tools/approvals/${result.approval_id}`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({session_id: result.session_id || session, accepted})})).json();
+          confirm.disabled = true; cancel.disabled = true;
+          text.textContent = labels[response.status] + (response.error ? `: ${response.error}` : "");
+          notice(response.status === "completed" ? "Ação concluída. Você pode continuar a conversa." : text.textContent, response.status === "failed");
+        });
+      };
+      confirm.addEventListener("click", () => resolve(true)); cancel.addEventListener("click", () => resolve(false));
+      controls.append(confirm, cancel); card.append(controls);
+    }
+    $("messages").append(card);
+  }
+}
+
 $("connect-form").addEventListener("submit", event => {
   event.preventDefault();
   run("Verificando conexão…", async () => {
@@ -59,8 +96,8 @@ $("connect-form").addEventListener("submit", event => {
     const result = await (await api("/status")).json();
     const values = [
       ["Backend: conectado", true],
-      [`IA: ${result.provider}${result.provider === "gemini" && !result.gemini_configured ? " · falta chave" : " · acesso ainda não testado"}`, result.provider !== "gemini" || result.gemini_configured],
-      [result.fish_configured ? "Voz: configurada · acesso ainda não testado" : "Voz: falta chave ou ID", result.fish_configured],
+      [`IA: ${result.provider}${!result.provider_configured ? " · falta configuração" : " · acesso ainda não testado"}`, result.provider_configured],
+      [result.fish_configured ? "Voz: configurada · acesso ainda não testado" : "Voz: falta chave", result.fish_configured],
       [result.personality_available ? "Personalidade: disponível" : "Personalidade: arquivo ausente", result.personality_available]
     ];
     $("status").replaceChildren(...values.map(([text, good]) => {
@@ -79,6 +116,7 @@ $("chat-form").addEventListener("submit", event => {
     session = result.session_id;
     $("session").value = session;
     message("user", text); message("assistant", result.reply);
+    renderTools(result.tool_results || []);
     lastReply = result.reply;
     $("message").value = "";
     $("notes").replaceChildren();
@@ -88,7 +126,7 @@ $("chat-form").addEventListener("submit", event => {
       item.textContent = result.topics[index] ? `${result.topics[index]} — ${path}` : path;
       $("notes").append(item);
     });
-    notice("Resposta recebida e conversa salva.");
+    notice(result.warnings?.length ? result.warnings.join("\n") : "Resposta recebida e conversa salva.", Boolean(result.warnings?.length));
   });
 });
 
@@ -119,12 +157,13 @@ $("history").addEventListener("click", () => run("Carregando histórico…", asy
     message(item.role, item.content);
     if (item.role === "assistant") lastReply = item.content;
   }
+  renderTools(result.tool_results || []);
   notice("Histórico carregado. As próximas mensagens continuarão esta conversa.");
 }));
 
 $("use-reply").addEventListener("click", () => {
   if (!lastReply) return notice("Envie uma mensagem ou carregue uma conversa primeiro.", true);
-  if (lastReply.length > 5000) return notice("A resposta supera 5.000 caracteres. Copie um trecho para testar a voz.", true);
+  if (lastReply.length > 50000) return notice("A resposta supera 50.000 caracteres. Divida-a em trechos para gerar a voz.", true);
   $("speech-text").value = lastReply;
   notice("Resposta copiada para o teste de voz.");
 });
@@ -132,7 +171,7 @@ $("use-reply").addEventListener("click", () => {
 $("speak").addEventListener("click", () => run("Gerando áudio pelo Fish Audio…", async () => {
   const text = $("speech-text").value.trim();
   if (!text) throw new Error("Digite um texto para gerar a voz.");
-  if (text.length > 5000) throw new Error("O texto de voz deve ter até 5.000 caracteres.");
+  if (text.length > 50000) throw new Error("Divida o texto em trechos de até 50.000 caracteres.");
   const response = await api("/voice/speech", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({text})});
   const blob = await response.blob();
   clearAudio(); audioUrl = URL.createObjectURL(blob);

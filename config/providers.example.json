@@ -1,0 +1,9 @@
+{
+  "providers": [
+    {"id": "openai-personal", "kind": "openai", "base_url": "https://api.openai.com/v1", "model": "gpt-4.1-mini", "key_env": "OPENAI_API_KEY"},
+    {"id": "groq", "kind": "openai", "base_url": "https://api.groq.com/openai/v1", "model": "openai/gpt-oss-20b", "key_env": "GROQ_API_KEY"},
+    {"id": "openrouter", "kind": "openai", "base_url": "https://openrouter.ai/api/v1", "model": "SUBSTITUA_PELO_MODELO_DA_SUA_CONTA", "key_env": "OPENROUTER_API_KEY"},
+    {"id": "claude", "kind": "anthropic", "base_url": "https://api.anthropic.com/v1", "model": "SUBSTITUA_PELO_MODELO_DA_SUA_CONTA", "key_env": "ANTHROPIC_API_KEY"},
+    {"id": "mistral", "kind": "openai", "base_url": "https://api.mistral.ai/v1", "model": "mistral-small-latest", "key_env": "MISTRAL_API_KEY"}
+  ]
+}

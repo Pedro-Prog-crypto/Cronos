@@ -1,0 +1,7740 @@
+{
+  "source": "CRONOS_V32_INTEGRADO_CORRIGIDO (1).zip",
+  "files": [
+    {
+      "file": ".gitignore",
+      "bytes": 2246,
+      "sha256": "fb063e0b36ddf6d92280505d62cdd7b06b7a9e30a34e043c2c87ad86aa7adf2c",
+      "kind": "asset-or-document"
+    },
+    {
+      "file": "BUSCAR_VOZES.bat",
+      "bytes": 131,
+      "sha256": "d74bbadc4e6f7de69e374edf6f14ff259dc4e0bf5baf01ed450b26c3c85ebc59",
+      "kind": "asset-or-document"
+    },
+    {
+      "file": "CRIAR_ATALHO.vbs",
+      "bytes": 2692,
+      "sha256": "69b0cf171b8b30a88035124337978e509eb66d0c8d4b1b1c880a4dbc36c6ea2d",
+      "kind": "asset-or-document"
+    },
+    {
+      "file": "CRONOS_INICIAR.bat",
+      "bytes": 573,
+      "sha256": "f96034a5af4d7849b54582cca916b5914f8eb255a267075da58a703aec05d16b",
+      "kind": "asset-or-document"
+    },
+    {
+      "file": "CRONOS_INSTALAR.bat",
+      "bytes": 625,
+      "sha256": "7b26cf2d0c5022a297b3b461f85912dbd2a540105a5da370564579afbb3ffe79",
+      "kind": "asset-or-document"
+    },
+    {
+      "file": "FISH_AUDIO_SETUP.md",
+      "bytes": 950,
+      "sha256": "a0193bf757b5560b629ff413e0c403af09b9502fb90bf1a80ec541afcce22325",
+      "kind": "asset-or-document"
+    },
+    {
+      "file": "GUIA_VOZ_JARVIS.md",
+      "bytes": 4816,
+      "sha256": "057888bdc80ebc6700db3c234352393af97494e9b8905bc255026d59c241be25",
+      "kind": "asset-or-document"
+    },
+    {
+      "file": "JARVIS_INICIAR.bat",
+      "bytes": 573,
+      "sha256": "f96034a5af4d7849b54582cca916b5914f8eb255a267075da58a703aec05d16b",
+      "kind": "asset-or-document"
+    },
+    {
+      "file": "LICENSE",
+      "bytes": 20098,
+      "sha256": "69b0132e6196e7b6ff9051242f2bf88ae0f3bfe569a85723419e11f775802d5d",
+      "kind": "asset-or-document"
+    },
+    {
+      "file": "README.md",
+      "bytes": 2693,
+      "sha256": "125ec099c9b5debaa34689a17f433de5c32cd3d2e1dfa8b294833b3757dd3c54",
+      "kind": "asset-or-document"
+    },
+    {
+      "file": "TESTAR_FISH.bat",
+      "bytes": 155,
+      "sha256": "297a2df2ef19318dd92876977026dee5e454c387a695c71304bc31903e806cde",
+      "kind": "asset-or-document"
+    },
+    {
+      "file": "actions/background_monitor.py",
+      "bytes": 5434,
+      "imports": [
+        "actions.web_search",
+        "datetime",
+        "hashlib",
+        "json",
+        "memory.memory_manager",
+        "pathlib",
+        "re"
+      ],
+      "definitions": [
+        {
+          "name": "_is_blocked",
+          "line": 24
+        },
+        {
+          "name": "_slug",
+          "line": 31
+        },
+        {
+          "name": "_title_hash",
+          "line": 34
+        },
+        {
+          "name": "_load",
+          "line": 40
+        },
+        {
+          "name": "_save",
+          "line": 45
+        },
+        {
+          "name": "add_monitor",
+          "line": 60
+        },
+        {
+          "name": "remove_monitor",
+          "line": 81
+        },
+        {
+          "name": "list_monitors",
+          "line": 99
+        },
+        {
+          "name": "check_all",
+          "line": 103
+        }
+      ],
+      "sha256": "0048f2141f8a8981ed79111cbc072ac71d4640914fcec929448733edadecdf14",
+      "kind": "python"
+    },
+    {
+      "file": "actions/browser_control.py",
+      "bytes": 43805,
+      "imports": [
+        "__future__",
+        "asyncio",
+        "concurrent.futures",
+        "os",
+        "pathlib",
+        "platform",
+        "playwright.async_api",
+        "shutil",
+        "subprocess",
+        "threading",
+        "typing",
+        "webbrowser",
+        "winreg"
+      ],
+      "definitions": [
+        {
+          "name": "_normalize_url",
+          "line": 17
+        },
+        {
+          "name": "_user_agent",
+          "line": 34
+        },
+        {
+          "name": "_real_profile_dir",
+          "line": 54
+        },
+        {
+          "name": "_firefox_profile_dir",
+          "line": 108
+        },
+        {
+          "name": "_find_opera_windows",
+          "line": 147
+        },
+        {
+          "name": "_find_exe_windows",
+          "line": 188
+        },
+        {
+          "name": "_resolve_browser",
+          "line": 257
+        },
+        {
+          "name": "_detect_default_browser",
+          "line": 304
+        },
+        {
+          "name": "_open_native",
+          "line": 363
+        },
+        {
+          "name": "_BrowserSession",
+          "line": 437
+        },
+        {
+          "name": "_SessionRegistry",
+          "line": 837
+        },
+        {
+          "name": "browser_control",
+          "line": 921
+        },
+        {
+          "name": "_log",
+          "line": 1051
+        },
+        {
+          "name": "__init__",
+          "line": 443
+        },
+        {
+          "name": "start",
+          "line": 455
+        },
+        {
+          "name": "_run_loop",
+          "line": 466
+        },
+        {
+          "name": "_async_init",
+          "line": 473
+        },
+        {
+          "name": "run",
+          "line": 477
+        },
+        {
+          "name": "close",
+          "line": 483
+        },
+        {
+          "name": "_async_close",
+          "line": 487
+        },
+        {
+          "name": "_adopt_page",
+          "line": 500
+        },
+        {
+          "name": "_launch",
+          "line": 510
+        },
+        {
+          "name": "_get_page",
+          "line": 621
+        },
+        {
+          "name": "go_to",
+          "line": 629
+        },
+        {
+          "name": "search",
+          "line": 660
+        },
+        {
+          "name": "click",
+          "line": 664
+        },
+        {
+          "name": "type_text",
+          "line": 681
+        },
+        {
+          "name": "scroll",
+          "line": 693
+        },
+        {
+          "name": "press",
+          "line": 702
+        },
+        {
+          "name": "get_text",
+          "line": 710
+        },
+        {
+          "name": "get_url",
+          "line": 718
+        },
+        {
+          "name": "fill_form",
+          "line": 722
+        },
+        {
+          "name": "smart_click",
+          "line": 735
+        },
+        {
+          "name": "smart_type",
+          "line": 760
+        },
+        {
+          "name": "new_tab",
+          "line": 781
+        },
+        {
+          "name": "close_tab",
+          "line": 790
+        },
+        {
+          "name": "screenshot",
+          "line": 800
+        },
+        {
+          "name": "back",
+          "line": 809
+        },
+        {
+          "name": "forward",
+          "line": 817
+        },
+        {
+          "name": "reload",
+          "line": 825
+        },
+        {
+          "name": "close_browser",
+          "line": 833
+        },
+        {
+          "name": "__init__",
+          "line": 840
+        },
+        {
+          "name": "has",
+          "line": 846
+        },
+        {
+          "name": "note_native_url",
+          "line": 854
+        },
+        {
+          "name": "pop_native_url",
+          "line": 857
+        },
+        {
+          "name": "_get_or_create",
+          "line": 862
+        },
+        {
+          "name": "get",
+          "line": 871
+        },
+        {
+          "name": "switch",
+          "line": 879
+        },
+        {
+          "name": "close_one",
+          "line": 885
+        },
+        {
+          "name": "close_all",
+          "line": 895
+        },
+        {
+          "name": "list_sessions",
+          "line": 908
+        },
+        {
+          "name": "_do_goto",
+          "line": 635
+        }
+      ],
+      "sha256": "62ddfa1c992891e78b8b38204fceb2b664dbefd0742a8135bdf202f53fe9e36e",
+      "kind": "python"
+    },
+    {
+      "file": "actions/code_helper.py",
+      "bytes": 21380,
+      "imports": [
+        "base64",
+        "core",
+        "google.genai",
+        "json",
+        "pathlib",
+        "pyautogui",
+        "re",
+        "subprocess",
+        "sys",
+        "time"
+      ],
+      "definitions": [
+        {
+          "name": "get_base_dir",
+          "line": 9
+        },
+        {
+          "name": "_get_api_key",
+          "line": 24
+        },
+        {
+          "name": "_get_gemini",
+          "line": 29
+        },
+        {
+          "name": "_clean_code",
+          "line": 42
+        },
+        {
+          "name": "_resolve_save_path",
+          "line": 49
+        },
+        {
+          "name": "_read_file",
+          "line": 66
+        },
+        {
+          "name": "_save_file",
+          "line": 78
+        },
+        {
+          "name": "_preview",
+          "line": 87
+        },
+        {
+          "name": "_has_error",
+          "line": 94
+        },
+        {
+          "name": "_take_screenshot",
+          "line": 100
+        },
+        {
+          "name": "_image_to_base64",
+          "line": 113
+        },
+        {
+          "name": "_detect_intent",
+          "line": 121
+        },
+        {
+          "name": "_write",
+          "line": 167
+        },
+        {
+          "name": "_fix_code",
+          "line": 191
+        },
+        {
+          "name": "_run_file",
+          "line": 211
+        },
+        {
+          "name": "_build",
+          "line": 247
+        },
+        {
+          "name": "_write_action",
+          "line": 300
+        },
+        {
+          "name": "_edit_action",
+          "line": 313
+        },
+        {
+          "name": "_explain_action",
+          "line": 349
+        },
+        {
+          "name": "_run_action",
+          "line": 377
+        },
+        {
+          "name": "_optimize_action",
+          "line": 388
+        },
+        {
+          "name": "_screen_debug_action",
+          "line": 444
+        },
+        {
+          "name": "code_helper",
+          "line": 525
+        },
+        {
+          "name": "_W",
+          "line": 32
+        },
+        {
+          "name": "generate_content",
+          "line": 33
+        }
+      ],
+      "sha256": "b56ca59b8342388660aabd663f58ee9cfbe76ed748cdbcfb49a8e754e6755e5e",
+      "kind": "python"
+    },
+    {
+      "file": "actions/computer_control.py",
+      "bytes": 19686,
+      "imports": [
+        "core",
+        "google",
+        "google.genai",
+        "io",
+        "json",
+        "memory.memory_manager",
+        "pathlib",
+        "platform",
+        "pyautogui",
+        "pyperclip",
+        "random",
+        "re",
+        "string",
+        "subprocess",
+        "sys",
+        "time"
+      ],
+      "definitions": [
+        {
+          "name": "_base_dir",
+          "line": 32
+        },
+        {
+          "name": "_load_config",
+          "line": 41
+        },
+        {
+          "name": "_platform_os",
+          "line": 47
+        },
+        {
+          "name": "_get_os",
+          "line": 52
+        },
+        {
+          "name": "_get_api_key",
+          "line": 56
+        },
+        {
+          "name": "_safe_screenshot_path",
+          "line": 63
+        },
+        {
+          "name": "_require_pyautogui",
+          "line": 77
+        },
+        {
+          "name": "_random_data",
+          "line": 92
+        },
+        {
+          "name": "_user_profile",
+          "line": 145
+        },
+        {
+          "name": "_type",
+          "line": 158
+        },
+        {
+          "name": "_smart_type",
+          "line": 165
+        },
+        {
+          "name": "_click",
+          "line": 182
+        },
+        {
+          "name": "_hotkey",
+          "line": 191
+        },
+        {
+          "name": "_press",
+          "line": 197
+        },
+        {
+          "name": "_scroll",
+          "line": 203
+        },
+        {
+          "name": "_move",
+          "line": 211
+        },
+        {
+          "name": "_drag",
+          "line": 217
+        },
+        {
+          "name": "_clipboard_get",
+          "line": 224
+        },
+        {
+          "name": "_clipboard_paste",
+          "line": 232
+        },
+        {
+          "name": "_screenshot",
+          "line": 243
+        },
+        {
+          "name": "_clear_field",
+          "line": 251
+        },
+        {
+          "name": "_focus_window",
+          "line": 259
+        },
+        {
+          "name": "_screen_find",
+          "line": 314
+        },
+        {
+          "name": "computer_control",
+          "line": 359
+        }
+      ],
+      "sha256": "c43174e7e380483c38b0b8db6c20683727ebda35e9e5cebaf5fff1cdae8dd951",
+      "kind": "python"
+    },
+    {
+      "file": "actions/computer_settings.py",
+      "bytes": 39795,
+      "imports": [
+        "comtypes",
+        "core",
+        "core.undo",
+        "ctypes",
+        "difflib",
+        "json",
+        "math",
+        "pathlib",
+        "platform",
+        "pyautogui",
+        "pycaw.pycaw",
+        "pyperclip",
+        "re",
+        "subprocess",
+        "sys",
+        "time",
+        "winreg"
+      ],
+      "definitions": [
+        {
+          "name": "_get_base_dir",
+          "line": 35
+        },
+        {
+          "name": "_get_api_key",
+          "line": 40
+        },
+        {
+          "name": "_get_macos_wifi_interface",
+          "line": 45
+        },
+        {
+          "name": "volume_up",
+          "line": 61
+        },
+        {
+          "name": "volume_down",
+          "line": 72
+        },
+        {
+          "name": "volume_mute",
+          "line": 83
+        },
+        {
+          "name": "volume_get",
+          "line": 93
+        },
+        {
+          "name": "brightness_get",
+          "line": 124
+        },
+        {
+          "name": "brightness_set",
+          "line": 147
+        },
+        {
+          "name": "volume_set",
+          "line": 162
+        },
+        {
+          "name": "brightness_up",
+          "line": 189
+        },
+        {
+          "name": "brightness_down",
+          "line": 218
+        },
+        {
+          "name": "close_app",
+          "line": 247
+        },
+        {
+          "name": "close_window",
+          "line": 251
+        },
+        {
+          "name": "full_screen",
+          "line": 255
+        },
+        {
+          "name": "minimize_window",
+          "line": 259
+        },
+        {
+          "name": "maximize_window",
+          "line": 263
+        },
+        {
+          "name": "snap_left",
+          "line": 278
+        },
+        {
+          "name": "snap_right",
+          "line": 295
+        },
+        {
+          "name": "switch_window",
+          "line": 311
+        },
+        {
+          "name": "show_desktop",
+          "line": 315
+        },
+        {
+          "name": "open_task_manager",
+          "line": 320
+        },
+        {
+          "name": "focus_search",
+          "line": 332
+        },
+        {
+          "name": "pause_video",
+          "line": 336
+        },
+        {
+          "name": "refresh_page",
+          "line": 338
+        },
+        {
+          "name": "close_tab",
+          "line": 342
+        },
+        {
+          "name": "new_tab",
+          "line": 346
+        },
+        {
+          "name": "next_tab",
+          "line": 350
+        },
+        {
+          "name": "prev_tab",
+          "line": 354
+        },
+        {
+          "name": "go_back",
+          "line": 358
+        },
+        {
+          "name": "go_forward",
+          "line": 362
+        },
+        {
+          "name": "zoom_in",
+          "line": 366
+        },
+        {
+          "name": "zoom_out",
+          "line": 370
+        },
+        {
+          "name": "zoom_reset",
+          "line": 374
+        },
+        {
+          "name": "find_on_page",
+          "line": 378
+        },
+        {
+          "name": "reload_page_n",
+          "line": 382
+        },
+        {
+          "name": "scroll_up",
+          "line": 388
+        },
+        {
+          "name": "scroll_down",
+          "line": 389
+        },
+        {
+          "name": "scroll_top",
+          "line": 391
+        },
+        {
+          "name": "scroll_bottom",
+          "line": 395
+        },
+        {
+          "name": "page_up",
+          "line": 399
+        },
+        {
+          "name": "page_down",
+          "line": 400
+        },
+        {
+          "name": "copy",
+          "line": 403
+        },
+        {
+          "name": "paste",
+          "line": 407
+        },
+        {
+          "name": "cut",
+          "line": 411
+        },
+        {
+          "name": "undo",
+          "line": 415
+        },
+        {
+          "name": "redo",
+          "line": 419
+        },
+        {
+          "name": "select_all",
+          "line": 423
+        },
+        {
+          "name": "save_file",
+          "line": 427
+        },
+        {
+          "name": "press_enter",
+          "line": 431
+        },
+        {
+          "name": "press_escape",
+          "line": 432
+        },
+        {
+          "name": "press_key",
+          "line": 433
+        },
+        {
+          "name": "type_text",
+          "line": 435
+        },
+        {
+          "name": "take_screenshot",
+          "line": 448
+        },
+        {
+          "name": "lock_screen",
+          "line": 460
+        },
+        {
+          "name": "open_system_settings",
+          "line": 475
+        },
+        {
+          "name": "open_file_explorer",
+          "line": 486
+        },
+        {
+          "name": "sleep_display",
+          "line": 498
+        },
+        {
+          "name": "open_run",
+          "line": 510
+        },
+        {
+          "name": "dark_mode",
+          "line": 514
+        },
+        {
+          "name": "toggle_wifi",
+          "line": 546
+        },
+        {
+          "name": "restart_computer",
+          "line": 575
+        },
+        {
+          "name": "shutdown_computer",
+          "line": 585
+        },
+        {
+          "name": "_normalise",
+          "line": 727
+        },
+        {
+          "name": "_detect_action",
+          "line": 731
+        },
+        {
+          "name": "_suggest",
+          "line": 774
+        },
+        {
+          "name": "computer_settings",
+          "line": 784
+        }
+      ],
+      "sha256": "cf70addd24c2cb3290a3e7d93530a2ddc520df7382cf2576a4aa11a68100f340",
+      "kind": "python"
+    },
+    {
+      "file": "actions/cronos_facts.py",
+      "bytes": 2948,
+      "imports": [
+        "json"
+      ],
+      "definitions": [
+        {
+          "name": "show_facts",
+          "line": 5
+        }
+      ],
+      "sha256": "c92a622211ffd6c0b27214fead40b96fae11cd14809aa29bf13b72871824898b",
+      "kind": "python"
+    },
+    {
+      "file": "actions/desktop.py",
+      "bytes": 17812,
+      "imports": [
+        "PIL",
+        "core",
+        "ctypes",
+        "datetime",
+        "google",
+        "json",
+        "os",
+        "pathlib",
+        "platform",
+        "pyautogui",
+        "shutil",
+        "subprocess",
+        "sys",
+        "tempfile",
+        "time",
+        "urllib.request",
+        "winreg"
+      ],
+      "definitions": [
+        {
+          "name": "_get_base_dir",
+          "line": 21
+        },
+        {
+          "name": "_get_api_key",
+          "line": 26
+        },
+        {
+          "name": "_get_desktop",
+          "line": 31
+        },
+        {
+          "name": "_build_sandbox",
+          "line": 38
+        },
+        {
+          "name": "_execute_generated_code",
+          "line": 83
+        },
+        {
+          "name": "_ask_gemini_for_desktop_action",
+          "line": 104
+        },
+        {
+          "name": "set_wallpaper",
+          "line": 156
+        },
+        {
+          "name": "set_wallpaper_from_url",
+          "line": 240
+        },
+        {
+          "name": "get_current_wallpaper",
+          "line": 256
+        },
+        {
+          "name": "organize_desktop",
+          "line": 309
+        },
+        {
+          "name": "list_desktop",
+          "line": 352
+        },
+        {
+          "name": "clean_desktop",
+          "line": 377
+        },
+        {
+          "name": "get_desktop_stats",
+          "line": 398
+        },
+        {
+          "name": "desktop_control",
+          "line": 415
+        }
+      ],
+      "sha256": "7eefc336087ad0e2c3fdb9b61a084e0d7d4a33953708c6c8d19f41f5e0ecd20f",
+      "kind": "python"
+    },
+    {
+      "file": "actions/dev_agent.py",
+      "bytes": 21686,
+      "imports": [
+        "core",
+        "json",
+        "pathlib",
+        "re",
+        "subprocess",
+        "sys",
+        "time"
+      ],
+      "definitions": [
+        {
+          "name": "get_base_dir",
+          "line": 9
+        },
+        {
+          "name": "_get_api_key",
+          "line": 25
+        },
+        {
+          "name": "_get_model",
+          "line": 30
+        },
+        {
+          "name": "_strip_fences",
+          "line": 43
+        },
+        {
+          "name": "_is_rate_limit",
+          "line": 50
+        },
+        {
+          "name": "_parse_traceback",
+          "line": 55
+        },
+        {
+          "name": "_classify_error",
+          "line": 69
+        },
+        {
+          "name": "_has_error",
+          "line": 92
+        },
+        {
+          "name": "RateLimitError",
+          "line": 105
+        },
+        {
+          "name": "_plan_project",
+          "line": 109
+        },
+        {
+          "name": "_write_file",
+          "line": 158
+        },
+        {
+          "name": "_install_dependencies",
+          "line": 242
+        },
+        {
+          "name": "_open_vscode",
+          "line": 277
+        },
+        {
+          "name": "_run_project",
+          "line": 298
+        },
+        {
+          "name": "_try_auto_install",
+          "line": 331
+        },
+        {
+          "name": "_fix_files",
+          "line": 353
+        },
+        {
+          "name": "_build_project",
+          "line": 442
+        },
+        {
+          "name": "dev_agent",
+          "line": 584
+        },
+        {
+          "name": "_W",
+          "line": 33
+        },
+        {
+          "name": "log",
+          "line": 451
+        },
+        {
+          "name": "_dep_sort_key",
+          "line": 480
+        },
+        {
+          "name": "generate_content",
+          "line": 34
+        }
+      ],
+      "sha256": "d3f67280a1e5d65cbb82ad0ba7e2d1ce51a974b5918405e1cbf5da2b433dd02f",
+      "kind": "python"
+    },
+    {
+      "file": "actions/file_controller.py",
+      "bytes": 28186,
+      "imports": [
+        "core.undo",
+        "datetime",
+        "os",
+        "pathlib",
+        "platform",
+        "send2trash",
+        "shutil",
+        "win32com.client"
+      ],
+      "definitions": [
+        {
+          "name": "_undo_move",
+          "line": 23
+        },
+        {
+          "name": "_undo_create",
+          "line": 34
+        },
+        {
+          "name": "_undo_write",
+          "line": 53
+        },
+        {
+          "name": "_restore_from_trash",
+          "line": 68
+        },
+        {
+          "name": "_is_safe_path",
+          "line": 97
+        },
+        {
+          "name": "_get_desktop",
+          "line": 108
+        },
+        {
+          "name": "_get_downloads",
+          "line": 115
+        },
+        {
+          "name": "_get_documents",
+          "line": 122
+        },
+        {
+          "name": "_get_pictures",
+          "line": 129
+        },
+        {
+          "name": "_get_music",
+          "line": 136
+        },
+        {
+          "name": "_get_videos",
+          "line": 143
+        },
+        {
+          "name": "_resolve_path",
+          "line": 151
+        },
+        {
+          "name": "_format_size",
+          "line": 179
+        },
+        {
+          "name": "_safe_trash",
+          "line": 186
+        },
+        {
+          "name": "list_files",
+          "line": 198
+        },
+        {
+          "name": "create_file",
+          "line": 229
+        },
+        {
+          "name": "create_folder",
+          "line": 251
+        },
+        {
+          "name": "delete_file",
+          "line": 269
+        },
+        {
+          "name": "move_file",
+          "line": 299
+        },
+        {
+          "name": "copy_file",
+          "line": 328
+        },
+        {
+          "name": "rename_file",
+          "line": 371
+        },
+        {
+          "name": "read_file",
+          "line": 396
+        },
+        {
+          "name": "write_file",
+          "line": 416
+        },
+        {
+          "name": "find_files",
+          "line": 453
+        },
+        {
+          "name": "get_largest_files",
+          "line": 493
+        },
+        {
+          "name": "get_disk_usage",
+          "line": 526
+        },
+        {
+          "name": "organize_desktop",
+          "line": 541
+        },
+        {
+          "name": "get_file_info",
+          "line": 624
+        },
+        {
+          "name": "file_controller",
+          "line": 648
+        },
+        {
+          "name": "_fn",
+          "line": 25
+        },
+        {
+          "name": "_fn",
+          "line": 39
+        },
+        {
+          "name": "_fn",
+          "line": 56
+        },
+        {
+          "name": "_undo_copy",
+          "line": 355
+        },
+        {
+          "name": "_undo_organize",
+          "line": 589
+        }
+      ],
+      "sha256": "13063e97c1ec77bbc3883c7e8bd4af00a4c86aa10f6c0365c47343f497836a00",
+      "kind": "python"
+    },
+    {
+      "file": "actions/file_processor.py",
+      "bytes": 39582,
+      "imports": [
+        "PIL",
+        "PyPDF2",
+        "core",
+        "datetime",
+        "docx",
+        "json",
+        "os",
+        "pandas",
+        "pathlib",
+        "pdfplumber",
+        "pptx",
+        "pydub",
+        "re",
+        "shutil",
+        "subprocess",
+        "tarfile",
+        "tempfile",
+        "traceback",
+        "zipfile"
+      ],
+      "definitions": [
+        {
+          "name": "_get_api_key",
+          "line": 31
+        },
+        {
+          "name": "_gemini_client",
+          "line": 37
+        },
+        {
+          "name": "_detect_type",
+          "line": 50
+        },
+        {
+          "name": "_file_size_str",
+          "line": 76
+        },
+        {
+          "name": "_output_path",
+          "line": 83
+        },
+        {
+          "name": "_process_image",
+          "line": 88
+        },
+        {
+          "name": "_process_pdf",
+          "line": 180
+        },
+        {
+          "name": "_process_text_doc",
+          "line": 257
+        },
+        {
+          "name": "_process_data",
+          "line": 320
+        },
+        {
+          "name": "_process_json",
+          "line": 418
+        },
+        {
+          "name": "_process_code",
+          "line": 460
+        },
+        {
+          "name": "_process_audio",
+          "line": 518
+        },
+        {
+          "name": "_process_video",
+          "line": 589
+        },
+        {
+          "name": "_process_archive",
+          "line": 718
+        },
+        {
+          "name": "_process_pptx",
+          "line": 750
+        },
+        {
+          "name": "file_processor",
+          "line": 784
+        },
+        {
+          "name": "_W",
+          "line": 40
+        },
+        {
+          "name": "_extract_pdf_text",
+          "line": 183
+        },
+        {
+          "name": "_read_content",
+          "line": 261
+        },
+        {
+          "name": "_ffmpeg_available",
+          "line": 593
+        },
+        {
+          "name": "_read_pptx_text",
+          "line": 753
+        },
+        {
+          "name": "generate_content",
+          "line": 41
+        }
+      ],
+      "sha256": "e48945e0936cc5725448c2341372f724e9364c826ff219d10536109f6c0f6ff8",
+      "kind": "python"
+    },
+    {
+      "file": "actions/fish_audio_voice_control.py",
+      "bytes": 6208,
+      "imports": [
+        "__future__",
+        "core.fish_audio_tts"
+      ],
+      "definitions": [
+        {
+          "name": "_current_status",
+          "line": 10
+        },
+        {
+          "name": "_apply",
+          "line": 23
+        },
+        {
+          "name": "fish_audio_voice_control",
+          "line": 35
+        }
+      ],
+      "sha256": "d4a5fd1c787a384dfc8dc5112c35c08954a7da3ba473ab2c3a01a94f4e30d78e",
+      "kind": "python"
+    },
+    {
+      "file": "actions/flight_finder.py",
+      "bytes": 13223,
+      "imports": [
+        "actions.browser_control",
+        "config",
+        "core",
+        "datetime",
+        "google",
+        "google.genai",
+        "json",
+        "pathlib",
+        "re",
+        "subprocess",
+        "sys",
+        "time"
+      ],
+      "definitions": [
+        {
+          "name": "_get_base_dir",
+          "line": 11
+        },
+        {
+          "name": "_get_api_key",
+          "line": 21
+        },
+        {
+          "name": "_parse_date",
+          "line": 40
+        },
+        {
+          "name": "_build_google_flights_url",
+          "line": 95
+        },
+        {
+          "name": "_search_flights_browser",
+          "line": 123
+        },
+        {
+          "name": "_parse_flights_with_gemini",
+          "line": 145
+        },
+        {
+          "name": "_format_spoken",
+          "line": 184
+        },
+        {
+          "name": "_format_text_report",
+          "line": 231
+        },
+        {
+          "name": "_save_to_desktop",
+          "line": 273
+        },
+        {
+          "name": "flight_finder",
+          "line": 296
+        }
+      ],
+      "sha256": "35ae0641b750cfb733f807745a311af2855b6e2be0c4d316ecfd550cf93e38a0",
+      "kind": "python"
+    },
+    {
+      "file": "actions/game_updater.py",
+      "bytes": 43825,
+      "imports": [
+        "config",
+        "datetime",
+        "json",
+        "numpy",
+        "os",
+        "pathlib",
+        "platform",
+        "pyautogui",
+        "pygetwindow",
+        "pywinauto",
+        "re",
+        "shutil",
+        "string",
+        "subprocess",
+        "sys",
+        "threading",
+        "time",
+        "urllib.parse",
+        "urllib.request",
+        "winreg"
+      ],
+      "definitions": [
+        {
+          "name": "_find_steam_path",
+          "line": 62
+        },
+        {
+          "name": "_find_steam_windows",
+          "line": 68
+        },
+        {
+          "name": "_find_steam_mac",
+          "line": 97
+        },
+        {
+          "name": "_find_steam_linux",
+          "line": 107
+        },
+        {
+          "name": "_steam_exe",
+          "line": 120
+        },
+        {
+          "name": "_launch_steam_url",
+          "line": 126
+        },
+        {
+          "name": "_get_steam_libraries",
+          "line": 134
+        },
+        {
+          "name": "_get_steam_games",
+          "line": 150
+        },
+        {
+          "name": "_is_steam_running",
+          "line": 173
+        },
+        {
+          "name": "_get_steam_window_rect",
+          "line": 185
+        },
+        {
+          "name": "_click_first_profile_by_screenshot",
+          "line": 196
+        },
+        {
+          "name": "_handle_steam_profile_selection",
+          "line": 250
+        },
+        {
+          "name": "_find_best_drive",
+          "line": 279
+        },
+        {
+          "name": "_select_drive_in_dialog",
+          "line": 294
+        },
+        {
+          "name": "_click_button",
+          "line": 330
+        },
+        {
+          "name": "_handle_install_dialog_pyautogui",
+          "line": 345
+        },
+        {
+          "name": "_handle_install_dialog",
+          "line": 386
+        },
+        {
+          "name": "_ensure_steam_running",
+          "line": 451
+        },
+        {
+          "name": "_search_steam_appid",
+          "line": 479
+        },
+        {
+          "name": "_update_steam_games",
+          "line": 515
+        },
+        {
+          "name": "_install_steam_game",
+          "line": 567
+        },
+        {
+          "name": "_get_download_status",
+          "line": 619
+        },
+        {
+          "name": "_system_shutdown",
+          "line": 633
+        },
+        {
+          "name": "_watch_and_shutdown",
+          "line": 642
+        },
+        {
+          "name": "_find_epic_exe",
+          "line": 671
+        },
+        {
+          "name": "_find_epic_exe_windows",
+          "line": 677
+        },
+        {
+          "name": "_find_epic_exe_mac",
+          "line": 706
+        },
+        {
+          "name": "_find_epic_exe_linux",
+          "line": 711
+        },
+        {
+          "name": "_epic_manifests_path",
+          "line": 718
+        },
+        {
+          "name": "_get_epic_games",
+          "line": 730
+        },
+        {
+          "name": "_is_epic_running",
+          "line": 746
+        },
+        {
+          "name": "_update_epic_games",
+          "line": 761
+        },
+        {
+          "name": "_schedule_daily_update",
+          "line": 806
+        },
+        {
+          "name": "_schedule_windows",
+          "line": 812
+        },
+        {
+          "name": "_schedule_mac",
+          "line": 826
+        },
+        {
+          "name": "_schedule_linux",
+          "line": 861
+        },
+        {
+          "name": "_cancel_scheduled_update",
+          "line": 880
+        },
+        {
+          "name": "_get_schedule_status",
+          "line": 907
+        },
+        {
+          "name": "game_updater",
+          "line": 937
+        }
+      ],
+      "sha256": "485f7c587ca5eee3d58b4225df03bd828e6800320d2aedf14981c720f710d5df",
+      "kind": "python"
+    },
+    {
+      "file": "actions/hud_display.py",
+      "bytes": 3202,
+      "imports": [
+        "__future__"
+      ],
+      "definitions": [
+        {
+          "name": "hud_display",
+          "line": 4
+        }
+      ],
+      "sha256": "a3e16d4b658ceaba12e64d9c038d8d4a1049e43327651df1c45b3ef6347db0ef",
+      "kind": "python"
+    },
+    {
+      "file": "actions/music_library.py",
+      "bytes": 6027,
+      "imports": [
+        "__future__",
+        "pathlib",
+        "re",
+        "threading",
+        "yt_dlp"
+      ],
+      "definitions": [
+        {
+          "name": "_resolve_audio_results",
+          "line": 20
+        },
+        {
+          "name": "_resolve_audio",
+          "line": 64
+        },
+        {
+          "name": "_play_next_queued",
+          "line": 69
+        },
+        {
+          "name": "music_library",
+          "line": 82
+        }
+      ],
+      "sha256": "2a65996faedb50aeb5fd1f583ce59f588b9d68c6c35547ad9fbf56d4563438f1",
+      "kind": "python"
+    },
+    {
+      "file": "actions/obsidian.py",
+      "bytes": 1458,
+      "imports": [
+        "core.obsidian"
+      ],
+      "definitions": [
+        {
+          "name": "obsidian_search",
+          "line": 5
+        },
+        {
+          "name": "obsidian_open",
+          "line": 14
+        }
+      ],
+      "sha256": "cf68bfb625d6da8611e6fcd9ea218dcb5c537e1835e3f5245dc4467cc4526d97",
+      "kind": "python"
+    },
+    {
+      "file": "actions/open_app.py",
+      "bytes": 12702,
+      "imports": [
+        "platform",
+        "psutil",
+        "pyautogui",
+        "shutil",
+        "subprocess",
+        "time"
+      ],
+      "definitions": [
+        {
+          "name": "_normalize",
+          "line": 68
+        },
+        {
+          "name": "_launch_windows",
+          "line": 80
+        },
+        {
+          "name": "_launch_macos",
+          "line": 119
+        },
+        {
+          "name": "_launch_linux",
+          "line": 176
+        },
+        {
+          "name": "open_app",
+          "line": 240
+        }
+      ],
+      "sha256": "d2bb751b7ab3625dfa102f0f86b6274c75e00b08fc9b71074688731a2be2c0ad",
+      "kind": "python"
+    },
+    {
+      "file": "actions/open_obsidian.py",
+      "bytes": 650,
+      "imports": [
+        "core.obsidian"
+      ],
+      "definitions": [
+        {
+          "name": "open_obsidian",
+          "line": 4
+        }
+      ],
+      "sha256": "060ce7fa82dd8692008449b3d18234622a2937370175f16901f7685f1543002d",
+      "kind": "python"
+    },
+    {
+      "file": "actions/proactive.py",
+      "bytes": 5141,
+      "imports": [
+        "datetime",
+        "memory.memory_manager",
+        "time"
+      ],
+      "definitions": [
+        {
+          "name": "ProactiveEngine",
+          "line": 9
+        },
+        {
+          "name": "__init__",
+          "line": 25
+        },
+        {
+          "name": "should_trigger",
+          "line": 37
+        },
+        {
+          "name": "mark_triggered",
+          "line": 44
+        },
+        {
+          "name": "build_prompt",
+          "line": 50
+        }
+      ],
+      "sha256": "3c2faa796468aa54e5184fb46b064c63d934eb0ada15f9ddddb91f6642368622",
+      "kind": "python"
+    },
+    {
+      "file": "actions/reminder.py",
+      "bytes": 11404,
+      "imports": [
+        "datetime",
+        "json",
+        "os",
+        "pathlib",
+        "platform",
+        "shutil",
+        "subprocess",
+        "sys"
+      ],
+      "definitions": [
+        {
+          "name": "_base_dir",
+          "line": 15
+        },
+        {
+          "name": "_get_os",
+          "line": 21
+        },
+        {
+          "name": "_scripts_dir",
+          "line": 30
+        },
+        {
+          "name": "_sanitise",
+          "line": 36
+        },
+        {
+          "name": "_write_notify_script",
+          "line": 46
+        },
+        {
+          "name": "_schedule_windows",
+          "line": 146
+        },
+        {
+          "name": "_schedule_mac",
+          "line": 202
+        },
+        {
+          "name": "_schedule_linux",
+          "line": 252
+        },
+        {
+          "name": "reminder",
+          "line": 287
+        }
+      ],
+      "sha256": "b47b7f206fd60128de53d9f3449b42bc92911edd05812e6bba7319728b0e6ec7",
+      "kind": "python"
+    },
+    {
+      "file": "actions/screen_processor.py",
+      "bytes": 5868,
+      "imports": [
+        "PIL",
+        "__future__",
+        "cv2",
+        "io",
+        "json",
+        "mss",
+        "mss.tools",
+        "pathlib",
+        "sys"
+      ],
+      "definitions": [
+        {
+          "name": "_load_cv2",
+          "line": 25
+        },
+        {
+          "name": "_load_mss",
+          "line": 36
+        },
+        {
+          "name": "_load_pil",
+          "line": 48
+        },
+        {
+          "name": "_base_dir",
+          "line": 59
+        },
+        {
+          "name": "_load_config",
+          "line": 69
+        },
+        {
+          "name": "_save_config_key",
+          "line": 76
+        },
+        {
+          "name": "_get_os",
+          "line": 85
+        },
+        {
+          "name": "_compress",
+          "line": 94
+        },
+        {
+          "name": "_capture_screen",
+          "line": 112
+        },
+        {
+          "name": "_cv2_backend",
+          "line": 126
+        },
+        {
+          "name": "_probe_camera",
+          "line": 141
+        },
+        {
+          "name": "_detect_camera_index",
+          "line": 160
+        },
+        {
+          "name": "_get_camera_index",
+          "line": 176
+        },
+        {
+          "name": "_capture_camera",
+          "line": 183
+        }
+      ],
+      "sha256": "2a581730db51b1da3d6a29441adad71b907b55e278ea934a03701fe558442e71",
+      "kind": "python"
+    },
+    {
+      "file": "actions/send_message.py",
+      "bytes": 11184,
+      "imports": [
+        "json",
+        "pathlib",
+        "plugins",
+        "pyautogui",
+        "pyperclip",
+        "subprocess",
+        "sys",
+        "time",
+        "webbrowser"
+      ],
+      "definitions": [
+        {
+          "name": "_base_dir",
+          "line": 21
+        },
+        {
+          "name": "_get_os",
+          "line": 26
+        },
+        {
+          "name": "_require_pyautogui",
+          "line": 36
+        },
+        {
+          "name": "_paste_text",
+          "line": 41
+        },
+        {
+          "name": "_clear_and_paste",
+          "line": 56
+        },
+        {
+          "name": "_open_app",
+          "line": 66
+        },
+        {
+          "name": "_open_browser_url",
+          "line": 117
+        },
+        {
+          "name": "_search_in_app",
+          "line": 127
+        },
+        {
+          "name": "_desktop_send",
+          "line": 137
+        },
+        {
+          "name": "_send_whatsapp",
+          "line": 152
+        },
+        {
+          "name": "_send_telegram",
+          "line": 197
+        },
+        {
+          "name": "_send_signal",
+          "line": 200
+        },
+        {
+          "name": "_send_discord",
+          "line": 204
+        },
+        {
+          "name": "_send_instagram",
+          "line": 208
+        },
+        {
+          "name": "_send_messenger",
+          "line": 236
+        },
+        {
+          "name": "_resolve_platform",
+          "line": 267
+        },
+        {
+          "name": "send_message",
+          "line": 275
+        }
+      ],
+      "sha256": "089e6d3f87fbfdf830493eada1b54c29f413ba64230b433705c13c1a7c295282",
+      "kind": "python"
+    },
+    {
+      "file": "actions/system_monitor.py",
+      "bytes": 5698,
+      "imports": [
+        "ctypes",
+        "platform",
+        "psutil",
+        "pynvml",
+        "time",
+        "wmi"
+      ],
+      "definitions": [
+        {
+          "name": "_nvml_gpu",
+          "line": 28
+        },
+        {
+          "name": "_get_gpu_usage",
+          "line": 72
+        },
+        {
+          "name": "_get_cpu_temp",
+          "line": 85
+        },
+        {
+          "name": "get_system_status",
+          "line": 113
+        },
+        {
+          "name": "SystemMonitor",
+          "line": 137
+        },
+        {
+          "name": "__init__",
+          "line": 143
+        },
+        {
+          "name": "_can_alert",
+          "line": 148
+        },
+        {
+          "name": "_record",
+          "line": 151
+        },
+        {
+          "name": "check",
+          "line": 154
+        },
+        {
+          "name": "_Util",
+          "line": 34
+        }
+      ],
+      "sha256": "ac8cee76cea0b0dc08803a322db9403f2154da6d20bd66f096c1e1d9ee568c3a",
+      "kind": "python"
+    },
+    {
+      "file": "actions/video_player.py",
+      "bytes": 13804,
+      "imports": [
+        "__future__",
+        "pathlib",
+        "re",
+        "threading",
+        "urllib.parse",
+        "yt_dlp"
+      ],
+      "definitions": [
+        {
+          "name": "_begin_open",
+          "line": 41
+        },
+        {
+          "name": "_still_wanted",
+          "line": 48
+        },
+        {
+          "name": "_is_url",
+          "line": 53
+        },
+        {
+          "name": "_local_path",
+          "line": 57
+        },
+        {
+          "name": "_resolve_youtube",
+          "line": 71
+        },
+        {
+          "name": "_search_page",
+          "line": 164
+        },
+        {
+          "name": "video_player",
+          "line": 169
+        },
+        {
+          "name": "_play_youtube",
+          "line": 244
+        },
+        {
+          "name": "_say",
+          "line": 272
+        },
+        {
+          "name": "has",
+          "line": 110
+        },
+        {
+          "name": "best",
+          "line": 113
+        }
+      ],
+      "sha256": "3926f0e277941853ff75ae90fa5e396fc34fb1cff3709f68029f4704729bfb3f",
+      "kind": "python"
+    },
+    {
+      "file": "actions/weather_report.py",
+      "bytes": 1914,
+      "imports": [
+        "urllib.parse",
+        "webbrowser"
+      ],
+      "definitions": [
+        {
+          "name": "weather_action",
+          "line": 5
+        },
+        {
+          "name": "_log",
+          "line": 45
+        }
+      ],
+      "sha256": "227f116d1156a8c63e9985cd2040b6f2baa0ef5c580a873081aee69c0f63efe5",
+      "kind": "python"
+    },
+    {
+      "file": "actions/web_search.py",
+      "bytes": 14701,
+      "imports": [
+        "core",
+        "ddgs",
+        "duckduckgo_search",
+        "json",
+        "pathlib",
+        "re",
+        "sys",
+        "threading",
+        "time"
+      ],
+      "definitions": [
+        {
+          "name": "_gemini_available",
+          "line": 18
+        },
+        {
+          "name": "_note_gemini_error",
+          "line": 23
+        },
+        {
+          "name": "_QuotaCooldown",
+          "line": 38
+        },
+        {
+          "name": "_log_gemini_failure",
+          "line": 42
+        },
+        {
+          "name": "_run_bounded",
+          "line": 49
+        },
+        {
+          "name": "_get_base_dir",
+          "line": 66
+        },
+        {
+          "name": "_get_api_key",
+          "line": 76
+        },
+        {
+          "name": "_gemini_search",
+          "line": 81
+        },
+        {
+          "name": "_get_ddgs",
+          "line": 110
+        },
+        {
+          "name": "_ddg_search",
+          "line": 130
+        },
+        {
+          "name": "_ddg_news",
+          "line": 146
+        },
+        {
+          "name": "_format_ddg",
+          "line": 168
+        },
+        {
+          "name": "_format_news",
+          "line": 182
+        },
+        {
+          "name": "_gemini_headlines",
+          "line": 202
+        },
+        {
+          "name": "_search",
+          "line": 243
+        },
+        {
+          "name": "_news",
+          "line": 253
+        },
+        {
+          "name": "_research",
+          "line": 287
+        },
+        {
+          "name": "_price",
+          "line": 304
+        },
+        {
+          "name": "_compare",
+          "line": 315
+        },
+        {
+          "name": "web_search",
+          "line": 345
+        },
+        {
+          "name": "_run",
+          "line": 53
+        },
+        {
+          "name": "_ddg_attempt",
+          "line": 271
+        }
+      ],
+      "sha256": "649b1b822b8ee43091fe9bd96644f054ae4e84a9d0acca01a207cd6e1e553638",
+      "kind": "python"
+    },
+    {
+      "file": "actions/youtube_video.py",
+      "bytes": 1068,
+      "imports": [
+        "__future__",
+        "actions.video_player"
+      ],
+      "definitions": [
+        {
+          "name": "youtube_video",
+          "line": 6
+        }
+      ],
+      "sha256": "c4849da74896c6303c052496288f6fd7c3102d450a61bf4ed810d471b23fa95c",
+      "kind": "python"
+    },
+    {
+      "file": "config/__init__.py",
+      "bytes": 787,
+      "imports": [
+        "json",
+        "os",
+        "pathlib",
+        "platform"
+      ],
+      "definitions": [
+        {
+          "name": "_platform_os",
+          "line": 7
+        },
+        {
+          "name": "get_config",
+          "line": 13
+        },
+        {
+          "name": "get_os",
+          "line": 20
+        },
+        {
+          "name": "is_windows",
+          "line": 24
+        },
+        {
+          "name": "is_mac",
+          "line": 25
+        },
+        {
+          "name": "is_linux",
+          "line": 26
+        }
+      ],
+      "sha256": "961f27cef4fa3bf6172f73c5282e16a55bfe5477d50ef9695eedcb8921ac8f62",
+      "kind": "python"
+    },
+    {
+      "file": "config/cronos.ico",
+      "bytes": 72927,
+      "sha256": "ea10c08932be8207a10bfd247dd8398242a1730d3ea1c89dbd7feba8d855828d",
+      "kind": "asset-or-document"
+    },
+    {
+      "file": "config/cronos.png",
+      "bytes": 41024,
+      "sha256": "bb66dcc903e0c3c72f9ea668baf1cee8bea6ac350fa4cd89b588898c3a66db4b",
+      "kind": "asset-or-document"
+    },
+    {
+      "file": "config/hud_display.py",
+      "bytes": 2675,
+      "imports": [
+        "__future__"
+      ],
+      "definitions": [
+        {
+          "name": "hud_display",
+          "line": 9
+        }
+      ],
+      "sha256": "583ef5db7a3da1e241c649da818b208eb796499c46865aeadeabdf443d6b9ee2",
+      "kind": "python"
+    },
+    {
+      "file": "config/testar_fish.py",
+      "bytes": 16037,
+      "imports": [
+        "__future__",
+        "argparse",
+        "json",
+        "os",
+        "pathlib",
+        "re",
+        "requests",
+        "struct",
+        "sys",
+        "time",
+        "wave"
+      ],
+      "definitions": [
+        {
+          "name": "ok",
+          "line": 51
+        },
+        {
+          "name": "erro",
+          "line": 52
+        },
+        {
+          "name": "info",
+          "line": 53
+        },
+        {
+          "name": "clean_key",
+          "line": 56
+        },
+        {
+          "name": "clean_id",
+          "line": 64
+        },
+        {
+          "name": "read_config",
+          "line": 70
+        },
+        {
+          "name": "detail",
+          "line": 81
+        },
+        {
+          "name": "explain",
+          "line": 93
+        },
+        {
+          "name": "headers",
+          "line": 109
+        },
+        {
+          "name": "net_error",
+          "line": 117
+        },
+        {
+          "name": "check_key",
+          "line": 123
+        },
+        {
+          "name": "check_voice",
+          "line": 141
+        },
+        {
+          "name": "write_wav",
+          "line": 165
+        },
+        {
+          "name": "extract_pcm",
+          "line": 173
+        },
+        {
+          "name": "try_tts",
+          "line": 194
+        },
+        {
+          "name": "search_voices",
+          "line": 235
+        },
+        {
+          "name": "save_config",
+          "line": 270
+        },
+        {
+          "name": "main",
+          "line": 278
+        }
+      ],
+      "sha256": "e61c399e91141769ea988abe66402218a228c3a1ed18bf16155b2609cc824aff",
+      "kind": "python"
+    },
+    {
+      "file": "configurar_fish_audio.py",
+      "bytes": 4993,
+      "imports": [
+        "__future__",
+        "datetime",
+        "json",
+        "pathlib",
+        "re",
+        "shutil"
+      ],
+      "definitions": [
+        {
+          "name": "load_existing",
+          "line": 15
+        },
+        {
+          "name": "clean_voice_id",
+          "line": 30
+        },
+        {
+          "name": "ask",
+          "line": 36
+        },
+        {
+          "name": "main",
+          "line": 47
+        }
+      ],
+      "sha256": "e0836dccec2ee2dfe547ae96aef25ca2e35e72fb4435324978e471b3080d780b",
+      "kind": "python"
+    },
+    {
+      "file": "core/README-WAKE-JARVIS.md",
+      "bytes": 1713,
+      "sha256": "a91fcddafb79a0723044b03c195a014d6641529f8ea671496b62e9520832720c",
+      "kind": "asset-or-document"
+    },
+    {
+      "file": "core/__init__.py",
+      "bytes": 0,
+      "imports": [],
+      "definitions": [],
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "kind": "python"
+    },
+    {
+      "file": "core/action_loader.py",
+      "bytes": 9868,
+      "imports": [
+        "__future__",
+        "dataclasses",
+        "importlib.util",
+        "inspect",
+        "pathlib",
+        "re",
+        "sys",
+        "traceback",
+        "typing"
+      ],
+      "definitions": [
+        {
+          "name": "_opt_upper",
+          "line": 52
+        },
+        {
+          "name": "ActionRecord",
+          "line": 58
+        },
+        {
+          "name": "ActionRegistry",
+          "line": 70
+        },
+        {
+          "name": "_call_handler",
+          "line": 111
+        },
+        {
+          "name": "_validate",
+          "line": 124
+        },
+        {
+          "name": "discover_actions",
+          "line": 157
+        },
+        {
+          "name": "__init__",
+          "line": 71
+        },
+        {
+          "name": "get_tool_declarations",
+          "line": 77
+        },
+        {
+          "name": "has",
+          "line": 87
+        },
+        {
+          "name": "scheduling",
+          "line": 90
+        },
+        {
+          "name": "names",
+          "line": 95
+        },
+        {
+          "name": "run",
+          "line": 99
+        }
+      ],
+      "sha256": "f6bb1907f56d790ac6f67349114753594d71464a4aa84b8106422547ba5842ef",
+      "kind": "python"
+    },
+    {
+      "file": "core/ai_council.py",
+      "bytes": 38438,
+      "imports": [
+        "__future__",
+        "concurrent.futures",
+        "dataclasses",
+        "json",
+        "os",
+        "pathlib",
+        "re",
+        "requests",
+        "threading",
+        "time",
+        "unicodedata"
+      ],
+      "definitions": [
+        {
+          "name": "VoiceSpec",
+          "line": 53
+        },
+        {
+          "name": "_clean_key",
+          "line": 168
+        },
+        {
+          "name": "_read_json",
+          "line": 175
+        },
+        {
+          "name": "load_config",
+          "line": 185
+        },
+        {
+          "name": "save_keys",
+          "line": 230
+        },
+        {
+          "name": "_fold",
+          "line": 250
+        },
+        {
+          "name": "_words",
+          "line": 255
+        },
+        {
+          "name": "_clean_answer",
+          "line": 259
+        },
+        {
+          "name": "_trim",
+          "line": 265
+        },
+        {
+          "name": "CouncilError",
+          "line": 273
+        },
+        {
+          "name": "CouncilResult",
+          "line": 278
+        },
+        {
+          "name": "AICouncil",
+          "line": 313
+        },
+        {
+          "name": "get_council",
+          "line": 795
+        },
+        {
+          "name": "log_line",
+          "line": 288
+        },
+        {
+          "name": "__init__",
+          "line": 314
+        },
+        {
+          "name": "_st",
+          "line": 325
+        },
+        {
+          "name": "reload",
+          "line": 330
+        },
+        {
+          "name": "_key",
+          "line": 334
+        },
+        {
+          "name": "_base",
+          "line": 337
+        },
+        {
+          "name": "is_configured",
+          "line": 341
+        },
+        {
+          "name": "is_usable",
+          "line": 352
+        },
+        {
+          "name": "usable_voices",
+          "line": 356
+        },
+        {
+          "name": "configured_voices",
+          "line": 359
+        },
+        {
+          "name": "_headers",
+          "line": 363
+        },
+        {
+          "name": "_throttle",
+          "line": 369
+        },
+        {
+          "name": "_override",
+          "line": 381
+        },
+        {
+          "name": "_candidates",
+          "line": 385
+        },
+        {
+          "name": "_model_for",
+          "line": 408
+        },
+        {
+          "name": "_can_rotate",
+          "line": 415
+        },
+        {
+          "name": "_rank",
+          "line": 422
+        },
+        {
+          "name": "_discover",
+          "line": 427
+        },
+        {
+          "name": "_detail",
+          "line": 453
+        },
+        {
+          "name": "_chat",
+          "line": 473
+        },
+        {
+          "name": "ping",
+          "line": 567
+        },
+        {
+          "name": "warmup",
+          "line": 581
+        },
+        {
+          "name": "_plan",
+          "line": 596
+        },
+        {
+          "name": "_budget",
+          "line": 615
+        },
+        {
+          "name": "ask",
+          "line": 619
+        },
+        {
+          "name": "_agree",
+          "line": 728
+        },
+        {
+          "name": "_synthesize",
+          "line": 732
+        },
+        {
+          "name": "_consensus",
+          "line": 751
+        },
+        {
+          "name": "_no_voice_message",
+          "line": 766
+        },
+        {
+          "name": "status",
+          "line": 772
+        },
+        {
+          "name": "one",
+          "line": 587
+        },
+        {
+          "name": "launch",
+          "line": 640
+        },
+        {
+          "name": "done_result",
+          "line": 709
+        }
+      ],
+      "sha256": "e0fa9810d2e582796e869046900fb9b12221c480ff417989ffa91d784f243f4e",
+      "kind": "python"
+    },
+    {
+      "file": "core/audio_devices.py",
+      "bytes": 18870,
+      "imports": [
+        "__future__",
+        "platform",
+        "sounddevice",
+        "threading",
+        "time"
+      ],
+      "definitions": [
+        {
+          "name": "_transport_works",
+          "line": 119
+        },
+        {
+          "name": "_display_name",
+          "line": 176
+        },
+        {
+          "name": "configure",
+          "line": 197
+        },
+        {
+          "name": "_usable",
+          "line": 210
+        },
+        {
+          "name": "_is_pseudo",
+          "line": 253
+        },
+        {
+          "name": "_query",
+          "line": 258
+        },
+        {
+          "name": "prefetch",
+          "line": 322
+        },
+        {
+          "name": "list_devices",
+          "line": 335
+        },
+        {
+          "name": "resolve",
+          "line": 348
+        },
+        {
+          "name": "_work",
+          "line": 325
+        },
+        {
+          "name": "_collect",
+          "line": 275
+        },
+        {
+          "name": "_candidates",
+          "line": 377
+        },
+        {
+          "name": "_cb",
+          "line": 156
+        }
+      ],
+      "sha256": "594bfd2cb7a397fd0094e247a89a9c81f0ec16e09c2dce5a3e91252780346da7",
+      "kind": "python"
+    },
+    {
+      "file": "core/auto_memory.py",
+      "bytes": 1881,
+      "imports": [
+        "__future__",
+        "datetime",
+        "memory.memory_manager",
+        "re"
+      ],
+      "definitions": [
+        {
+          "name": "capture",
+          "line": 26
+        }
+      ],
+      "sha256": "5c2d849f2b96e3c0b642070b185beb7b359a670550a863d17c9f993fc7a36409",
+      "kind": "python"
+    },
+    {
+      "file": "core/avatar.py",
+      "bytes": 36067,
+      "imports": [
+        "PyQt6.QtCore",
+        "PyQt6.QtGui",
+        "__future__",
+        "core.avatar_mesh",
+        "math",
+        "numpy",
+        "random"
+      ],
+      "definitions": [
+        {
+          "name": "_rate",
+          "line": 86
+        },
+        {
+          "name": "_c",
+          "line": 93
+        },
+        {
+          "name": "_blend",
+          "line": 100
+        },
+        {
+          "name": "HoloAvatar",
+          "line": 114
+        },
+        {
+          "name": "__init__",
+          "line": 127
+        },
+        {
+          "name": "_mouth_step",
+          "line": 208
+        },
+        {
+          "name": "step",
+          "line": 250
+        },
+        {
+          "name": "glance",
+          "line": 418
+        },
+        {
+          "name": "_pose",
+          "line": 430
+        },
+        {
+          "name": "_lut",
+          "line": 471
+        },
+        {
+          "name": "paint",
+          "line": 480
+        },
+        {
+          "name": "_paint_surface",
+          "line": 514
+        },
+        {
+          "name": "_paint_wire",
+          "line": 578
+        },
+        {
+          "name": "_ring",
+          "line": 630
+        },
+        {
+          "name": "_paint_features",
+          "line": 634
+        }
+      ],
+      "sha256": "e582d3e88913baa69aba4d0f6ff921d23195bc4c5c16ef918f7082b385377fde",
+      "kind": "python"
+    },
+    {
+      "file": "core/avatar_mesh.py",
+      "bytes": 15999,
+      "imports": [
+        "__future__",
+        "collections",
+        "numpy",
+        "pathlib"
+      ],
+      "definitions": [
+        {
+          "name": "_load_obj",
+          "line": 76
+        },
+        {
+          "name": "_boundary_loop",
+          "line": 86
+        },
+        {
+          "name": "_slerp",
+          "line": 110
+        },
+        {
+          "name": "_add_cranium",
+          "line": 120
+        },
+        {
+          "name": "_add_neck",
+          "line": 180
+        },
+        {
+          "name": "_vertex_normals",
+          "line": 218
+        },
+        {
+          "name": "_unique_edges",
+          "line": 242
+        },
+        {
+          "name": "_check_landmarks",
+          "line": 248
+        },
+        {
+          "name": "build_head",
+          "line": 263
+        },
+        {
+          "name": "get_head_mesh",
+          "line": 346
+        },
+        {
+          "name": "ell_r",
+          "line": 141
+        }
+      ],
+      "sha256": "305682e6166db50945c91ef9b75207c534c0b6418780d0d97af9035899163c27",
+      "kind": "python"
+    },
+    {
+      "file": "core/confirm.py",
+      "bytes": 5578,
+      "imports": [
+        "__future__",
+        "dataclasses",
+        "threading",
+        "time",
+        "typing"
+      ],
+      "definitions": [
+        {
+          "name": "_Pending",
+          "line": 50
+        },
+        {
+          "name": "bind",
+          "line": 68
+        },
+        {
+          "name": "_log",
+          "line": 74
+        },
+        {
+          "name": "request",
+          "line": 82
+        },
+        {
+          "name": "resolve",
+          "line": 115
+        },
+        {
+          "name": "pending_title",
+          "line": 154
+        },
+        {
+          "name": "_worker",
+          "line": 143
+        }
+      ],
+      "sha256": "c0b4f9f191620a7c011e3623a8642ae61ba80f5e983165596cd774bfd58ca1ea",
+      "kind": "python"
+    },
+    {
+      "file": "core/echo.py",
+      "bytes": 13836,
+      "imports": [
+        "__future__",
+        "numpy",
+        "time"
+      ],
+      "definitions": [
+        {
+          "name": "band_energies",
+          "line": 96
+        },
+        {
+          "name": "EchoGuard",
+          "line": 116
+        },
+        {
+          "name": "__init__",
+          "line": 124
+        },
+        {
+          "name": "gain",
+          "line": 138
+        },
+        {
+          "name": "calibrated",
+          "line": 142
+        },
+        {
+          "name": "floor",
+          "line": 147
+        },
+        {
+          "name": "reliable",
+          "line": 152
+        },
+        {
+          "name": "threshold",
+          "line": 162
+        },
+        {
+          "name": "required_blocks",
+          "line": 167
+        },
+        {
+          "name": "last_similarity",
+          "line": 172
+        },
+        {
+          "name": "reset",
+          "line": 176
+        },
+        {
+          "name": "note_output",
+          "line": 183
+        },
+        {
+          "name": "is_user_speech",
+          "line": 194
+        }
+      ],
+      "sha256": "e63af72cef93a4f0d9e4d0c18a5f021ab2c3e036c391177cf6277817afd8ec5b",
+      "kind": "python"
+    },
+    {
+      "file": "core/face_model.obj",
+      "bytes": 25286,
+      "sha256": "aaea216b33c94f89036a8d80cfeabf5375b5e32477fbd3982710ca48d3649694",
+      "kind": "asset-or-document"
+    },
+    {
+      "file": "core/fish_audio_tts.py",
+      "bytes": 31373,
+      "imports": [
+        "__future__",
+        "io",
+        "json",
+        "miniaudio",
+        "numpy",
+        "os",
+        "pathlib",
+        "re",
+        "requests",
+        "shutil",
+        "sounddevice",
+        "struct",
+        "subprocess",
+        "sys",
+        "time",
+        "typing",
+        "unicodedata"
+      ],
+      "definitions": [
+        {
+          "name": "config_error",
+          "line": 80
+        },
+        {
+          "name": "_as_bool",
+          "line": 85
+        },
+        {
+          "name": "_clean_key",
+          "line": 93
+        },
+        {
+          "name": "_clean_id",
+          "line": 102
+        },
+        {
+          "name": "_norm_model",
+          "line": 108
+        },
+        {
+          "name": "_norm_format",
+          "line": 113
+        },
+        {
+          "name": "_norm_latency",
+          "line": 119
+        },
+        {
+          "name": "_to_float",
+          "line": 124
+        },
+        {
+          "name": "_to_int",
+          "line": 131
+        },
+        {
+          "name": "_load_json",
+          "line": 138
+        },
+        {
+          "name": "load_config",
+          "line": 153
+        },
+        {
+          "name": "save_config",
+          "line": 186
+        },
+        {
+          "name": "build_example_config",
+          "line": 220
+        },
+        {
+          "name": "FishAudioTTSError",
+          "line": 241
+        },
+        {
+          "name": "_server_detail",
+          "line": 248
+        },
+        {
+          "name": "explain_error",
+          "line": 263
+        },
+        {
+          "name": "_to_int16",
+          "line": 287
+        },
+        {
+          "name": "decode_wav",
+          "line": 313
+        },
+        {
+          "name": "_decode_any",
+          "line": 337
+        },
+        {
+          "name": "_fold",
+          "line": 364
+        },
+        {
+          "name": "is_dark_topic",
+          "line": 369
+        },
+        {
+          "name": "_StreamUnavailable",
+          "line": 380
+        },
+        {
+          "name": "FishAudioTTSEngine",
+          "line": 387
+        },
+        {
+          "name": "test_connection",
+          "line": 719
+        },
+        {
+          "name": "pick",
+          "line": 157
+        },
+        {
+          "name": "__init__",
+          "line": 242
+        },
+        {
+          "name": "__init__",
+          "line": 390
+        },
+        {
+          "name": "configured",
+          "line": 402
+        },
+        {
+          "name": "model_in_use",
+          "line": 406
+        },
+        {
+          "name": "pick_reference",
+          "line": 410
+        },
+        {
+          "name": "_headers",
+          "line": 423
+        },
+        {
+          "name": "_payload",
+          "line": 430
+        },
+        {
+          "name": "_post",
+          "line": 446
+        },
+        {
+          "name": "_checked",
+          "line": 467
+        },
+        {
+          "name": "synthesize",
+          "line": 489
+        },
+        {
+          "name": "_open_output",
+          "line": 505
+        },
+        {
+          "name": "_play",
+          "line": 514
+        },
+        {
+          "name": "_speak_stream",
+          "line": 545
+        },
+        {
+          "name": "_fallback_command",
+          "line": 620
+        },
+        {
+          "name": "_fallback_speak",
+          "line": 638
+        },
+        {
+          "name": "_note_failure",
+          "line": 667
+        },
+        {
+          "name": "speak",
+          "line": 673
+        },
+        {
+          "name": "emit",
+          "line": 555
+        },
+        {
+          "name": "_started",
+          "line": 688
+        }
+      ],
+      "sha256": "b72e59e59625064f125944387678e9fc1c92525b3dea3032b20fa966a8ce037b",
+      "kind": "python"
+    },
+    {
+      "file": "core/gemini.py",
+      "bytes": 24844,
+      "imports": [
+        "__future__",
+        "asyncio",
+        "base64",
+        "google",
+        "google.genai",
+        "json",
+        "pathlib",
+        "sys",
+        "threading",
+        "time"
+      ],
+      "definitions": [
+        {
+          "name": "_cool",
+          "line": 230
+        },
+        {
+          "name": "is_quota_error",
+          "line": 235
+        },
+        {
+          "name": "is_unavailable_error",
+          "line": 239
+        },
+        {
+          "name": "is_gone_error",
+          "line": 252
+        },
+        {
+          "name": "live_model",
+          "line": 259
+        },
+        {
+          "name": "note_live_failure",
+          "line": 269
+        },
+        {
+          "name": "_cooling",
+          "line": 289
+        },
+        {
+          "name": "api_key",
+          "line": 298
+        },
+        {
+          "name": "client",
+          "line": 312
+        },
+        {
+          "name": "_Reply",
+          "line": 327
+        },
+        {
+          "name": "_live_model",
+          "line": 337
+        },
+        {
+          "name": "_to_live_parts",
+          "line": 342
+        },
+        {
+          "name": "_live_turn",
+          "line": 371
+        },
+        {
+          "name": "_live_call",
+          "line": 420
+        },
+        {
+          "name": "call",
+          "line": 467
+        },
+        {
+          "name": "text",
+          "line": 524
+        },
+        {
+          "name": "as_json",
+          "line": 534
+        },
+        {
+          "name": "__init__",
+          "line": 333
+        },
+        {
+          "name": "runner",
+          "line": 448
+        },
+        {
+          "name": "drain",
+          "line": 398
+        }
+      ],
+      "sha256": "9d6673d3c87f7a363a55f51fcadaecf21ed9cb9dcc913d607fcef0a6b71389f6",
+      "kind": "python"
+    },
+    {
+      "file": "core/hotkey.py",
+      "bytes": 6465,
+      "imports": [
+        "__future__",
+        "ctypes",
+        "platform",
+        "threading",
+        "time",
+        "typing"
+      ],
+      "definitions": [
+        {
+          "name": "chord_label",
+          "line": 61
+        },
+        {
+          "name": "qt_sequence",
+          "line": 66
+        },
+        {
+          "name": "PushToTalk",
+          "line": 71
+        },
+        {
+          "name": "__init__",
+          "line": 78
+        },
+        {
+          "name": "held",
+          "line": 89
+        },
+        {
+          "name": "scope",
+          "line": 93
+        },
+        {
+          "name": "label",
+          "line": 98
+        },
+        {
+          "name": "start",
+          "line": 103
+        },
+        {
+          "name": "stop",
+          "line": 116
+        },
+        {
+          "name": "set_held",
+          "line": 125
+        },
+        {
+          "name": "_can_poll",
+          "line": 131
+        },
+        {
+          "name": "_set_held",
+          "line": 139
+        },
+        {
+          "name": "_poll_loop",
+          "line": 148
+        }
+      ],
+      "sha256": "8ef1155dc08ca0ef1ddf096aa8f01ff9a1bdf8a9cda0a221dd17e94000aed70d",
+      "kind": "python"
+    },
+    {
+      "file": "core/installer.py",
+      "bytes": 4972,
+      "imports": [
+        "__future__",
+        "importlib.util",
+        "platform",
+        "subprocess",
+        "sys",
+        "typing"
+      ],
+      "definitions": [
+        {
+          "name": "_available",
+          "line": 63
+        },
+        {
+          "name": "_pip",
+          "line": 68
+        },
+        {
+          "name": "install_for_config",
+          "line": 87
+        }
+      ],
+      "sha256": "ab591b58cb3c52544870c6c67236bdd229b7cd6ca36973a783f72c647e797fe5",
+      "kind": "python"
+    },
+    {
+      "file": "core/interaction_policy.py",
+      "bytes": 1241,
+      "imports": [
+        "__future__",
+        "os",
+        "pathlib"
+      ],
+      "definitions": [
+        {
+          "name": "load_personality",
+          "line": 37
+        }
+      ],
+      "sha256": "674e51832253817faaf660fb4661bb5cc86a146546a6ca717f405b5674db50c7",
+      "kind": "python"
+    },
+    {
+      "file": "core/llm_client.py",
+      "bytes": 21886,
+      "imports": [
+        "json",
+        "pathlib",
+        "re",
+        "requests",
+        "subprocess",
+        "sys",
+        "time",
+        "typing"
+      ],
+      "definitions": [
+        {
+          "name": "get_base_dir",
+          "line": 33
+        },
+        {
+          "name": "get_llm_provider",
+          "line": 49
+        },
+        {
+          "name": "_load_config",
+          "line": 55
+        },
+        {
+          "name": "ensure_ollama_running",
+          "line": 62
+        },
+        {
+          "name": "warmup_model",
+          "line": 125
+        },
+        {
+          "name": "check_model_available",
+          "line": 187
+        },
+        {
+          "name": "get_llm_settings",
+          "line": 221
+        },
+        {
+          "name": "call_llm",
+          "line": 229
+        },
+        {
+          "name": "call_llm_text",
+          "line": 331
+        },
+        {
+          "name": "_stream_openai",
+          "line": 372
+        },
+        {
+          "name": "call_llm_stream",
+          "line": 488
+        },
+        {
+          "name": "_is_up",
+          "line": 92
+        },
+        {
+          "name": "_do_stream",
+          "line": 523
+        }
+      ],
+      "sha256": "54734db111f162db7fd87b21fceb0176e02e67daece4e755948cbafbb5f72ceb",
+      "kind": "python"
+    },
+    {
+      "file": "core/obsidian.py",
+      "bytes": 12163,
+      "imports": [
+        "__future__",
+        "core.storage_paths",
+        "datetime",
+        "json",
+        "memory.memory_manager",
+        "os",
+        "pathlib",
+        "re",
+        "subprocess",
+        "sys",
+        "threading",
+        "unicodedata"
+      ],
+      "definitions": [
+        {
+          "name": "_legacy_config",
+          "line": 29
+        },
+        {
+          "name": "_settings",
+          "line": 37
+        },
+        {
+          "name": "_normalise_vault",
+          "line": 44
+        },
+        {
+          "name": "get_config",
+          "line": 50
+        },
+        {
+          "name": "save_config",
+          "line": 71
+        },
+        {
+          "name": "vault_path",
+          "line": 88
+        },
+        {
+          "name": "is_ready",
+          "line": 92
+        },
+        {
+          "name": "ensure_vault",
+          "line": 98
+        },
+        {
+          "name": "_safe_note_name",
+          "line": 105
+        },
+        {
+          "name": "daily_note_path",
+          "line": 111
+        },
+        {
+          "name": "_ensure_header",
+          "line": 118
+        },
+        {
+          "name": "append_turn",
+          "line": 133
+        },
+        {
+          "name": "extract_topic",
+          "line": 165
+        },
+        {
+          "name": "_topic_slug",
+          "line": 203
+        },
+        {
+          "name": "topic_note_path",
+          "line": 209
+        },
+        {
+          "name": "_update_topic_index",
+          "line": 214
+        },
+        {
+          "name": "append_topic_note",
+          "line": 231
+        },
+        {
+          "name": "search",
+          "line": 272
+        },
+        {
+          "name": "open_vault",
+          "line": 313
+        }
+      ],
+      "sha256": "aa11d7ab1d7733d8d823c27e9f4a4b00b378ce39db445e7d2074da80c8605c59",
+      "kind": "python"
+    },
+    {
+      "file": "core/plugin_loader.py",
+      "bytes": 13363,
+      "imports": [
+        "__future__",
+        "dataclasses",
+        "importlib.util",
+        "inspect",
+        "memory.config_manager",
+        "pathlib",
+        "re",
+        "sys",
+        "traceback",
+        "typing"
+      ],
+      "definitions": [
+        {
+          "name": "_opt_upper",
+          "line": 32
+        },
+        {
+          "name": "PluginRecord",
+          "line": 38
+        },
+        {
+          "name": "PluginRegistry",
+          "line": 51
+        },
+        {
+          "name": "_call_run",
+          "line": 142
+        },
+        {
+          "name": "_validate",
+          "line": 155
+        },
+        {
+          "name": "_load_error",
+          "line": 195
+        },
+        {
+          "name": "discover_plugins",
+          "line": 221
+        },
+        {
+          "name": "__init__",
+          "line": 52
+        },
+        {
+          "name": "get_tool_declarations",
+          "line": 64
+        },
+        {
+          "name": "has",
+          "line": 78
+        },
+        {
+          "name": "scheduling",
+          "line": 81
+        },
+        {
+          "name": "run",
+          "line": 87
+        },
+        {
+          "name": "settings_schemas",
+          "line": 102
+        },
+        {
+          "name": "list_for_ui",
+          "line": 128
+        }
+      ],
+      "sha256": "6018206af85c26fc3c27fc5b45f9bd167c3ecd27cbfdd5f9831ffb6ca8b0a27d",
+      "kind": "python"
+    },
+    {
+      "file": "core/prompt.txt",
+      "bytes": 18231,
+      "sha256": "d9c559ae52e88390f996d82d6f0959f30cc50dc1f68be478f5c72e50a34e2aea",
+      "kind": "asset-or-document"
+    },
+    {
+      "file": "core/prompt_append.txt",
+      "bytes": 1020,
+      "sha256": "04d4c5622f6f13ccff0a04315663a45e889bdd7ae05ad0fe36667417f69648de",
+      "kind": "asset-or-document"
+    },
+    {
+      "file": "core/resource_mode.py",
+      "bytes": 2004,
+      "imports": [
+        "__future__",
+        "os"
+      ],
+      "definitions": [
+        {
+          "name": "_truthy",
+          "line": 23
+        },
+        {
+          "name": "feature_enabled",
+          "line": 29
+        },
+        {
+          "name": "hud_interval_ms",
+          "line": 37
+        },
+        {
+          "name": "metrics_interval_ms",
+          "line": 45
+        },
+        {
+          "name": "metrics_worker_seconds",
+          "line": 53
+        },
+        {
+          "name": "status",
+          "line": 61
+        }
+      ],
+      "sha256": "abec3d5795d644116c0dd625605c021eca14069030ae7700fb6d1603c0b6f4ef",
+      "kind": "python"
+    },
+    {
+      "file": "core/storage_paths.py",
+      "bytes": 1638,
+      "imports": [
+        "__future__",
+        "json",
+        "os",
+        "pathlib",
+        "sys",
+        "tempfile",
+        "threading"
+      ],
+      "definitions": [
+        {
+          "name": "load_settings",
+          "line": 17
+        },
+        {
+          "name": "save_settings",
+          "line": 29
+        }
+      ],
+      "sha256": "0ffbd9a046dc6ac54db3412b305207064f5a0e665051dd710873e2f1c0f90b15",
+      "kind": "python"
+    },
+    {
+      "file": "core/stt.py",
+      "bytes": 4060,
+      "imports": [
+        "faster_whisper",
+        "json",
+        "numpy",
+        "os",
+        "torch",
+        "vosk"
+      ],
+      "definitions": [
+        {
+          "name": "WhisperSTT",
+          "line": 11
+        },
+        {
+          "name": "VoskSTT",
+          "line": 73
+        },
+        {
+          "name": "__init__",
+          "line": 14
+        },
+        {
+          "name": "transcribe",
+          "line": 55
+        },
+        {
+          "name": "__init__",
+          "line": 76
+        },
+        {
+          "name": "process_chunk",
+          "line": 87
+        }
+      ],
+      "sha256": "17976dec1585d7f808a1e02bbb217a88093bf6085f61b39a9bb57d2131259b8e",
+      "kind": "python"
+    },
+    {
+      "file": "core/tts.py",
+      "bytes": 16540,
+      "imports": [
+        "__future__",
+        "asyncio",
+        "edge_tts",
+        "kokoro",
+        "miniaudio",
+        "numpy",
+        "os",
+        "queue",
+        "requests",
+        "sounddevice",
+        "subprocess",
+        "sys",
+        "threading",
+        "torch",
+        "typing"
+      ],
+      "definitions": [
+        {
+          "name": "_to_numpy",
+          "line": 33
+        },
+        {
+          "name": "_compress_silence",
+          "line": 52
+        },
+        {
+          "name": "_play_np",
+          "line": 80
+        },
+        {
+          "name": "_play_audio_bytes",
+          "line": 88
+        },
+        {
+          "name": "EdgeTTSEngine",
+          "line": 105
+        },
+        {
+          "name": "_import_kokoro_pipeline",
+          "line": 139
+        },
+        {
+          "name": "KokoroTTSEngine",
+          "line": 214
+        },
+        {
+          "name": "ElevenLabsTTSEngine",
+          "line": 353
+        },
+        {
+          "name": "TTSPlayer",
+          "line": 383
+        },
+        {
+          "name": "create_tts_player",
+          "line": 429
+        },
+        {
+          "name": "__init__",
+          "line": 108
+        },
+        {
+          "name": "speak",
+          "line": 111
+        },
+        {
+          "name": "_synth",
+          "line": 120
+        },
+        {
+          "name": "_try_import",
+          "line": 153
+        },
+        {
+          "name": "__init__",
+          "line": 226
+        },
+        {
+          "name": "_lang_code",
+          "line": 234
+        },
+        {
+          "name": "_init",
+          "line": 238
+        },
+        {
+          "name": "speak",
+          "line": 310
+        },
+        {
+          "name": "__init__",
+          "line": 356
+        },
+        {
+          "name": "speak",
+          "line": 360
+        },
+        {
+          "name": "__init__",
+          "line": 389
+        },
+        {
+          "name": "is_playing",
+          "line": 395
+        },
+        {
+          "name": "speak",
+          "line": 398
+        },
+        {
+          "name": "stop",
+          "line": 419
+        },
+        {
+          "name": "_create_pipeline",
+          "line": 267
+        },
+        {
+          "name": "_synth",
+          "line": 324
+        }
+      ],
+      "sha256": "1de291decabe1963c56ff9e2d3ab31d1e87bedb11ab0c11fabf0770e9bb2d6c8",
+      "kind": "python"
+    },
+    {
+      "file": "core/undo.py",
+      "bytes": 4330,
+      "imports": [
+        "__future__",
+        "dataclasses",
+        "threading",
+        "time",
+        "typing"
+      ],
+      "definitions": [
+        {
+          "name": "_Entry",
+          "line": 50
+        },
+        {
+          "name": "push_undo",
+          "line": 60
+        },
+        {
+          "name": "can_undo",
+          "line": 79
+        },
+        {
+          "name": "peek",
+          "line": 84
+        },
+        {
+          "name": "history",
+          "line": 90
+        },
+        {
+          "name": "undo_last",
+          "line": 96
+        },
+        {
+          "name": "clear",
+          "line": 117
+        }
+      ],
+      "sha256": "b52a0a112d9a375bce41bac8f347a7bf3f16bdded984bdf7589b13e3ef81fe84",
+      "kind": "python"
+    },
+    {
+      "file": "core/viseme.py",
+      "bytes": 11039,
+      "imports": [
+        "__future__",
+        "collections",
+        "unicodedata"
+      ],
+      "definitions": [
+        {
+          "name": "to_latin",
+          "line": 126
+        },
+        {
+          "name": "coverage",
+          "line": 151
+        },
+        {
+          "name": "text_to_visemes",
+          "line": 159
+        },
+        {
+          "name": "VisemeStream",
+          "line": 206
+        },
+        {
+          "name": "__init__",
+          "line": 220
+        },
+        {
+          "name": "reset",
+          "line": 225
+        },
+        {
+          "name": "feed_text",
+          "line": 230
+        },
+        {
+          "name": "pending",
+          "line": 238
+        },
+        {
+          "name": "_step_seconds",
+          "line": 241
+        },
+        {
+          "name": "frames",
+          "line": 247
+        }
+      ],
+      "sha256": "1bd7a9739b4eee6ce780a488f5a7cfeddbd866bfbdaa6f02e436e488e60fa8fa",
+      "kind": "python"
+    },
+    {
+      "file": "core/wake_word.py",
+      "bytes": 10787,
+      "imports": [
+        "__future__",
+        "importlib.util",
+        "json",
+        "pathlib",
+        "queue",
+        "re",
+        "shutil",
+        "subprocess",
+        "sys",
+        "threading",
+        "time",
+        "typing",
+        "unicodedata",
+        "urllib.request",
+        "vosk",
+        "zipfile"
+      ],
+      "definitions": [
+        {
+          "name": "_project_root",
+          "line": 59
+        },
+        {
+          "name": "_models_dir",
+          "line": 63
+        },
+        {
+          "name": "_model_dir",
+          "line": 67
+        },
+        {
+          "name": "_normalize",
+          "line": 71
+        },
+        {
+          "name": "_contains_wake_word",
+          "line": 78
+        },
+        {
+          "name": "is_installed",
+          "line": 87
+        },
+        {
+          "name": "is_ready",
+          "line": 95
+        },
+        {
+          "name": "_run_pip_install",
+          "line": 116
+        },
+        {
+          "name": "_download_model",
+          "line": 136
+        },
+        {
+          "name": "install_and_download",
+          "line": 192
+        },
+        {
+          "name": "WakeWordDetector",
+          "line": 216
+        },
+        {
+          "name": "__init__",
+          "line": 232
+        },
+        {
+          "name": "ready",
+          "line": 251
+        },
+        {
+          "name": "start",
+          "line": 254
+        },
+        {
+          "name": "stop",
+          "line": 294
+        },
+        {
+          "name": "feed",
+          "line": 304
+        },
+        {
+          "name": "_maybe_trigger",
+          "line": 318
+        },
+        {
+          "name": "_loop",
+          "line": 341
+        },
+        {
+          "name": "_report",
+          "line": 155
+        }
+      ],
+      "sha256": "a9e3aad4439f5a31faa5fce80a9ea4ce87f98624e0c62b10d36c6ca0fe944178",
+      "kind": "python"
+    },
+    {
+      "file": "cronos_web.py",
+      "bytes": 34516,
+      "imports": [
+        "PyQt6.QtCore",
+        "PyQt6.QtGui",
+        "PyQt6.QtWebEngineWidgets",
+        "PyQt6.QtWidgets",
+        "__future__",
+        "asyncio",
+        "core",
+        "core.confirm",
+        "desktop_launcher",
+        "fastapi",
+        "fastapi.responses",
+        "fastapi.staticfiles",
+        "json",
+        "memory",
+        "memory.config_manager",
+        "mimetypes",
+        "os",
+        "pathlib",
+        "platform",
+        "psutil",
+        "secrets",
+        "socket",
+        "sounddevice",
+        "sys",
+        "threading",
+        "time",
+        "typing",
+        "urllib.parse",
+        "uvicorn",
+        "web_ui",
+        "winreg"
+      ],
+      "definitions": [
+        {
+          "name": "SystemMetrics",
+          "line": 30
+        },
+        {
+          "name": "_call",
+          "line": 95
+        },
+        {
+          "name": "_get_safe_config",
+          "line": 104
+        },
+        {
+          "name": "create_app",
+          "line": 208
+        },
+        {
+          "name": "_create_desktop_shortcut",
+          "line": 641
+        },
+        {
+          "name": "_set_autostart",
+          "line": 651
+        },
+        {
+          "name": "_available_port",
+          "line": 675
+        },
+        {
+          "name": "_configure_chromium_rendering_flags",
+          "line": 686
+        },
+        {
+          "name": "run_desktop_interface",
+          "line": 719
+        },
+        {
+          "name": "_json_safe",
+          "line": 805
+        },
+        {
+          "name": "__init__",
+          "line": 31
+        },
+        {
+          "name": "_net_sample",
+          "line": 39
+        },
+        {
+          "name": "read",
+          "line": 47
+        },
+        {
+          "name": "reject_cross_origin_writes",
+          "line": 219
+        },
+        {
+          "name": "index",
+          "line": 229
+        },
+        {
+          "name": "bridge_js",
+          "line": 233
+        },
+        {
+          "name": "bridge_css",
+          "line": 237
+        },
+        {
+          "name": "browser_media_source",
+          "line": 240
+        },
+        {
+          "name": "api_state",
+          "line": 263
+        },
+        {
+          "name": "api_local_media",
+          "line": 275
+        },
+        {
+          "name": "api_config",
+          "line": 290
+        },
+        {
+          "name": "api_setup",
+          "line": 294
+        },
+        {
+          "name": "api_command",
+          "line": 306
+        },
+        {
+          "name": "api_upload",
+          "line": 320
+        },
+        {
+          "name": "api_control",
+          "line": 341
+        },
+        {
+          "name": "api_card_layout",
+          "line": 422
+        },
+        {
+          "name": "api_save_config",
+          "line": 444
+        },
+        {
+          "name": "api_test_fish",
+          "line": 544
+        },
+        {
+          "name": "api_plugin_test",
+          "line": 553
+        },
+        {
+          "name": "api_quiz",
+          "line": 591
+        },
+        {
+          "name": "api_quiz_next",
+          "line": 600
+        },
+        {
+          "name": "api_media",
+          "line": 607
+        },
+        {
+          "name": "run_assistant",
+          "line": 747
+        },
+        {
+          "name": "CronosWindow",
+          "line": 774
+        },
+        {
+          "name": "show_after_load",
+          "line": 788
+        },
+        {
+          "name": "closeEvent",
+          "line": 775
+        }
+      ],
+      "sha256": "186064548bab9f2f65286bf527b62d3b25ff1726b545f1b7918b7838fea1ea43",
+      "kind": "python"
+    },
+    {
+      "file": "dashboard/__init__.py",
+      "bytes": 0,
+      "imports": [],
+      "definitions": [],
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "kind": "python"
+    },
+    {
+      "file": "dashboard/server.py",
+      "bytes": 38818,
+      "imports": [
+        "asyncio",
+        "base64",
+        "cryptography",
+        "cryptography.hazmat.primitives",
+        "cryptography.hazmat.primitives.asymmetric",
+        "cryptography.hazmat.primitives.ciphers",
+        "cryptography.x509.oid",
+        "ctypes",
+        "datetime",
+        "fastapi",
+        "fastapi.responses",
+        "hashlib",
+        "ipaddress",
+        "json",
+        "os",
+        "pathlib",
+        "re",
+        "secrets",
+        "socket",
+        "string",
+        "subprocess",
+        "sys",
+        "tempfile",
+        "threading",
+        "time",
+        "urllib.request",
+        "uvicorn"
+      ],
+      "definitions": [
+        {
+          "name": "_make_uploads_dir",
+          "line": 44
+        },
+        {
+          "name": "_get_gemini_key",
+          "line": 61
+        },
+        {
+          "name": "_derive_key",
+          "line": 76
+        },
+        {
+          "name": "_decrypt_cbc",
+          "line": 81
+        },
+        {
+          "name": "_ensure_network_access",
+          "line": 99
+        },
+        {
+          "name": "_ensure_crypto_js",
+          "line": 310
+        },
+        {
+          "name": "_local_ip",
+          "line": 328
+        },
+        {
+          "name": "_ensure_certs",
+          "line": 363
+        },
+        {
+          "name": "_read",
+          "line": 450
+        },
+        {
+          "name": "DashboardServer",
+          "line": 456
+        },
+        {
+          "name": "_privileged",
+          "line": 263
+        },
+        {
+          "name": "__init__",
+          "line": 458
+        },
+        {
+          "name": "new_key",
+          "line": 478
+        },
+        {
+          "name": "_ssl_enabled",
+          "line": 486
+        },
+        {
+          "name": "get_url",
+          "line": 490
+        },
+        {
+          "name": "get_manual_url",
+          "line": 494
+        },
+        {
+          "name": "_aes_key",
+          "line": 500
+        },
+        {
+          "name": "_decrypt",
+          "line": 505
+        },
+        {
+          "name": "set_wake_callback",
+          "line": 516
+        },
+        {
+          "name": "set_connect_callback",
+          "line": 519
+        },
+        {
+          "name": "broadcast",
+          "line": 524
+        },
+        {
+          "name": "_build_app",
+          "line": 538
+        },
+        {
+          "name": "_serve_alias",
+          "line": 842
+        },
+        {
+          "name": "serve",
+          "line": 856
+        },
+        {
+          "name": "_netsh_rule_exists",
+          "line": 119
+        },
+        {
+          "name": "_network_is_public",
+          "line": 129
+        },
+        {
+          "name": "_auth",
+          "line": 541
+        },
+        {
+          "name": "serve_crypto",
+          "line": 547
+        },
+        {
+          "name": "login_page",
+          "line": 555
+        },
+        {
+          "name": "index",
+          "line": 559
+        },
+        {
+          "name": "login",
+          "line": 569
+        },
+        {
+          "name": "auto_login",
+          "line": 590
+        },
+        {
+          "name": "device_login_ep",
+          "line": 637
+        },
+        {
+          "name": "revoke_devices",
+          "line": 659
+        },
+        {
+          "name": "command",
+          "line": 668
+        },
+        {
+          "name": "wake_ep",
+          "line": 687
+        },
+        {
+          "name": "phone_audio_ws",
+          "line": 697
+        },
+        {
+          "name": "_safe_filename",
+          "line": 724
+        },
+        {
+          "name": "list_files",
+          "line": 783
+        },
+        {
+          "name": "download_file",
+          "line": 799
+        },
+        {
+          "name": "ws_ep",
+          "line": 811
+        },
+        {
+          "name": "_cleanup",
+          "line": 225
+        },
+        {
+          "name": "upload_file",
+          "line": 731
+        },
+        {
+          "name": "upload_unavailable",
+          "line": 776
+        }
+      ],
+      "sha256": "1ee74091b07f5be25d0786eef58c8f39e8860bffe94e0646eea37d56da961592",
+      "kind": "python"
+    },
+    {
+      "file": "dashboard/static/app.html",
+      "bytes": 26561,
+      "sha256": "23aa1ccd230b324dc10ccc5dbaa625917c3963576616ffb499fe4c93cf79a893",
+      "kind": "interface"
+    },
+    {
+      "file": "dashboard/static/crypto-js.min.js",
+      "bytes": 60819,
+      "sha256": "769a555de553babc35a3338f344dd7aa16260c93cea2c7db290707c90484e7cc",
+      "kind": "interface"
+    },
+    {
+      "file": "dashboard/static/login.html",
+      "bytes": 6647,
+      "sha256": "7619f310e29a8b5f045c8241f9bd596a2b57cf9e0485f2b98724a31e1b31a382",
+      "kind": "interface"
+    },
+    {
+      "file": "desktop_launcher.py",
+      "bytes": 3272,
+      "imports": [
+        "__future__",
+        "os",
+        "pathlib",
+        "platform",
+        "subprocess",
+        "tempfile",
+        "win32com.client"
+      ],
+      "definitions": [
+        {
+          "name": "_desktop_folder",
+          "line": 11
+        },
+        {
+          "name": "_write_shortcut_with_wscript",
+          "line": 24
+        },
+        {
+          "name": "create_desktop_shortcut",
+          "line": 63
+        },
+        {
+          "name": "vb",
+          "line": 29
+        }
+      ],
+      "sha256": "211fbbc1309d7538aef9abd6524a74d492b332f49f4d9e83a49b9f63ae398efb",
+      "kind": "python"
+    },
+    {
+      "file": "interface/__init__.py",
+      "bytes": 0,
+      "imports": [],
+      "definitions": [],
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "kind": "python"
+    },
+    {
+      "file": "interface/assets/cronos_monge_rig.png",
+      "bytes": 1872204,
+      "sha256": "31ed63de2c984caae2d57313a514e8c6441c64f1808b3ef5ce4de7e5da5c2221",
+      "kind": "interface"
+    },
+    {
+      "file": "interface/test1_hud.py",
+      "bytes": 66676,
+      "imports": [
+        "PyQt6.QtCore",
+        "PyQt6.QtGui",
+        "PyQt6.QtWidgets",
+        "__future__",
+        "core.resource_mode",
+        "dataclasses",
+        "json",
+        "math",
+        "pathlib",
+        "psutil",
+        "re",
+        "time",
+        "typing"
+      ],
+      "definitions": [
+        {
+          "name": "alpha",
+          "line": 34
+        },
+        {
+          "name": "hsla",
+          "line": 40
+        },
+        {
+          "name": "clamp",
+          "line": 48
+        },
+        {
+          "name": "ease_out_back",
+          "line": 52
+        },
+        {
+          "name": "wrap_text",
+          "line": 58
+        },
+        {
+          "name": "_Loop",
+          "line": 78
+        },
+        {
+          "name": "_Card",
+          "line": 89
+        },
+        {
+          "name": "_make_loops",
+          "line": 118
+        },
+        {
+          "name": "Test1HudCanvas",
+          "line": 134
+        },
+        {
+          "name": "__init__",
+          "line": 145
+        },
+        {
+          "name": "glance",
+          "line": 219
+        },
+        {
+          "name": "push_visemes",
+          "line": 222
+        },
+        {
+          "name": "set_audio_level",
+          "line": 231
+        },
+        {
+          "name": "set_state",
+          "line": 237
+        },
+        {
+          "name": "set_active_section",
+          "line": 242
+        },
+        {
+          "name": "set_telemetry",
+          "line": 248
+        },
+        {
+          "name": "set_runtime_info",
+          "line": 259
+        },
+        {
+          "name": "clear_content",
+          "line": 264
+        },
+        {
+          "name": "clear_content_by_source",
+          "line": 272
+        },
+        {
+          "name": "_clean_display_text",
+          "line": 284
+        },
+        {
+          "name": "_short_title",
+          "line": 309
+        },
+        {
+          "name": "_content_kind",
+          "line": 317
+        },
+        {
+          "name": "_remember_content",
+          "line": 321
+        },
+        {
+          "name": "restore_content",
+          "line": 331
+        },
+        {
+          "name": "_build_cards",
+          "line": 350
+        },
+        {
+          "name": "show_content",
+          "line": 375
+        },
+        {
+          "name": "show_telemetry",
+          "line": 405
+        },
+        {
+          "name": "show_side_panels",
+          "line": 413
+        },
+        {
+          "name": "show_news_stack",
+          "line": 420
+        },
+        {
+          "name": "_target_level",
+          "line": 431
+        },
+        {
+          "name": "_tick",
+          "line": 436
+        },
+        {
+          "name": "_point",
+          "line": 501
+        },
+        {
+          "name": "paintEvent",
+          "line": 513
+        },
+        {
+          "name": "_paint_edges",
+          "line": 533
+        },
+        {
+          "name": "_paint_hologram",
+          "line": 836
+        },
+        {
+          "name": "_paint_control_capsule",
+          "line": 973
+        },
+        {
+          "name": "_paint_monk",
+          "line": 1029
+        },
+        {
+          "name": "_paint_activation",
+          "line": 1063
+        },
+        {
+          "name": "_paint_voice",
+          "line": 1086
+        },
+        {
+          "name": "_card_size",
+          "line": 1109
+        },
+        {
+          "name": "_auto_card_size",
+          "line": 1116
+        },
+        {
+          "name": "_default_centers",
+          "line": 1119
+        },
+        {
+          "name": "_ensure_positions",
+          "line": 1129
+        },
+        {
+          "name": "_wrapped_lines",
+          "line": 1135
+        },
+        {
+          "name": "_paint_cards",
+          "line": 1149
+        },
+        {
+          "name": "wheelEvent",
+          "line": 1200
+        },
+        {
+          "name": "_card_resize_rect",
+          "line": 1209
+        },
+        {
+          "name": "_resize_card",
+          "line": 1212
+        },
+        {
+          "name": "_move_card",
+          "line": 1233
+        },
+        {
+          "name": "resize_content_card",
+          "line": 1256
+        },
+        {
+          "name": "move_content_card",
+          "line": 1263
+        },
+        {
+          "name": "_card_close_rect",
+          "line": 1269
+        },
+        {
+          "name": "_card_header_rect",
+          "line": 1272
+        },
+        {
+          "name": "_remove_card_at",
+          "line": 1275
+        },
+        {
+          "name": "_action_at",
+          "line": 1284
+        },
+        {
+          "name": "mousePressEvent",
+          "line": 1296
+        },
+        {
+          "name": "mouseMoveEvent",
+          "line": 1337
+        },
+        {
+          "name": "mouseReleaseEvent",
+          "line": 1389
+        },
+        {
+          "name": "_paint_background",
+          "line": 1403
+        },
+        {
+          "name": "_core_radius",
+          "line": 1415
+        },
+        {
+          "name": "g",
+          "line": 406
+        },
+        {
+          "name": "callout",
+          "line": 645
+        }
+      ],
+      "sha256": "ba16fb6a026299bd744db2c26c58511f2be85821cbf2e4c8f2a151fa73fbe808",
+      "kind": "python"
+    },
+    {
+      "file": "interface_v32/assets/bg-environment.jpg",
+      "bytes": 316987,
+      "sha256": "48ac4838194e3d5b655de75a97aa8b4e2011c9add3d15dbeb7c6ce2d83ade0da",
+      "kind": "interface"
+    },
+    {
+      "file": "interface_v32/assets/index-DrABOOUt.css",
+      "bytes": 100072,
+      "sha256": "d3d37ec88441c7b80f4cb4a6e9ec1207e91f5034c49b708318e827c5c2004ff8",
+      "kind": "interface"
+    },
+    {
+      "file": "interface_v32/assets/logo-cronos.png",
+      "bytes": 13549,
+      "sha256": "44d10fbcf1e4ff9f5afc5a55ac48f8cf2e15c0cd73472c69d1e84dcb412e7970",
+      "kind": "interface"
+    },
+    {
+      "file": "interface_v32/assets/media_1791693299509_8c8d63cb.png",
+      "bytes": 287064,
+      "sha256": "cedcde4d449eff512655a7564b93e9389b2480f23520be192a0683b182ed75e2",
+      "kind": "interface"
+    },
+    {
+      "file": "interface_v32/assets/media_1791693299701_7ee698a7.jpg",
+      "bytes": 361611,
+      "sha256": "798aaecb4f4a951f0db3324daf0849b9628e7b4800ee97485905fdd5eaae3ce7",
+      "kind": "interface"
+    },
+    {
+      "file": "interface_v32/assets/media_1791693299721_5ff50043.jpg",
+      "bytes": 316987,
+      "sha256": "48ac4838194e3d5b655de75a97aa8b4e2011c9add3d15dbeb7c6ce2d83ade0da",
+      "kind": "interface"
+    },
+    {
+      "file": "interface_v32/assets/media_1791693299751_df048ed7.jpg",
+      "bytes": 275181,
+      "sha256": "266a85a797f9c0662dc3133568421729713dd27b0ec092dc55dfad88ada03289",
+      "kind": "interface"
+    },
+    {
+      "file": "interface_v32/assets/monk-crystal.webp",
+      "bytes": 311298,
+      "sha256": "076bb3bc7f8b82c98ba5df810782401b976d1eadfdc8648a689c7d55ff4b4a5c",
+      "kind": "interface"
+    },
+    {
+      "file": "interface_v32/assets/monk-cutout.png",
+      "bytes": 119656,
+      "sha256": "502d3a9e1a69c36821e054d4348d19b7ec32847022447dd7c4ef28c577a6ffa1",
+      "kind": "interface"
+    },
+    {
+      "file": "interface_v32/assets/monk.jpg",
+      "bytes": 361611,
+      "sha256": "798aaecb4f4a951f0db3324daf0849b9628e7b4800ee97485905fdd5eaae3ce7",
+      "kind": "interface"
+    },
+    {
+      "file": "interface_v32/assets/reference-full.jpg",
+      "bytes": 275181,
+      "sha256": "266a85a797f9c0662dc3133568421729713dd27b0ec092dc55dfad88ada03289",
+      "kind": "interface"
+    },
+    {
+      "file": "interface_v32/bridge.css",
+      "bytes": 28728,
+      "sha256": "10159ee297c859e1942f0b91215cd225760098faa1e5c10d8738e6a093ff0aad",
+      "kind": "interface"
+    },
+    {
+      "file": "interface_v32/bridge.js",
+      "bytes": 51157,
+      "sha256": "fb96794f22a4f3eb8e02be41208ba764842a1ad8c929c1cb99620b8ceddcd1b0",
+      "kind": "interface"
+    },
+    {
+      "file": "interface_v32/index.html",
+      "bytes": 1015,
+      "sha256": "ceb90b557ceb355a13a5cb1e5e5c98b13fdd15541ad2ac981b263ca394684912",
+      "kind": "interface"
+    },
+    {
+      "file": "main.py",
+      "bytes": 139123,
+      "imports": [
+        "actions.background_monitor",
+        "actions.proactive",
+        "actions.screen_processor",
+        "actions.system_monitor",
+        "actions.web_search",
+        "asyncio",
+        "base64",
+        "core",
+        "core.action_loader",
+        "core.echo",
+        "core.fish_audio_tts",
+        "core.hotkey",
+        "core.interaction_policy",
+        "core.plugin_loader",
+        "core.viseme",
+        "core.wake_word",
+        "cronos_web",
+        "dashboard.server",
+        "datetime",
+        "google",
+        "google.genai",
+        "json",
+        "memory.config_manager",
+        "memory.memory_manager",
+        "numpy",
+        "os",
+        "pathlib",
+        "platform",
+        "re",
+        "socket",
+        "sounddevice",
+        "subprocess",
+        "sys",
+        "threading",
+        "time",
+        "traceback"
+      ],
+      "definitions": [
+        {
+          "name": "get_base_dir",
+          "line": 145
+        },
+        {
+          "name": "_pcm_level",
+          "line": 173
+        },
+        {
+          "name": "_pcm_visemes",
+          "line": 219
+        },
+        {
+          "name": "_describe_tools",
+          "line": 279
+        },
+        {
+          "name": "_describe_limits",
+          "line": 302
+        },
+        {
+          "name": "_render_prompt",
+          "line": 333
+        },
+        {
+          "name": "_get_api_key",
+          "line": 346
+        },
+        {
+          "name": "_load_system_prompt",
+          "line": 351
+        },
+        {
+          "name": "_is_repeat_chunk",
+          "line": 368
+        },
+        {
+          "name": "_clean_transcript",
+          "line": 379
+        },
+        {
+          "name": "_ReconnectSignal",
+          "line": 592
+        },
+        {
+          "name": "_is_reconnect_signal",
+          "line": 607
+        },
+        {
+          "name": "_keep_context_of",
+          "line": 617
+        },
+        {
+          "name": "JarvisLive",
+          "line": 630
+        },
+        {
+          "name": "main",
+          "line": 2764
+        },
+        {
+          "name": "_Popen",
+          "line": 11
+        },
+        {
+          "name": "_jarvis_gemini_ipv4_getaddrinfo",
+          "line": 79
+        },
+        {
+          "name": "__init__",
+          "line": 602
+        },
+        {
+          "name": "__init__",
+          "line": 631
+        },
+        {
+          "name": "_wake_state",
+          "line": 772
+        },
+        {
+          "name": "_ensure_wake_detector",
+          "line": 778
+        },
+        {
+          "name": "_on_wake_detected",
+          "line": 790
+        },
+        {
+          "name": "wake",
+          "line": 794
+        },
+        {
+          "name": "sleep",
+          "line": 803
+        },
+        {
+          "name": "_run_sleep_watch",
+          "line": 811
+        },
+        {
+          "name": "_ui_wake_toggle",
+          "line": 828
+        },
+        {
+          "name": "_ui_wake_manual",
+          "line": 845
+        },
+        {
+          "name": "_ui_wake_install",
+          "line": 854
+        },
+        {
+          "name": "plugin_say",
+          "line": 861
+        },
+        {
+          "name": "request_reconnect",
+          "line": 888
+        },
+        {
+          "name": "_on_voice_change",
+          "line": 903
+        },
+        {
+          "name": "_on_audio_device_change",
+          "line": 914
+        },
+        {
+          "name": "_watch_reconnect",
+          "line": 921
+        },
+        {
+          "name": "_make_remote_key",
+          "line": 935
+        },
+        {
+          "name": "_ui_save_fish_audio",
+          "line": 948
+        },
+        {
+          "name": "_ui_test_fish_audio",
+          "line": 963
+        },
+        {
+          "name": "_ui_save_obsidian",
+          "line": 991
+        },
+        {
+          "name": "_ui_open_obsidian",
+          "line": 1008
+        },
+        {
+          "name": "_obsidian_log_turn",
+          "line": 1016
+        },
+        {
+          "name": "_on_text_command",
+          "line": 1032
+        },
+        {
+          "name": "_tail_active",
+          "line": 1052
+        },
+        {
+          "name": "set_speaking",
+          "line": 1056
+        },
+        {
+          "name": "set_push_to_talk",
+          "line": 1077
+        },
+        {
+          "name": "_on_ptt",
+          "line": 1104
+        },
+        {
+          "name": "interrupt",
+          "line": 1118
+        },
+        {
+          "name": "speak",
+          "line": 1147
+        },
+        {
+          "name": "speak_error",
+          "line": 1158
+        },
+        {
+          "name": "_build_config",
+          "line": 1163
+        },
+        {
+          "name": "_tuning_config",
+          "line": 1279
+        },
+        {
+          "name": "_execute_tool",
+          "line": 1332
+        },
+        {
+          "name": "_speak_with_fish",
+          "line": 1506
+        },
+        {
+          "name": "_send_realtime",
+          "line": 1552
+        },
+        {
+          "name": "_listen_audio",
+          "line": 1567
+        },
+        {
+          "name": "_flush_pending_vision",
+          "line": 1687
+        },
+        {
+          "name": "_receive_audio",
+          "line": 1730
+        },
+        {
+          "name": "_play_audio",
+          "line": 2016
+        },
+        {
+          "name": "_send_startup_briefing",
+          "line": 2193
+        },
+        {
+          "name": "_save_session_summary",
+          "line": 2329
+        },
+        {
+          "name": "_run_system_monitor",
+          "line": 2359
+        },
+        {
+          "name": "_run_background_monitor",
+          "line": 2381
+        },
+        {
+          "name": "_run_proactive_mode",
+          "line": 2414
+        },
+        {
+          "name": "_relay_phone_audio",
+          "line": 2455
+        },
+        {
+          "name": "_on_phone_connected",
+          "line": 2474
+        },
+        {
+          "name": "_process_dashboard_commands",
+          "line": 2480
+        },
+        {
+          "name": "run",
+          "line": 2513
+        },
+        {
+          "name": "__init__",
+          "line": 12
+        },
+        {
+          "name": "_say",
+          "line": 874
+        },
+        {
+          "name": "worker",
+          "line": 972
+        },
+        {
+          "name": "_start",
+          "line": 1513
+        },
+        {
+          "name": "_should_stop",
+          "line": 1519
+        },
+        {
+          "name": "_chunk",
+          "line": 1524
+        },
+        {
+          "name": "_end",
+          "line": 1533
+        },
+        {
+          "name": "callback",
+          "line": 1571
+        },
+        {
+          "name": "_fish_queue_worker",
+          "line": 1737
+        },
+        {
+          "name": "_queue_fish_text",
+          "line": 1750
+        },
+        {
+          "name": "_open_spk",
+          "line": 2024
+        },
+        {
+          "name": "_val",
+          "line": 2205
+        },
+        {
+          "name": "_deliver_news",
+          "line": 2259
+        },
+        {
+          "name": "_open_mic",
+          "line": 1646
+        },
+        {
+          "name": "_cam_close",
+          "line": 1990
+        },
+        {
+          "name": "_do_shutdown",
+          "line": 1443
+        }
+      ],
+      "sha256": "5dd9ec4933d67572b6f73d2035f026a062b49091ad3ef265a8c2214512d89b05",
+      "kind": "python"
+    },
+    {
+      "file": "memory/__init__.py",
+      "bytes": 16,
+      "imports": [],
+      "definitions": [],
+      "sha256": "1a53be42e3bb5daa658eac29b1df3568bbdd3f294d4a495f9f09c0e9d0e361c8",
+      "kind": "python"
+    },
+    {
+      "file": "memory/config_manager.py",
+      "bytes": 16292,
+      "imports": [
+        "json",
+        "os",
+        "pathlib",
+        "sys"
+      ],
+      "definitions": [
+        {
+          "name": "get_base_dir",
+          "line": 5
+        },
+        {
+          "name": "ensure_config_dir",
+          "line": 14
+        },
+        {
+          "name": "config_exists",
+          "line": 17
+        },
+        {
+          "name": "save_api_keys",
+          "line": 20
+        },
+        {
+          "name": "load_api_keys",
+          "line": 37
+        },
+        {
+          "name": "get_gemini_key",
+          "line": 46
+        },
+        {
+          "name": "is_configured",
+          "line": 49
+        },
+        {
+          "name": "get_assistant_name",
+          "line": 54
+        },
+        {
+          "name": "get_user_name",
+          "line": 59
+        },
+        {
+          "name": "save_assistant_config",
+          "line": 64
+        },
+        {
+          "name": "get_voice",
+          "line": 85
+        },
+        {
+          "name": "save_voice",
+          "line": 92
+        },
+        {
+          "name": "get_wake_word_enabled",
+          "line": 107
+        },
+        {
+          "name": "save_wake_word_enabled",
+          "line": 112
+        },
+        {
+          "name": "get_push_to_talk_enabled",
+          "line": 124
+        },
+        {
+          "name": "save_push_to_talk_enabled",
+          "line": 129
+        },
+        {
+          "name": "get_captions_enabled",
+          "line": 133
+        },
+        {
+          "name": "save_captions_enabled",
+          "line": 138
+        },
+        {
+          "name": "get_assistant_reply_cards_enabled",
+          "line": 142
+        },
+        {
+          "name": "save_assistant_reply_cards_enabled",
+          "line": 147
+        },
+        {
+          "name": "get_hud_style",
+          "line": 155
+        },
+        {
+          "name": "save_hud_style",
+          "line": 167
+        },
+        {
+          "name": "get_immersive_mode",
+          "line": 175
+        },
+        {
+          "name": "save_immersive_mode",
+          "line": 180
+        },
+        {
+          "name": "get_fish_audio_config",
+          "line": 184
+        },
+        {
+          "name": "get_thinking_enabled",
+          "line": 205
+        },
+        {
+          "name": "save_thinking_enabled",
+          "line": 215
+        },
+        {
+          "name": "get_turn_tuning",
+          "line": 219
+        },
+        {
+          "name": "save_turn_tuning",
+          "line": 253
+        },
+        {
+          "name": "get_proactive_audio_enabled",
+          "line": 268
+        },
+        {
+          "name": "save_proactive_audio_enabled",
+          "line": 281
+        },
+        {
+          "name": "get_media_resolution",
+          "line": 288
+        },
+        {
+          "name": "save_media_resolution",
+          "line": 297
+        },
+        {
+          "name": "_save_flag",
+          "line": 302
+        },
+        {
+          "name": "get_brief_enabled",
+          "line": 315
+        },
+        {
+          "name": "save_brief_enabled",
+          "line": 319
+        },
+        {
+          "name": "_patch_config",
+          "line": 338
+        },
+        {
+          "name": "get_input_device",
+          "line": 355
+        },
+        {
+          "name": "save_input_device",
+          "line": 360
+        },
+        {
+          "name": "get_output_device",
+          "line": 364
+        },
+        {
+          "name": "save_output_device",
+          "line": 369
+        },
+        {
+          "name": "get_plugin_enabled",
+          "line": 373
+        },
+        {
+          "name": "get_plugin_config",
+          "line": 384
+        },
+        {
+          "name": "get_plugin_setting",
+          "line": 391
+        },
+        {
+          "name": "save_plugin_config",
+          "line": 396
+        },
+        {
+          "name": "save_plugin_enabled",
+          "line": 418
+        },
+        {
+          "name": "_int",
+          "line": 237
+        }
+      ],
+      "sha256": "7b2b57155f2e97aa02f9aa2db98374bc97e3dd9c6b0efe5b58f24ecafdba00a8",
+      "kind": "python"
+    },
+    {
+      "file": "memory/memory_manager.py",
+      "bytes": 21464,
+      "imports": [
+        "core.storage_paths",
+        "datetime",
+        "json",
+        "pathlib",
+        "re",
+        "shutil",
+        "sys",
+        "threading"
+      ],
+      "definitions": [
+        {
+          "name": "get_base_dir",
+          "line": 10
+        },
+        {
+          "name": "_configured_memory_path",
+          "line": 50
+        },
+        {
+          "name": "get_memory_path",
+          "line": 65
+        },
+        {
+          "name": "configure_memory_path",
+          "line": 74
+        },
+        {
+          "name": "_empty_memory",
+          "line": 116
+        },
+        {
+          "name": "load_memory",
+          "line": 126
+        },
+        {
+          "name": "_all_entries",
+          "line": 144
+        },
+        {
+          "name": "set_trim_notifier",
+          "line": 160
+        },
+        {
+          "name": "_trim_to_limit",
+          "line": 166
+        },
+        {
+          "name": "save_memory",
+          "line": 188
+        },
+        {
+          "name": "_truncate_value",
+          "line": 201
+        },
+        {
+          "name": "_recursive_update",
+          "line": 207
+        },
+        {
+          "name": "update_memory",
+          "line": 230
+        },
+        {
+          "name": "_entry_value",
+          "line": 239
+        },
+        {
+          "name": "_pretty",
+          "line": 247
+        },
+        {
+          "name": "format_memory_for_prompt",
+          "line": 265
+        },
+        {
+          "name": "_score",
+          "line": 400
+        },
+        {
+          "name": "search_memory",
+          "line": 421
+        },
+        {
+          "name": "all_entries_for_ui",
+          "line": 454
+        },
+        {
+          "name": "remember",
+          "line": 475
+        },
+        {
+          "name": "forget",
+          "line": 483
+        },
+        {
+          "name": "save_session_summary",
+          "line": 502
+        },
+        {
+          "name": "pop_last_session",
+          "line": 529
+        }
+      ],
+      "sha256": "f923092a3c8ab37abb844ac620023b966bb8a65e872f16017beb62d87e4274f7",
+      "kind": "python"
+    },
+    {
+      "file": "plugins/__init__.py",
+      "bytes": 0,
+      "imports": [],
+      "definitions": [],
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "kind": "python"
+    },
+    {
+      "file": "plugins/_template.py",
+      "bytes": 1846,
+      "imports": [],
+      "definitions": [
+        {
+          "name": "run",
+          "line": 25
+        }
+      ],
+      "sha256": "56ec93455482fa9e08b380b6af9b06cdcc3f2c6a4c947b9f1bb617b77787ad72",
+      "kind": "python"
+    },
+    {
+      "file": "plugins/conselho_ias.py",
+      "bytes": 4182,
+      "imports": [
+        "core.ai_council",
+        "pathlib",
+        "sys",
+        "threading"
+      ],
+      "definitions": [
+        {
+          "name": "_load_council",
+          "line": 50
+        },
+        {
+          "name": "run",
+          "line": 61
+        },
+        {
+          "name": "_warmup_in_background",
+          "line": 87
+        },
+        {
+          "name": "work",
+          "line": 91
+        }
+      ],
+      "sha256": "136f3a14f09eb4045de32b757d8f0b15c77e7d494728501d012b7594621b8da3",
+      "kind": "python"
+    },
+    {
+      "file": "requirements.txt",
+      "bytes": 6836,
+      "sha256": "abec4195eb63b4112e8bca7878db117f5402c7326cf4cfed3c08baaa957bf050",
+      "kind": "asset-or-document"
+    },
+    {
+      "file": "setup.py",
+      "bytes": 6873,
+      "imports": [
+        "desktop_launcher",
+        "pathlib",
+        "platform",
+        "subprocess",
+        "sys",
+        "win32com.client"
+      ],
+      "definitions": [
+        {
+          "name": "_run",
+          "line": 27
+        },
+        {
+          "name": "_check_python",
+          "line": 32
+        },
+        {
+          "name": "_check_assets",
+          "line": 58
+        },
+        {
+          "name": "main",
+          "line": 69
+        }
+      ],
+      "sha256": "d7273e6065e9a35fc9e60c60fc6e88d9176393a6861095b85bab06917e7279df",
+      "kind": "python"
+    },
+    {
+      "file": "testar_fish.py",
+      "bytes": 13723,
+      "imports": [
+        "__future__",
+        "argparse",
+        "getpass",
+        "json",
+        "os",
+        "pathlib",
+        "re",
+        "requests",
+        "struct",
+        "sys",
+        "time",
+        "wave"
+      ],
+      "definitions": [
+        {
+          "name": "ok",
+          "line": 47
+        },
+        {
+          "name": "erro",
+          "line": 48
+        },
+        {
+          "name": "info",
+          "line": 49
+        },
+        {
+          "name": "clean_key",
+          "line": 52
+        },
+        {
+          "name": "clean_id",
+          "line": 60
+        },
+        {
+          "name": "read_config",
+          "line": 66
+        },
+        {
+          "name": "detail",
+          "line": 77
+        },
+        {
+          "name": "explain",
+          "line": 89
+        },
+        {
+          "name": "headers",
+          "line": 105
+        },
+        {
+          "name": "net_error",
+          "line": 113
+        },
+        {
+          "name": "check_key",
+          "line": 119
+        },
+        {
+          "name": "check_voice",
+          "line": 137
+        },
+        {
+          "name": "write_wav",
+          "line": 161
+        },
+        {
+          "name": "extract_pcm",
+          "line": 169
+        },
+        {
+          "name": "try_tts",
+          "line": 190
+        },
+        {
+          "name": "search_voices",
+          "line": 231
+        },
+        {
+          "name": "save_config",
+          "line": 264
+        },
+        {
+          "name": "main",
+          "line": 272
+        }
+      ],
+      "sha256": "02ca2a8f18b419bf681485dbaabd306da945e02ef130328981dde980a6d82e65",
+      "kind": "python"
+    },
+    {
+      "file": "ui.py",
+      "bytes": 314278,
+      "imports": [
+        "PIL.Image",
+        "PIL.ImageDraw",
+        "PIL.ImageFilter",
+        "PyQt6.QtCore",
+        "PyQt6.QtGui",
+        "PyQt6.QtMultimedia",
+        "PyQt6.QtMultimediaWidgets",
+        "PyQt6.QtWidgets",
+        "__future__",
+        "actions.system_monitor",
+        "colorsys",
+        "core",
+        "core.audio_devices",
+        "core.avatar",
+        "core.confirm",
+        "core.fish_audio_tts",
+        "core.hotkey",
+        "core.obsidian",
+        "core.resource_mode",
+        "core.wake_word",
+        "ctypes",
+        "cv2",
+        "interface.test1_hud",
+        "io",
+        "json",
+        "math",
+        "memory",
+        "memory.config_manager",
+        "memory.memory_manager",
+        "os",
+        "pathlib",
+        "platform",
+        "psutil",
+        "pynvml",
+        "qrcode",
+        "random",
+        "stat",
+        "subprocess",
+        "sys",
+        "tempfile",
+        "threading",
+        "time",
+        "win32com.client",
+        "winreg",
+        "wmi"
+      ],
+      "definitions": [
+        {
+          "name": "_base_dir",
+          "line": 72
+        },
+        {
+          "name": "_read_full_config",
+          "line": 82
+        },
+        {
+          "name": "C",
+          "line": 103
+        },
+        {
+          "name": "apply_ui_accent",
+          "line": 138
+        },
+        {
+          "name": "current_palette",
+          "line": 176
+        },
+        {
+          "name": "retheme_all_widgets",
+          "line": 181
+        },
+        {
+          "name": "qcol",
+          "line": 210
+        },
+        {
+          "name": "_nvml_gpu_windows",
+          "line": 219
+        },
+        {
+          "name": "_SysMetrics",
+          "line": 258
+        },
+        {
+          "name": "HudCanvas",
+          "line": 412
+        },
+        {
+          "name": "MetricBar",
+          "line": 1056
+        },
+        {
+          "name": "LogWidget",
+          "line": 1117
+        },
+        {
+          "name": "_file_category",
+          "line": 1237
+        },
+        {
+          "name": "_fmt_size",
+          "line": 1240
+        },
+        {
+          "name": "FileDropZone",
+          "line": 1247
+        },
+        {
+          "name": "_DropCanvas",
+          "line": 1332
+        },
+        {
+          "name": "_CameraPreview",
+          "line": 1439
+        },
+        {
+          "name": "SetupOverlay",
+          "line": 1506
+        },
+        {
+          "name": "HueWheel",
+          "line": 1635
+        },
+        {
+          "name": "CustomizeOverlay",
+          "line": 1729
+        },
+        {
+          "name": "PluginManagerOverlay",
+          "line": 1947
+        },
+        {
+          "name": "_HudOverlay",
+          "line": 2058
+        },
+        {
+          "name": "SystemPanelOverlay",
+          "line": 2080
+        },
+        {
+          "name": "ConfirmBanner",
+          "line": 2483
+        },
+        {
+          "name": "AudioDeviceOverlay",
+          "line": 2563
+        },
+        {
+          "name": "MemoryOverlay",
+          "line": 2692
+        },
+        {
+          "name": "ClipboardPanel",
+          "line": 2887
+        },
+        {
+          "name": "PluginSettingsOverlay",
+          "line": 2973
+        },
+        {
+          "name": "RemoteKeyOverlay",
+          "line": 3229
+        },
+        {
+          "name": "MainWindow",
+          "line": 3457
+        },
+        {
+          "name": "_RootShim",
+          "line": 6993
+        },
+        {
+          "name": "JarvisUI",
+          "line": 7002
+        },
+        {
+          "name": "_hsv",
+          "line": 155
+        },
+        {
+          "name": "__init__",
+          "line": 259
+        },
+        {
+          "name": "_loop",
+          "line": 282
+        },
+        {
+          "name": "_update",
+          "line": 290
+        },
+        {
+          "name": "_get_gpu",
+          "line": 324
+        },
+        {
+          "name": "_get_temp",
+          "line": 368
+        },
+        {
+          "name": "snapshot",
+          "line": 399
+        },
+        {
+          "name": "__init__",
+          "line": 413
+        },
+        {
+          "name": "glance",
+          "line": 479
+        },
+        {
+          "name": "push_visemes",
+          "line": 487
+        },
+        {
+          "name": "set_audio_level",
+          "line": 540
+        },
+        {
+          "name": "_make_grid",
+          "line": 555
+        },
+        {
+          "name": "_step",
+          "line": 569
+        },
+        {
+          "name": "_on_screen",
+          "line": 676
+        },
+        {
+          "name": "_cinematic_colours",
+          "line": 688
+        },
+        {
+          "name": "_paint_cinematic",
+          "line": 692
+        },
+        {
+          "name": "_core_colours",
+          "line": 797
+        },
+        {
+          "name": "_paint_core",
+          "line": 808
+        },
+        {
+          "name": "paintEvent",
+          "line": 953
+        },
+        {
+          "name": "__init__",
+          "line": 1058
+        },
+        {
+          "name": "set_value",
+          "line": 1067
+        },
+        {
+          "name": "paintEvent",
+          "line": 1075
+        },
+        {
+          "name": "__init__",
+          "line": 1120
+        },
+        {
+          "name": "append_log",
+          "line": 1158
+        },
+        {
+          "name": "_enqueue",
+          "line": 1161
+        },
+        {
+          "name": "_next",
+          "line": 1166
+        },
+        {
+          "name": "_step",
+          "line": 1182
+        },
+        {
+          "name": "__init__",
+          "line": 1250
+        },
+        {
+          "name": "_animate",
+          "line": 1268
+        },
+        {
+          "name": "dragEnterEvent",
+          "line": 1278
+        },
+        {
+          "name": "dragLeaveEvent",
+          "line": 1283
+        },
+        {
+          "name": "dropEvent",
+          "line": 1286
+        },
+        {
+          "name": "mousePressEvent",
+          "line": 1295
+        },
+        {
+          "name": "enterEvent",
+          "line": 1299
+        },
+        {
+          "name": "leaveEvent",
+          "line": 1302
+        },
+        {
+          "name": "current_file",
+          "line": 1305
+        },
+        {
+          "name": "clear_file",
+          "line": 1308
+        },
+        {
+          "name": "_browse",
+          "line": 1311
+        },
+        {
+          "name": "_set_file",
+          "line": 1326
+        },
+        {
+          "name": "__init__",
+          "line": 1333
+        },
+        {
+          "name": "paintEvent",
+          "line": 1337
+        },
+        {
+          "name": "_paint_idle",
+          "line": 1367
+        },
+        {
+          "name": "_paint_drag_over",
+          "line": 1384
+        },
+        {
+          "name": "_paint_file",
+          "line": 1393
+        },
+        {
+          "name": "mousePressEvent",
+          "line": 1431
+        },
+        {
+          "name": "__init__",
+          "line": 1444
+        },
+        {
+          "name": "show_frame",
+          "line": 1488
+        },
+        {
+          "name": "__init__",
+          "line": 1509
+        },
+        {
+          "name": "_sel",
+          "line": 1603
+        },
+        {
+          "name": "_submit",
+          "line": 1624
+        },
+        {
+          "name": "__init__",
+          "line": 1647
+        },
+        {
+          "name": "color",
+          "line": 1656
+        },
+        {
+          "name": "set_color",
+          "line": 1659
+        },
+        {
+          "name": "_ring_rect",
+          "line": 1666
+        },
+        {
+          "name": "_hue_from_pos",
+          "line": 1670
+        },
+        {
+          "name": "paintEvent",
+          "line": 1678
+        },
+        {
+          "name": "mousePressEvent",
+          "line": 1711
+        },
+        {
+          "name": "mouseMoveEvent",
+          "line": 1717
+        },
+        {
+          "name": "mouseReleaseEvent",
+          "line": 1723
+        },
+        {
+          "name": "__init__",
+          "line": 1735
+        },
+        {
+          "name": "_on_voice_pick",
+          "line": 1881
+        },
+        {
+          "name": "_refresh_voice_btns",
+          "line": 1885
+        },
+        {
+          "name": "_set_color",
+          "line": 1903
+        },
+        {
+          "name": "_on_wheel_pick",
+          "line": 1914
+        },
+        {
+          "name": "_on_wheel_commit",
+          "line": 1921
+        },
+        {
+          "name": "_on_hex_edited",
+          "line": 1925
+        },
+        {
+          "name": "_cancel",
+          "line": 1934
+        },
+        {
+          "name": "_save",
+          "line": 1940
+        },
+        {
+          "name": "__init__",
+          "line": 1952
+        },
+        {
+          "name": "_build_row",
+          "line": 2001
+        },
+        {
+          "name": "_style_toggle",
+          "line": 2031
+        },
+        {
+          "name": "_toggle",
+          "line": 2051
+        },
+        {
+          "name": "hideEvent",
+          "line": 2066
+        },
+        {
+          "name": "closeEvent",
+          "line": 2073
+        },
+        {
+          "name": "__init__",
+          "line": 2086
+        },
+        {
+          "name": "_close_panel",
+          "line": 2260
+        },
+        {
+          "name": "_section_title",
+          "line": 2268
+        },
+        {
+          "name": "_field_label",
+          "line": 2275
+        },
+        {
+          "name": "_style_input",
+          "line": 2282
+        },
+        {
+          "name": "_style_combo",
+          "line": 2292
+        },
+        {
+          "name": "_style_button",
+          "line": 2302
+        },
+        {
+          "name": "_toggle_button",
+          "line": 2312
+        },
+        {
+          "name": "_metric",
+          "line": 2317
+        },
+        {
+          "name": "set_caption_enabled",
+          "line": 2328
+        },
+        {
+          "name": "_toggle_caption",
+          "line": 2346
+        },
+        {
+          "name": "_load_configs",
+          "line": 2354
+        },
+        {
+          "name": "_set_fish_enabled",
+          "line": 2385
+        },
+        {
+          "name": "_toggle_fish",
+          "line": 2395
+        },
+        {
+          "name": "_save_fish",
+          "line": 2399
+        },
+        {
+          "name": "_test_fish",
+          "line": 2414
+        },
+        {
+          "name": "_toggle_obsidian",
+          "line": 2421
+        },
+        {
+          "name": "_set_obs_enabled",
+          "line": 2425
+        },
+        {
+          "name": "_save_obsidian",
+          "line": 2434
+        },
+        {
+          "name": "_open_obsidian",
+          "line": 2444
+        },
+        {
+          "name": "update_status",
+          "line": 2449
+        },
+        {
+          "name": "__init__",
+          "line": 2496
+        },
+        {
+          "name": "__init__",
+          "line": 2574
+        },
+        {
+          "name": "_apply",
+          "line": 2675
+        },
+        {
+          "name": "__init__",
+          "line": 2702
+        },
+        {
+          "name": "_clear_layout",
+          "line": 2719
+        },
+        {
+          "name": "_settle",
+          "line": 2750
+        },
+        {
+          "name": "_rebuild",
+          "line": 2781
+        },
+        {
+          "name": "_forget",
+          "line": 2877
+        },
+        {
+          "name": "__init__",
+          "line": 2893
+        },
+        {
+          "name": "_trigger",
+          "line": 2958
+        },
+        {
+          "name": "show_clipboard",
+          "line": 2963
+        },
+        {
+          "name": "__init__",
+          "line": 2987
+        },
+        {
+          "name": "_lbl",
+          "line": 3066
+        },
+        {
+          "name": "_build_section",
+          "line": 3074
+        },
+        {
+          "name": "_style_toggle",
+          "line": 3153
+        },
+        {
+          "name": "_gather",
+          "line": 3164
+        },
+        {
+          "name": "_save_ns",
+          "line": 3178
+        },
+        {
+          "name": "_save_all",
+          "line": 3182
+        },
+        {
+          "name": "_run_action",
+          "line": 3192
+        },
+        {
+          "name": "_on_test_done",
+          "line": 3220
+        },
+        {
+          "name": "__init__",
+          "line": 3236
+        },
+        {
+          "name": "set_new_key_callback",
+          "line": 3357
+        },
+        {
+          "name": "_update_qr",
+          "line": 3360
+        },
+        {
+          "name": "_tick",
+          "line": 3396
+        },
+        {
+          "name": "mark_connected",
+          "line": 3403
+        },
+        {
+          "name": "_refresh_key",
+          "line": 3423
+        },
+        {
+          "name": "_do_close",
+          "line": 3451
+        },
+        {
+          "name": "__init__",
+          "line": 3489
+        },
+        {
+          "name": "_position_caption_label",
+          "line": 3926
+        },
+        {
+          "name": "_build_typing_overlay",
+          "line": 3939
+        },
+        {
+          "name": "_send_typing_overlay",
+          "line": 3960
+        },
+        {
+          "name": "set_typing_mode",
+          "line": 3971
+        },
+        {
+          "name": "_clear_hud_ui",
+          "line": 3986
+        },
+        {
+          "name": "_restore_hud_ui",
+          "line": 3992
+        },
+        {
+          "name": "_finish_caption_ui",
+          "line": 3999
+        },
+        {
+          "name": "_keep_caption_ui",
+          "line": 4002
+        },
+        {
+          "name": "set_system_panel",
+          "line": 4005
+        },
+        {
+          "name": "_position_system_panel",
+          "line": 4024
+        },
+        {
+          "name": "_request_system_panel_refresh",
+          "line": 4033
+        },
+        {
+          "name": "_position_typing_input",
+          "line": 4049
+        },
+        {
+          "name": "_apply_immersive_mode",
+          "line": 4057
+        },
+        {
+          "name": "_show_camera_frame",
+          "line": 4096
+        },
+        {
+          "name": "_on_cam_stream",
+          "line": 4109
+        },
+        {
+          "name": "_on_cam_frame",
+          "line": 4116
+        },
+        {
+          "name": "start_camera_stream",
+          "line": 4128
+        },
+        {
+          "name": "_cam_loop",
+          "line": 4134
+        },
+        {
+          "name": "stop_camera_stream",
+          "line": 4168
+        },
+        {
+          "name": "_on_video_open",
+          "line": 4176
+        },
+        {
+          "name": "_fit_video",
+          "line": 4204
+        },
+        {
+          "name": "_on_video_close",
+          "line": 4222
+        },
+        {
+          "name": "_set_video_muted",
+          "line": 4234
+        },
+        {
+          "name": "_on_video_mute",
+          "line": 4246
+        },
+        {
+          "name": "_sync_mic_for_video",
+          "line": 4249
+        },
+        {
+          "name": "_sync_video_sound",
+          "line": 4274
+        },
+        {
+          "name": "_sync_video_mute_btn",
+          "line": 4294
+        },
+        {
+          "name": "_toggle_video_mute",
+          "line": 4299
+        },
+        {
+          "name": "_on_video_error",
+          "line": 4304
+        },
+        {
+          "name": "stop_video",
+          "line": 4313
+        },
+        {
+          "name": "video_is_playing",
+          "line": 4316
+        },
+        {
+          "name": "_position_audio_card",
+          "line": 4320
+        },
+        {
+          "name": "_toggle_audio_card_size",
+          "line": 4327
+        },
+        {
+          "name": "_on_audio_open",
+          "line": 4332
+        },
+        {
+          "name": "_on_audio_status",
+          "line": 4354
+        },
+        {
+          "name": "_on_audio_stop",
+          "line": 4361
+        },
+        {
+          "name": "_on_audio_pause",
+          "line": 4371
+        },
+        {
+          "name": "_on_audio_resume",
+          "line": 4378
+        },
+        {
+          "name": "_on_media_mode",
+          "line": 4385
+        },
+        {
+          "name": "play_audio_stream",
+          "line": 4406
+        },
+        {
+          "name": "stop_audio",
+          "line": 4409
+        },
+        {
+          "name": "pause_audio",
+          "line": 4412
+        },
+        {
+          "name": "resume_audio",
+          "line": 4415
+        },
+        {
+          "name": "minimize_audio",
+          "line": 4418
+        },
+        {
+          "name": "maximize_audio",
+          "line": 4421
+        },
+        {
+          "name": "_build_cronos_icon",
+          "line": 4428
+        },
+        {
+          "name": "_create_lnk_windows",
+          "line": 4528
+        },
+        {
+          "name": "_get_desktop_dir",
+          "line": 4579
+        },
+        {
+          "name": "_create_desktop_shortcut",
+          "line": 4659
+        },
+        {
+          "name": "_toggle_fullscreen",
+          "line": 4777
+        },
+        {
+          "name": "resizeEvent",
+          "line": 4783
+        },
+        {
+          "name": "_update_metrics",
+          "line": 4856
+        },
+        {
+          "name": "_hud_read_object",
+          "line": 4926
+        },
+        {
+          "name": "_hud_has_secret",
+          "line": 4934
+        },
+        {
+          "name": "_hud_provider_names",
+          "line": 4944
+        },
+        {
+          "name": "_hud_action_names",
+          "line": 4969
+        },
+        {
+          "name": "_hud_plugin_names",
+          "line": 4976
+        },
+        {
+          "name": "_hud_runtime_snapshot",
+          "line": 4985
+        },
+        {
+          "name": "_hud_card",
+          "line": 5030
+        },
+        {
+          "name": "_on_hud_navigation",
+          "line": 5038
+        },
+        {
+          "name": "_on_hud_control",
+          "line": 5081
+        },
+        {
+          "name": "_on_hud_branch",
+          "line": 5094
+        },
+        {
+          "name": "_build_header",
+          "line": 5180
+        },
+        {
+          "name": "_tick_clock",
+          "line": 5263
+        },
+        {
+          "name": "_build_left_panel",
+          "line": 5267
+        },
+        {
+          "name": "_build_right_panel",
+          "line": 5338
+        },
+        {
+          "name": "_build_quick_drawer",
+          "line": 5407
+        },
+        {
+          "name": "_build_controls_drawer",
+          "line": 5516
+        },
+        {
+          "name": "_warm_wake_state",
+          "line": 5576
+        },
+        {
+          "name": "_toggle_drawer",
+          "line": 5594
+        },
+        {
+          "name": "_toggle_controls",
+          "line": 5605
+        },
+        {
+          "name": "_close_setup",
+          "line": 5615
+        },
+        {
+          "name": "_close_controls",
+          "line": 5621
+        },
+        {
+          "name": "_place_drawer",
+          "line": 5627
+        },
+        {
+          "name": "_position_quick_drawer",
+          "line": 5633
+        },
+        {
+          "name": "_position_ctrl_drawer",
+          "line": 5637
+        },
+        {
+          "name": "_build_input_row",
+          "line": 5648
+        },
+        {
+          "name": "_build_content_panel",
+          "line": 5679
+        },
+        {
+          "name": "_show_content",
+          "line": 5769
+        },
+        {
+          "name": "_esc",
+          "line": 5818
+        },
+        {
+          "name": "_show_review",
+          "line": 5822
+        },
+        {
+          "name": "_quiz_btn",
+          "line": 5893
+        },
+        {
+          "name": "_build_quiz_panel",
+          "line": 5911
+        },
+        {
+          "name": "_show_quiz",
+          "line": 5995
+        },
+        {
+          "name": "_hide_quiz",
+          "line": 6016
+        },
+        {
+          "name": "_quiz_clear_answers",
+          "line": 6020
+        },
+        {
+          "name": "_quiz_render",
+          "line": 6028
+        },
+        {
+          "name": "_quiz_submit",
+          "line": 6066
+        },
+        {
+          "name": "_quiz_next",
+          "line": 6109
+        },
+        {
+          "name": "_quiz_finish",
+          "line": 6118
+        },
+        {
+          "name": "_build_footer",
+          "line": 6155
+        },
+        {
+          "name": "_on_file_selected",
+          "line": 6171
+        },
+        {
+          "name": "notify_phone_connected",
+          "line": 6188
+        },
+        {
+          "name": "_open_remote",
+          "line": 6192
+        },
+        {
+          "name": "_check_autostart",
+          "line": 6223
+        },
+        {
+          "name": "_toggle_autostart",
+          "line": 6245
+        },
+        {
+          "name": "_update_autostart_btn",
+          "line": 6302
+        },
+        {
+          "name": "_toggle_brief",
+          "line": 6324
+        },
+        {
+          "name": "_refresh_caption_btn",
+          "line": 6330
+        },
+        {
+          "name": "_toggle_captions",
+          "line": 6353
+        },
+        {
+          "name": "_refresh_assistant_reply_cards_btn",
+          "line": 6373
+        },
+        {
+          "name": "_toggle_assistant_reply_cards",
+          "line": 6394
+        },
+        {
+          "name": "keep_caption",
+          "line": 6409
+        },
+        {
+          "name": "finish_caption",
+          "line": 6418
+        },
+        {
+          "name": "_show_caption",
+          "line": 6429
+        },
+        {
+          "name": "_fade_caption",
+          "line": 6449
+        },
+        {
+          "name": "_wake_state",
+          "line": 6464
+        },
+        {
+          "name": "_refresh_wake_btns",
+          "line": 6486
+        },
+        {
+          "name": "_refresh_talk_btns",
+          "line": 6516
+        },
+        {
+          "name": "_refresh_hud_btn",
+          "line": 6543
+        },
+        {
+          "name": "_toggle_hud_style",
+          "line": 6563
+        },
+        {
+          "name": "_toggle_ptt",
+          "line": 6579
+        },
+        {
+          "name": "_apply_ptt_shortcut",
+          "line": 6595
+        },
+        {
+          "name": "_ptt_hold",
+          "line": 6630
+        },
+        {
+          "name": "_toggle_wake_word",
+          "line": 6639
+        },
+        {
+          "name": "_on_wake_install_done",
+          "line": 6668
+        },
+        {
+          "name": "_tap_wake_manual",
+          "line": 6672
+        },
+        {
+          "name": "_update_brief_btn",
+          "line": 6680
+        },
+        {
+          "name": "_open_customize",
+          "line": 6706
+        },
+        {
+          "name": "_preview_ui_color",
+          "line": 6730
+        },
+        {
+          "name": "_apply_name_update",
+          "line": 6736
+        },
+        {
+          "name": "_centre_overlay",
+          "line": 6785
+        },
+        {
+          "name": "_open_audio_devices",
+          "line": 6799
+        },
+        {
+          "name": "_on_audio_devices_applied",
+          "line": 6805
+        },
+        {
+          "name": "_open_memory_panel",
+          "line": 6812
+        },
+        {
+          "name": "_show_confirm_banner",
+          "line": 6819
+        },
+        {
+          "name": "_hide_confirm_banner",
+          "line": 6826
+        },
+        {
+          "name": "_on_confirm_answered",
+          "line": 6833
+        },
+        {
+          "name": "_open_plugin_manager",
+          "line": 6844
+        },
+        {
+          "name": "_open_plugin_settings",
+          "line": 6858
+        },
+        {
+          "name": "_on_clipboard_changed",
+          "line": 6875
+        },
+        {
+          "name": "_show_clipboard_panel",
+          "line": 6883
+        },
+        {
+          "name": "_position_clipboard_panel",
+          "line": 6887
+        },
+        {
+          "name": "_on_clipboard_action",
+          "line": 6896
+        },
+        {
+          "name": "_do_interrupt",
+          "line": 6902
+        },
+        {
+          "name": "_toggle_mute",
+          "line": 6906
+        },
+        {
+          "name": "_set_muted",
+          "line": 6912
+        },
+        {
+          "name": "_style_mute_btn",
+          "line": 6926
+        },
+        {
+          "name": "_send",
+          "line": 6945
+        },
+        {
+          "name": "_apply_state",
+          "line": 6953
+        },
+        {
+          "name": "_check_config",
+          "line": 6957
+        },
+        {
+          "name": "_show_setup",
+          "line": 6965
+        },
+        {
+          "name": "_on_setup_done",
+          "line": 6978
+        },
+        {
+          "name": "__init__",
+          "line": 6994
+        },
+        {
+          "name": "mainloop",
+          "line": 6996
+        },
+        {
+          "name": "protocol",
+          "line": 6998
+        },
+        {
+          "name": "__init__",
+          "line": 7003
+        },
+        {
+          "name": "muted",
+          "line": 7011
+        },
+        {
+          "name": "muted",
+          "line": 7015
+        },
+        {
+          "name": "current_file",
+          "line": 7020
+        },
+        {
+          "name": "on_text_command",
+          "line": 7024
+        },
+        {
+          "name": "on_text_command",
+          "line": 7028
+        },
+        {
+          "name": "on_remote_clicked",
+          "line": 7032
+        },
+        {
+          "name": "on_remote_clicked",
+          "line": 7036
+        },
+        {
+          "name": "on_interrupt",
+          "line": 7040
+        },
+        {
+          "name": "on_interrupt",
+          "line": 7044
+        },
+        {
+          "name": "on_voice_change",
+          "line": 7048
+        },
+        {
+          "name": "on_voice_change",
+          "line": 7052
+        },
+        {
+          "name": "on_audio_device_change",
+          "line": 7056
+        },
+        {
+          "name": "on_audio_device_change",
+          "line": 7060
+        },
+        {
+          "name": "show_confirm",
+          "line": 7063
+        },
+        {
+          "name": "hide_confirm",
+          "line": 7068
+        },
+        {
+          "name": "get_plugins",
+          "line": 7073
+        },
+        {
+          "name": "get_plugins",
+          "line": 7077
+        },
+        {
+          "name": "get_actions",
+          "line": 7081
+        },
+        {
+          "name": "get_actions",
+          "line": 7085
+        },
+        {
+          "name": "get_plugin_settings",
+          "line": 7089
+        },
+        {
+          "name": "get_plugin_settings",
+          "line": 7093
+        },
+        {
+          "name": "on_wake_toggle",
+          "line": 7097
+        },
+        {
+          "name": "on_wake_toggle",
+          "line": 7101
+        },
+        {
+          "name": "on_wake_manual",
+          "line": 7105
+        },
+        {
+          "name": "on_wake_manual",
+          "line": 7109
+        },
+        {
+          "name": "wake_get_state",
+          "line": 7113
+        },
+        {
+          "name": "wake_get_state",
+          "line": 7117
+        },
+        {
+          "name": "set_audio_level",
+          "line": 7120
+        },
+        {
+          "name": "glance",
+          "line": 7129
+        },
+        {
+          "name": "ptt_hold",
+          "line": 7138
+        },
+        {
+          "name": "ptt_hold",
+          "line": 7142
+        },
+        {
+          "name": "on_push_to_talk",
+          "line": 7146
+        },
+        {
+          "name": "on_push_to_talk",
+          "line": 7150
+        },
+        {
+          "name": "push_visemes",
+          "line": 7153
+        },
+        {
+          "name": "notify_phone_connected",
+          "line": 7162
+        },
+        {
+          "name": "set_state",
+          "line": 7165
+        },
+        {
+          "name": "set_typing_mode",
+          "line": 7168
+        },
+        {
+          "name": "set_system_panel",
+          "line": 7171
+        },
+        {
+          "name": "set_immersive_mode",
+          "line": 7174
+        },
+        {
+          "name": "write_log",
+          "line": 7177
+        },
+        {
+          "name": "wait_for_api_key",
+          "line": 7180
+        },
+        {
+          "name": "show_content",
+          "line": 7184
+        },
+        {
+          "name": "resize_content_card",
+          "line": 7188
+        },
+        {
+          "name": "move_content_card",
+          "line": 7194
+        },
+        {
+          "name": "arrange_content_cards",
+          "line": 7200
+        },
+        {
+          "name": "play_audio_stream",
+          "line": 7208
+        },
+        {
+          "name": "stop_audio",
+          "line": 7211
+        },
+        {
+          "name": "pause_audio",
+          "line": 7214
+        },
+        {
+          "name": "resume_audio",
+          "line": 7217
+        },
+        {
+          "name": "minimize_audio",
+          "line": 7220
+        },
+        {
+          "name": "maximize_audio",
+          "line": 7223
+        },
+        {
+          "name": "clear_content",
+          "line": 7226
+        },
+        {
+          "name": "restore_hud",
+          "line": 7230
+        },
+        {
+          "name": "set_caption_text",
+          "line": 7235
+        },
+        {
+          "name": "finish_caption",
+          "line": 7239
+        },
+        {
+          "name": "keep_caption",
+          "line": 7242
+        },
+        {
+          "name": "show_quiz",
+          "line": 7245
+        },
+        {
+          "name": "hide_quiz",
+          "line": 7258
+        },
+        {
+          "name": "show_review",
+          "line": 7262
+        },
+        {
+          "name": "prompt_reconfig",
+          "line": 7272
+        },
+        {
+          "name": "show_camera_frame",
+          "line": 7277
+        },
+        {
+          "name": "show_video",
+          "line": 7281
+        },
+        {
+          "name": "stop_video",
+          "line": 7298
+        },
+        {
+          "name": "set_video_muted",
+          "line": 7302
+        },
+        {
+          "name": "video_is_playing",
+          "line": 7306
+        },
+        {
+          "name": "start_camera_stream",
+          "line": 7309
+        },
+        {
+          "name": "stop_camera_stream",
+          "line": 7313
+        },
+        {
+          "name": "assistant_name",
+          "line": 7318
+        },
+        {
+          "name": "start_speaking",
+          "line": 7321
+        },
+        {
+          "name": "stop_speaking",
+          "line": 7324
+        },
+        {
+          "name": "_Util",
+          "line": 227
+        },
+        {
+          "name": "blend",
+          "line": 818
+        },
+        {
+          "name": "_lbl",
+          "line": 1529
+        },
+        {
+          "name": "_lbl",
+          "line": 1750
+        },
+        {
+          "name": "_row",
+          "line": 2610
+        },
+        {
+          "name": "worker",
+          "line": 3207
+        },
+        {
+          "name": "_lbl",
+          "line": 3256
+        },
+        {
+          "name": "_vid_btn",
+          "line": 3638
+        },
+        {
+          "name": "worker",
+          "line": 4037
+        },
+        {
+          "name": "_render",
+          "line": 4448
+        },
+        {
+          "name": "_badge",
+          "line": 5187
+        },
+        {
+          "name": "_sec",
+          "line": 5346
+        },
+        {
+          "name": "_row",
+          "line": 5533
+        },
+        {
+          "name": "work",
+          "line": 5586
+        },
+        {
+          "name": "_fl",
+          "line": 6161
+        },
+        {
+          "name": "_press",
+          "line": 6622
+        },
+        {
+          "name": "_Util",
+          "line": 348
+        },
+        {
+          "name": "_work",
+          "line": 6645
+        },
+        {
+          "name": "_GUID",
+          "line": 4599
+        }
+      ],
+      "sha256": "614419a66198bb02bba82550398f4dbdcaae2ec18d4d1add5bdab25db00ccc5a",
+      "kind": "python"
+    },
+    {
+      "file": "web_ui.py",
+      "bytes": 20360,
+      "imports": [
+        "__future__",
+        "base64",
+        "collections",
+        "cv2",
+        "json",
+        "memory.config_manager",
+        "os",
+        "pathlib",
+        "platform",
+        "re",
+        "threading",
+        "time",
+        "types",
+        "typing"
+      ],
+      "definitions": [
+        {
+          "name": "scrub_secrets",
+          "line": 34
+        },
+        {
+          "name": "_json_safe",
+          "line": 41
+        },
+        {
+          "name": "WebUI",
+          "line": 56
+        },
+        {
+          "name": "__init__",
+          "line": 59
+        },
+        {
+          "name": "muted",
+          "line": 116
+        },
+        {
+          "name": "muted",
+          "line": 121
+        },
+        {
+          "name": "current_file",
+          "line": 126
+        },
+        {
+          "name": "assistant_name",
+          "line": 131
+        },
+        {
+          "name": "wait_for_api_key",
+          "line": 137
+        },
+        {
+          "name": "submit_setup",
+          "line": 141
+        },
+        {
+          "name": "prompt_reconfig",
+          "line": 157
+        },
+        {
+          "name": "attach_runtime",
+          "line": 164
+        },
+        {
+          "name": "set_state",
+          "line": 168
+        },
+        {
+          "name": "set_audio_level",
+          "line": 172
+        },
+        {
+          "name": "push_visemes",
+          "line": 180
+        },
+        {
+          "name": "set_typing_mode",
+          "line": 192
+        },
+        {
+          "name": "set_system_panel",
+          "line": 196
+        },
+        {
+          "name": "set_immersive_mode",
+          "line": 200
+        },
+        {
+          "name": "write_log",
+          "line": 204
+        },
+        {
+          "name": "show_content",
+          "line": 221
+        },
+        {
+          "name": "clear_content",
+          "line": 228
+        },
+        {
+          "name": "restore_hud",
+          "line": 233
+        },
+        {
+          "name": "resize_content_card",
+          "line": 253
+        },
+        {
+          "name": "move_content_card",
+          "line": 276
+        },
+        {
+          "name": "arrange_content_cards",
+          "line": 292
+        },
+        {
+          "name": "set_caption_text",
+          "line": 297
+        },
+        {
+          "name": "finish_caption",
+          "line": 302
+        },
+        {
+          "name": "keep_caption",
+          "line": 306
+        },
+        {
+          "name": "show_confirm",
+          "line": 310
+        },
+        {
+          "name": "hide_confirm",
+          "line": 315
+        },
+        {
+          "name": "show_quiz",
+          "line": 319
+        },
+        {
+          "name": "hide_quiz",
+          "line": 327
+        },
+        {
+          "name": "submit_quiz_answer",
+          "line": 332
+        },
+        {
+          "name": "next_quiz_question",
+          "line": 361
+        },
+        {
+          "name": "show_review",
+          "line": 390
+        },
+        {
+          "name": "show_camera_frame",
+          "line": 399
+        },
+        {
+          "name": "start_camera_stream",
+          "line": 407
+        },
+        {
+          "name": "stop_camera_stream",
+          "line": 442
+        },
+        {
+          "name": "show_video",
+          "line": 447
+        },
+        {
+          "name": "stop_video",
+          "line": 456
+        },
+        {
+          "name": "set_video_muted",
+          "line": 460
+        },
+        {
+          "name": "video_is_playing",
+          "line": 465
+        },
+        {
+          "name": "play_audio_stream",
+          "line": 469
+        },
+        {
+          "name": "stop_audio",
+          "line": 475
+        },
+        {
+          "name": "pause_audio",
+          "line": 479
+        },
+        {
+          "name": "resume_audio",
+          "line": 484
+        },
+        {
+          "name": "minimize_audio",
+          "line": 489
+        },
+        {
+          "name": "maximize_audio",
+          "line": 494
+        },
+        {
+          "name": "minimize_video",
+          "line": 499
+        },
+        {
+          "name": "maximize_video",
+          "line": 504
+        },
+        {
+          "name": "notify_phone_connected",
+          "line": 509
+        },
+        {
+          "name": "set_video_state",
+          "line": 512
+        },
+        {
+          "name": "set_current_file",
+          "line": 516
+        },
+        {
+          "name": "snapshot",
+          "line": 520
+        },
+        {
+          "name": "worker",
+          "line": 412
+        }
+      ],
+      "sha256": "9fa53658db5bfc9842619eb2c7d4f1c9c14cc359a74da939166ede0a40ef2292",
+      "kind": "python"
+    },
+    {
+      "file": "interface_v32/assets/index-cronos-v32-optimized.js",
+      "bytes": 259410,
+      "sha256": "19b9c8479f2d1d8d70cbc6e727d9127677e4cf86362c1a838f79ee7ce728811a",
+      "kind": "interface"
+    }
+  ]
+}

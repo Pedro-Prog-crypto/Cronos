@@ -1,152 +1,200 @@
-# Cronos
+# Cronos — núcleo reconstruído (v0.2)
 
-Primeira base do assistente: API Python/FastAPI, Gemini ou Ollama, personalidade
-Markdown, memória compatível com Obsidian e voz pelo Fish Audio. A interface é
-separada e consome o contrato em [docs/API.md](docs/API.md).
+Programa Windows com backend independente da interface. A versão anterior
+foi analisada como referência de arquitetura; sua interface, imagens, avatar e
+prompts rígidos não foram incorporados. A interface definitiva será fornecida
+pelo usuário. A interface básica deste repositório permanece só como bancada
+para testar a API e as confirmações.
 
-## Programa Windows
+Leia [a análise do pacote antigo](docs/ANALISE_LEGADO.md), o
+[contrato da API](docs/API.md) e o [inventário completo](docs/legacy-inventory.json).
 
-O objetivo do Cronos é um aplicativo desktop. A interface do navegador é uma
-bancada de testes; agora ela também abre em uma janela própria pelo WebView2.
+## Instalação Windows
 
-Extraia o ZIP inteiro, abra `Instalar-Cronos.bat` e configure `.env` no Bloco de
-Notas. Depois abra `Iniciar-Cronos.bat`: ele inicia o backend local, escolhe uma
-porta livre e abre a janela Cronos sem iniciar seu navegador. Se o token não
-estiver configurado, ele gera um token temporário para essa execução e conecta
-a janela automaticamente. As chaves dos provedores continuam necessárias.
+1. Extraia o ZIP inteiro numa pasta gravável.
+2. Abra `Instalar-Cronos.bat`. Ele instala o backend, a janela desktop e a busca.
+3. Configure `.env` no Bloco de Notas, sem compartilhar suas chaves.
+4. Abra `Iniciar-Cronos.bat`. Ele abre uma janela própria, sem navegador externo.
 
-O instalador preserva `.env` existente. Ao atualizar a partir de outro ZIP,
-mantenha seu `.env` e o vault; não publique esses arquivos. O renderizador exige
-Microsoft Edge WebView2 Runtime. Se não estiver disponível, instale-o pela
-Microsoft. A captura de microfone na janela ainda precisa de validação no
-Windows; a transcrição por arquivo continua disponível.
+Python 3.11+ e Microsoft Edge WebView2 Runtime são necessários. O aplicativo
+continua dependendo de Python; ainda não é um instalador `.exe` independente.
+O inicializador escolhe uma porta livre no loopback, gera um token temporário
+se necessário e conecta a janela automaticamente. Fechá-la encerra seu backend.
+O microfone na janela desktop ainda precisa de validação no Windows; o upload
+de áudio pode ser usado como alternativa. Não há coleta de áudio em segundo plano.
 
-Esta versão desktop usa Python e scripts de inicialização; ainda não é um
-instalador `.exe` independente. Fechar a janela encerra o backend dessa execução.
+Ao atualizar, preserve `.env`, `config/providers.json` e o vault. Instale novamente
+as dependências pelo BAT. A memória da primeira versão é importada automaticamente,
+sem apagar os JSON e Markdown originais.
 
-Se a conversa falhar, abra `Diagnosticar-Cronos.bat`. Ele faz uma chamada mínima
-ao provedor e mostra o diagnóstico sem imprimir chaves ou salvar conversas.
-A chamada pode consumir cota. Erros do Gemini agora distinguem chave rejeitada,
-API desativada, acesso negado, modelo indisponível, cota e conexão. A configuração
-presente na interface não comprova que a chave foi aceita. Após editar `.env`,
-feche e reabra o Cronos para carregar as alterações.
-
-Comandos equivalentes, executados na pasta do projeto:
+Comandos equivalentes na pasta que contém `pyproject.toml`:
 
 ```bat
-.\.venv\Scripts\python.exe -m pip install -e ".[desktop]"
+py -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e ".[desktop,search]"
 .\.venv\Scripts\python.exe -m cronos.desktop
 ```
 
-## Desenvolvimento / interface no navegador
+Em CMD, crie `.env` com `copy .env.example .env`. Em PowerShell, use
+`Copy-Item .env.example .env`. Não substitua um `.env` que já contém suas chaves.
 
-Instale Python 3.11+ e execute no PowerShell, na pasta do repositório:
+## Personalidade e raciocínio
 
-```powershell
-py -m venv .venv
-.\.venv\Scripts\python -m pip install -e ".[dev]"
-Copy-Item .env.example .env
+Edite `modelos/personalidades/cronos.md`, relido a cada mensagem. A personalidade
+não fica presa ao provedor. Não há bordões obrigatórios, limite de dez frases,
+uma linha por tarefa ou troca de voz por palavras-chave. O modelo escolhe o
+plano com base no pedido e nas ferramentas realmente disponíveis.
+
+A qualidade depende do modelo usado e das informações recuperadas. A arquitetura
+não cria inteligência ilimitada nem contorna limites das APIs. Opiniões de
+várias IAs são análises independentes, não prova de verdade por votação.
+
+## Obsidian
+
+Configure `CRONOS_VAULT` com o caminho de um vault existente ou novo, por exemplo
+`C:/Users/SEU_USUARIO/Documents/Cronos`. Se Documentos estiver no OneDrive, use o
+caminho real. Abra essa pasta no Obsidian; nenhum plugin REST é necessário.
+
+- `Conversas/`: histórico legível por conversa.
+- `Temas/`: notas criadas conforme surgem assuntos, com aliases e links de origem.
+- `Mapa de Conhecimento.md`: índice dos temas realmente registrados.
+- `.cronos/memory.sqlite3`: histórico e fila transacional de exportação Markdown.
+
+Não há descarte automático de memórias antigas nem truncamento do conteúdo salvo.
+Os orçamentos `CRONOS_CONTEXT_MESSAGES`, `CRONOS_CONTEXT_CHARS`,
+`CRONOS_MEMORY_CHARS` e `CRONOS_MEMORY_RESULTS` limitam o contexto enviado ao
+modelo, sem apagar dados. O limite prático de armazenamento é o disco disponível.
+`CRONOS_OUTPUT_TOKENS` e `CRONOS_PROVIDER_TIMEOUT` ajustam saída e timeout dos
+provedores nativos; sem limite de saída configurado, valem os limites do modelo.
+
+A busca FTS5 usa conteúdo e títulos de todos os Markdown públicos do vault, sem
+sensibilidade a acentos. Edições feitas no Obsidian são reindexadas. É busca
+textual com ranking, não busca semântica por embeddings. Aliases são propostos
+pelo modelo e podem exigir correção humana; homônimos continuam ambíguos.
+
+Notas existentes são reaproveitadas pelo título/alias, preservando seu texto.
+As novas seções são identificadas como resumos de IA não verificados. Exportações
+pendentes são recuperadas após reinício ou por `/memory/sync`, com marcadores
+para evitar duplicação. Use apenas uma instância/worker por vault. Evite editar
+uma mesma nota enquanto ela está sendo exportada; não existe bloqueio distribuído
+com o editor Obsidian. Links simbólicos são rejeitados para proteger o escopo.
+
+Na nuvem, o vault não é automaticamente o vault do Windows. Para usar seus arquivos
+locais e controlar o computador, rode o backend na mesma máquina. Sincronização
+entre máquinas não está implementada.
+
+## Provedores
+
+Gemini é o padrão (`GEMINI_API_KEY`, `GEMINI_MODEL`). Ollama pode ser escolhido com
+`CRONOS_PROVIDER=ollama`, `OLLAMA_MODEL` e `OLLAMA_URL`. O modelo local precisa estar
+instalado e cabe na RAM/GPU; o Cronos não baixa modelos automaticamente.
+
+Para acrescentar provedores, copie `config/providers.example.json` para
+`config/providers.json`. Configure IDs únicos, tipo (`openai`, `anthropic`,
+`gemini` ou `ollama`), modelo, endpoint e nome da variável da chave. `max_output_tokens` e
+`timeout_seconds` permitem ajustar limites operacionais por provedor. O manifesto
+não contém chaves. Escolha o ID em `CRONOS_PROVIDER` e reinicie. Há exemplos para
+OpenAI, Groq, OpenRouter, Claude e Mistral; verifique modelos e cotas da sua conta.
+Não há limite fixo de quantidade de provedores registrados. Nem todo endpoint
+compatível suporta JSON: o adaptador precisa desse suporte ou de uma resposta
+JSON válida seguindo as instruções.
+
+`consult_models` consulta os provedores indicados depois de sua confirmação.
+Os resultados permanecem identificados por provedor e incluem falhas; o modelo
+principal analisa diferenças sem votação por semelhança de palavras. Não há troca
+silenciosa de provedor ou de modelo pago. Nenhuma API paga é tratada como gratuita.
+
+Se a IA falhar, execute `Diagnosticar-Cronos.bat`. Ele faz uma chamada mínima,
+pode consumir cota e não salva a conversa nem imprime chaves.
+
+## Voz
+
+Configure `FISH_API_KEY`, `FISH_REFERENCE_ID` (opcional: sem ID, voz padrão),
+`FISH_MODEL`, `FISH_SPEED` e `FISH_LATENCY`. O modelo de síntese não é o ID da voz.
+O padrão `s2-pro` acompanha o SDK fixado, mas disponibilidade e preço dependem da
+conta. Não há fallback automático que esconda falhas ou mude sua voz.
+
+Há síntese MP3, transcrição e endpoint de áudio em streaming. A interface
+básica usa o MP3 completo; a interface definitiva pode consumir o streaming.
+A API permite selecionar referência e velocidade por solicitação. Ela não
+seleciona uma “voz sombria” com base em palavras do assunto. Gemini Live, wake
+word, interrupção de fala, STT offline e síntese local permanecem adaptações
+futuras; não foram transplantados sem teste do código antigo.
+
+## Ferramentas e integrações
+
+`GET /tools` lista apenas ferramentas carregadas nesta máquina, com esquemas.
+A conversa pode buscar/ler notas, listar/ler arquivos, criar/mover arquivos,
+extrair ZIPs, pesquisar na web e consultar IAs. Em Windows há ferramentas para
+abrir pastas, navegador, Notepad, calculadora, Explorador e Obsidian. Também pode iniciar um `.exe`
+existente na pasta autorizada, após confirmação humana do arquivo e argumentos;
+processo iniciado não significa tarefa concluída.
+
+Configure `CRONOS_FILES_ROOT` com a pasta autorizada; o padrão é Downloads.
+Leitura/listagem têm paginação para continuar conteúdos longos. Arquivos
+internos de configuração e credenciais não são fornecidos ao modelo. Criação
+não sobrescreve arquivos. Movimentação e extração não substituem destinos.
+As operações que alteram arquivos ficam pendentes até confirmação humana.
+O modelo não pode se autorizar passando `confirmed=true`.
+
+Resultados de ferramentas são registrados antes da próxima chamada de IA,
+inclusive se ela falhar depois. O limite configurável `CRONOS_TOOL_ROUNDS` evita
+loops; não remove resultados já executados. Confirmações expiram em cinco minutos,
+são específicas da sessão e não sobrevivem ao reinício do processo.
+
+A busca usa DDGS com backend DuckDuckGo. Para nuvem com rede restrita, o domínio
+`html.duckduckgo.com` precisa estar permitido. Dependências instaladas não provam
+acesso ao serviço. O primeiro instalador já instala o extra `search`.
+
+Plugins novos podem ser instalados com um entry point `cronos.tools`; veja
+[examples/plugin.py](examples/plugin.py). No pacote do plugin:
+
+```toml
+[project.entry-points."cronos.tools"]
+meu-plugin = "meu_pacote:build_tools"
 ```
 
-Edite `.env` localmente: preencha `GEMINI_API_KEY`, `FISH_API_KEY` e o ID da sua
-voz em `FISH_REFERENCE_ID`. O modelo de síntese é separado do ID da voz.
-`FISH_MODEL=s2-pro` é suportado pelo SDK fixado; confirme disponibilidade na sua
-conta. `GEMINI_MODEL=gemini-2.5-flash` também é editável. Nunca publique `.env`.
+Ative explicitamente `CRONOS_ENABLE_PLUGINS=1`. A função recebe `(settings,
+memory)` e retorna objetos `Tool`. Plugins são código local com acesso ao
+processo, não uma sandbox. Colisões/erros são reportados por `/tools`. Não há
+importação automática de scripts baixados nem do pacote antigo.
 
-Gere um token, coloque o resultado em `CRONOS_API_TOKEN` e não o compartilhe:
+## Migrar o Cronos anterior
 
-```powershell
-.\.venv\Scripts\python -c "import secrets; print(secrets.token_urlsafe(32))"
+O ZIP enviado não inclui `api_keys.json`, `fish_audio.json`, `storage.json` ou
+`long_term.json`. Se eles estiverem na instalação antiga do seu Windows, o
+migrador pode reutilizá-los. Primeiro, confira a prévia na pasta do projeto novo:
+
+```bat
+.\.venv\Scripts\python.exe -m cronos.migrate "C:/CAMINHO/CRONOS_ANTIGO"
 ```
 
-Configure `CRONOS_VAULT=C:/Users/SEU_USUARIO/Documents/Cronos` no `.env` e abra
-essa pasta como vault no Obsidian. Se Documentos estiver no OneDrive, use seu
-caminho real. Inicie o backend e rode os testes:
+Para aplicar, adicione `--apply`; para escolher um vault de destino explicitamente,
+adicione `--vault "C:/CAMINHO/VAULT"`. Credenciais existentes não são substituídas.
+A opção `--vault` altera o caminho de destino explicitamente. Os fatos antigos
+viram relatos importados, com origem identificada, sem truncar seu conteúdo.
+A mesma importação não se repete. Arquivos originais são preservados.
+A migração não executa código antigo nem importa a interface/prompts antigos.
+Não consegue recuperar entradas que já foram apagadas/truncadas pelo programa antigo.
 
-```powershell
-.\.venv\Scripts\python -m uvicorn cronos.app:app --env-file .env --host 127.0.0.1 --port 8000
-.\.venv\Scripts\python -m pytest -q
-```
-
-Use um único worker para preservar a ordem das gravações. A autenticação atual
-atende uma instalação pessoal com um único usuário: o token permite acessar
-todo o histórico. Não exponha à internet sem TLS e autenticação adequada.
-Sua interface deverá configurar o token localmente, sem incluí-lo no código
-distribuído. Configure a origin exata em `CRONOS_CORS_ORIGINS`.
-
-## Interface de testes
-
-Com o servidor iniciado, abra o endereço local da porta 8000 no navegador
-da mesma máquina. A interface é servida pelo próprio backend, sem instalar
-Node ou iniciar outro servidor. Informe o `CRONOS_API_TOKEN` no campo Conexão
-e clique em Verificar conexão. O token permanece apenas na página; não é
-salvo no armazenamento do navegador.
-
-- Envie mensagens, confira os temas e caminhos das notas e guarde o ID para
-  carregar o histórico depois. Nova conversa mantém os arquivos anteriores.
-- Use Resposta no painel de voz, gere o MP3 e reproduza pelo player.
-- Envie um arquivo ou grave pelo microfone para transcrever; revise o texto
-  antes de enviá-lo ao Cronos. A gravação para automaticamente em 60 segundos.
-
-Microfone exige permissão e um contexto seguro (localhost ou HTTPS).
-Configuração presente não significa que a chave/cota foi validada: teste cada
-função. Não há modo de demonstração que simule sucesso na interface. Sem chaves,
-as chamadas reais mostram o erro retornado pelo backend.
-
-## Nuvem / Linux
+## Desenvolvimento e validação
 
 ```bash
 python3 -m venv .venv
-.venv/bin/python -m pip install -e '.[dev]'
+.venv/bin/python -m pip install -e '.[dev,search]'
 .venv/bin/python -m pytest -q
 .venv/bin/python -m uvicorn cronos.app:app --host 127.0.0.1 --port 8000
 ```
 
-As variáveis podem ser injetadas pelo ambiente. Na nuvem, o vault não é o vault
-do seu Windows. Para escrever diretamente no Obsidian, rode o backend no
-Windows; sincronização entre máquinas ainda não está implementada.
+A interface de testes é servida na raiz do backend. Informe `CRONOS_API_TOKEN`
+quando iniciar manualmente; a janela desktop configura sua conexão automaticamente.
+Tokens da interface não são persistidos no navegador. Use uma única instância.
+Não exponha à internet sem TLS e autenticação apropriada: a instalação atual é
+pessoal, e o token permite acessar todo o vault/histórico autorizado.
 
-## Personalidade e memória
-
-Edite `modelos/personalidades/cronos.md`, relido a cada mensagem. A memória usa:
-
-- `Conversas/<UUID>.md`: histórico com a origem de cada fala.
-- `Temas/<nome>-<identificador>.md`: resumos separados por tema e links para a
-  conversa original, criados apenas quando os assuntos aparecem.
-- `.cronos/<UUID>.json`: estado persistente do histórico.
-
-O modelo identifica até cinco temas por mensagem. Títulos iguais, sem diferença
-de caixa, atualizam a mesma nota; sinônimos ainda podem gerar notas separadas.
-A recuperação usa palavras dos títulos, até três notas e as últimas vinte
-mensagens da sessão. Não há busca semântica nem memória ilimitada neste estágio.
-Os resumos são identificados como conteúdo de IA não verificado.
-
-## Ollama opcional
-
-Instale Ollama e obtenha um modelo compatível com sua RAM/GPU, por exemplo
-`ollama pull gemma3:4b`. Configure `CRONOS_PROVIDER=ollama` e
-`OLLAMA_MODEL=gemma3:4b`. O backend precisa acessar o endereço do Ollama; o
-endereço padrão só funciona na mesma máquina. Não exponha Ollama publicamente.
-Novos provedores são registrados em `cronos/providers.py`, sem limite fixo;
-cada um exige um adaptador e testes.
-
-## Agente Windows inicial
-
-```powershell
-.\.venv\Scripts\python -m cronos.windows_agent downloads
-.\.venv\Scripts\python -m cronos.windows_agent search "Sócrates"
-.\.venv\Scripts\python -m cronos.windows_agent extract "$HOME\Downloads\arquivo.zip" --destination "$HOME\Downloads\arquivo-extraido"
-```
-
-A extração pede confirmação, exige destino novo e rejeita caminhos perigosos,
-links e arquivos acima dos limites. O agente é uma ferramenta local por terminal;
-a conexão com conversa e interface ainda será implementada. Execução de
-downloads e controle geral do desktop não estão disponíveis nesta base.
-
-## Validação
-
-Os testes verificam memória, autenticação, falhas de provedores, contratos de
-áudio e extração de ZIPs. Usam serviços simulados e não fazem chamadas pagas.
-Depois de configurar as chaves, valide `/chat`, `/voice/speech` e
-`/voice/transcribe` com os serviços reais. Custos e limites dependem da conta.
-Captura de microfone, reprodução e streaming na interface ainda não existem.
+Testes cobrem memória grande, migração, arquivos manuais, aliases, falhas de
+exportação, orquestração, permissões, falhas das APIs e contratos de áudio.
+Chamadas de provedores são simuladas para não usar credenciais nem gerar cobranças.
+Validação real exige suas contas e o Windows. Câmera, controle geral de tela,
+WhatsApp, jogos, lembretes do sistema, dashboard remoto e processamento Office/PDF
+estão inventariados, mas não foram portados nem anunciados como funcionais.
