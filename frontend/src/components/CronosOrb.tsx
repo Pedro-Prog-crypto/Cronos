@@ -116,9 +116,9 @@ export const CronosOrb: React.FC<CronosOrbProps> = ({
     // Build the interwoven strands (tecido 3D de fios conectados)
     const strands: StrandConfig[] = [];
 
-    // Family 1: Clockwise spiral warp threads (14 strands)
-    for (let i = 0; i < 14; i++) {
-      const frac = i / 14;
+    // Family 1: Clockwise spiral warp threads (8 strands)
+    for (let i = 0; i < 8; i++) {
+      const frac = i / 8;
       strands.push({
         family: 'warp',
         helixWinding: 3.0,
@@ -134,9 +134,9 @@ export const CronosOrb: React.FC<CronosOrbProps> = ({
       });
     }
 
-    // Family 2: Counter-clockwise spiral weft threads (14 strands, crossing over Family 1)
-    for (let i = 0; i < 14; i++) {
-      const frac = i / 14;
+    // Family 2: Counter-clockwise spiral weft threads (8 strands, crossing over Family 1)
+    for (let i = 0; i < 8; i++) {
+      const frac = i / 8;
       strands.push({
         family: 'weft',
         helixWinding: -3.0,
@@ -302,8 +302,8 @@ export const CronosOrb: React.FC<CronosOrbProps> = ({
 
       time += currentSpeed * frameDelta;
 
-      // Calculate all 3D points along the ring (240 steps)
-      const steps = 240;
+      // Calculate all 3D points along the ring (120 steps)
+      const steps = 120;
       const strandPoints: Array<
         Array<{ x: number; y: number; z: number; perspective: number; distFromCenter: number }>
       > = [];
@@ -423,9 +423,9 @@ export const CronosOrb: React.FC<CronosOrbProps> = ({
         ctx.lineWidth = 0.55;
 
         for (let i = 0; i < steps; i += linkStep) {
-          for (let s = 0; s < 12; s += 2) {
+          for (let s = 0; s < 8; s += 2) {
             const p1 = strandPoints[s][i];
-            const p2 = strandPoints[s + 14][i];
+            const p2 = strandPoints[s + 8][i];
 
             if (p1 && p2) {
               const avgZ = (p1.z + p2.z) * 0.5;

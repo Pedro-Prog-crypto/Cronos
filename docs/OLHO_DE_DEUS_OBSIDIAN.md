@@ -1,3 +1,27 @@
+# Ajuste posterior à v0.5
+
+A área de memória agora não exibe esqueleto, linhas decorativas ou brilho central.
+Com vault vazio não há desenho; novas notas reais e seus wikilinks formam a galáxia
+progressivamente. As notas existentes são preservadas e continuam aparecendo.
+O núcleo mantém movimento, mas passa de 32 para 20 fios e de 240 para 120 amostras
+por fio (aproximadamente 69% menos pontos calculados por quadro, não medida de CPU).
+A captura histórica ao fim desta página mostra o esqueleto anterior, agora removido.
+
+Fish Audio não seleciona mais um modelo por padrão. `s2-pro` é recusado inclusive
+se estiver no `.env` antigo. Configure `FISH_MODEL` somente depois de verificar
+um modelo liberado na sua conta para API. `s1` é aceito pelo SDK, mas isso NÃO
+comprova gratuidade. Não há troca automática, assinatura ou compra de créditos.
+Sem modelo elegível, respostas automáticas de voz ficam desligadas; conversa e
+memória continuam funcionando. Transcrição é um serviço separado e também está
+sujeita ao acesso/cota da API Fish. A gratuidade da API não pôde ser verificada:
+credenciais reais estão ausentes e a consulta à documentação foi bloqueada pela rede.
+
+Validação do ajuste: 109 testes Python, TypeScript/build e Chromium com vault vazio,
+surgimento de notas após conversa, animação do núcleo e mapa passaram. Serviços de
+voz/mapa foram simulados. Desempenho no notebook ainda não foi medido.
+
+---
+
 # Memória e Olho de Deus — v0.5
 
 Esta versão remove os controles extras da tela principal: status/desconectado,

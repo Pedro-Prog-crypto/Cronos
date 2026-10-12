@@ -45,3 +45,12 @@ def test_map_context_has_scoped_worker_permissions(settings):
         assert world.headers['x-frame-options']=='SAMEORIGIN'
         assert 'microphone=()' in world.headers['permissions-policy']
         assert client.get('/ui/cesium/Workers/createGeometry.js').status_code==200
+
+
+def test_pro_voice_is_not_called_even_with_old_env_model(settings):
+    class ForbiddenFish:
+        def __call__(self):raise AssertionError('A paid model must not be called')
+    with TestClient(create_app(replace(settings,fish_key='dummy',fish_model='s2-pro'),fish_factory=ForbiddenFish())) as client:
+        assert client.get('/status',headers=AUTH).json()['fish_speech_configured'] is False
+        assert client.post('/voice/speech',headers=AUTH,json={'text':'Olá'}).status_code==503
+        assert client.post('/voice/stream',headers=AUTH,json={'text':'Olá'}).status_code==503

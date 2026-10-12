@@ -100,7 +100,7 @@ export default function App(){
     return true;
   };commandRef.current=runCommand;
   const selectNote=useCallback(async(path:string)=>{if(eyeOpen){setEyeOpen(false);return;}try{setNote(await jsonApi(`/memory/note?path=${encodeURIComponent(path)}`));}catch(error){tell('Não foi possível abrir essa nota.',true);}},[eyeOpen,tell]);
-  const worldReady=()=>{if(eyeAnnouncement.current){eyeAnnouncement.current=false;if(config?.fish_configured)void voice.speak('Ampliando sua perspectiva. Olho de Deus aberto.');}};
+  const worldReady=()=>{if(eyeAnnouncement.current){eyeAnnouncement.current=false;if(config?.fish_speech_configured)void voice.speak('Ampliando sua perspectiva. Olho de Deus aberto.');}};
   useEffect(()=>{const key=(event:KeyboardEvent)=>{if(event.key==='Escape'){setEyeOpen(false);setNote(null);setChatOpen(false);}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);},[]);
   useEffect(()=>{if(!notice)return;const timer=setTimeout(()=>setNotice(''),8000);return()=>clearTimeout(timer);},[notice]);
 
@@ -125,7 +125,7 @@ export default function App(){
       const result=await jsonApi('/chat',{message:text,session_id:session.current});session.current=result.session_id;setGraphRevision(value=>value+1);
       setMessages(old=>[...old,{role:'assistant',content:result.reply}]);setTools(old=>[...old,...(result.tool_results||[])]);
       if(result.warnings?.length)tell(result.warnings.join('\n'),true);else setNotice('');
-      if(autoVoice&&config?.fish_configured)void voice.speak(result.reply);
+      if(autoVoice&&config?.fish_speech_configured)void voice.speak(result.reply);
     }catch(error){
       if(error instanceof ApiError&&error.detail?.tool_results){session.current=error.detail.session_id;setTools(old=>[...old,...error.detail.tool_results]);}
       tell(error instanceof Error?error.message:'Não foi possível conversar.',true);

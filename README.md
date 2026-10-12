@@ -111,7 +111,7 @@ pode consumir cota e não salva a conversa nem imprime chaves.
 
 Configure `FISH_API_KEY`, `FISH_REFERENCE_ID` (opcional: sem ID, voz padrão),
 `FISH_MODEL`, `FISH_SPEED` e `FISH_LATENCY`. O modelo de síntese não é o ID da voz.
-O padrão `s2-pro` acompanha o SDK fixado, mas disponibilidade e preço dependem da
+Não há modelo de síntese padrão; `s2-pro` está desativado nesta configuração. Disponibilidade e preço dependem da
 conta. Não há fallback automático que esconda falhas ou mude sua voz.
 
 Há síntese MP3, transcrição e endpoint de áudio em streaming. A interface

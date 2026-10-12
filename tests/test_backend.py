@@ -20,7 +20,7 @@ def settings(tmp_path):
     personality = tmp_path / "personality.md"
     personality.write_text("Critique premissas e reconheça incerteza.", encoding="utf-8")
     return Settings(tmp_path / "vault", personality, "test-token", "gemini", "", "gemini-2.5-flash",
-                    "", "", "s2-pro", "http://127.0.0.1:11434", "gemma3:4b")
+                    "", "", "s1", "http://127.0.0.1:11434", "gemma3:4b")
 
 
 AUTH = {"Authorization": "Bearer test-token"}

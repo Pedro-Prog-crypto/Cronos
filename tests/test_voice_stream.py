@@ -21,7 +21,7 @@ def test_stream_voice_uses_configured_voice_speed_and_closes_client(tmp_path):
                 yield b"first"
                 yield b"second"
             return chunks()
-    settings = replace(Settings.from_env(), vault=tmp_path / "vault", token="test-token", fish_key="dummy", fish_reference="voice-id")
+    settings = replace(Settings.from_env(), vault=tmp_path / "vault", token="test-token", fish_key="dummy", fish_model="s1", fish_reference="voice-id")
     with TestClient(create_app(settings, fish_factory=Fish)) as client:
         response = client.post("/voice/stream", headers={"Authorization": "Bearer test-token"}, json={"text": "Olá", "speed": 1.2})
         assert response.status_code == 200 and response.content == b"firstsecond"
@@ -38,7 +38,7 @@ def test_voice_error_is_classified_before_stream_headers_without_secret_leak(tmp
             raise AuthenticationError(401, "SECRET_PROVIDER_ERROR")
         async def convert(self, **kwargs):
             raise APIError(402, "SECRET_PROVIDER_ERROR")
-    settings = replace(Settings.from_env(), vault=tmp_path / "vault", token="test-token", fish_key="dummy")
+    settings = replace(Settings.from_env(), vault=tmp_path / "vault", token="test-token", fish_key="dummy", fish_model="s1")
     with TestClient(create_app(settings, fish_factory=Fish)) as client:
         for endpoint, expected in (("/voice/stream", "chave rejeitada"), ("/voice/speech", "créditos necessários")):
             response = client.post(endpoint, headers={"Authorization": "Bearer test-token"}, json={"text": "Olá"})

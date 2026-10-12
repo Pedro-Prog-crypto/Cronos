@@ -47,7 +47,7 @@ class Settings:
             gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
             fish_key=os.getenv("FISH_API_KEY", ""),
             fish_reference=os.getenv("FISH_REFERENCE_ID", ""),
-            fish_model=os.getenv("FISH_MODEL", "s2-pro"),
+            fish_model=os.getenv("FISH_MODEL", "").strip().lower(),
             ollama_url=os.getenv("OLLAMA_URL", "http://127.0.0.1:11434"),
             ollama_model=os.getenv("OLLAMA_MODEL", "gemma3:4b"),
             origins=tuple(x.strip() for x in os.getenv("CRONOS_CORS_ORIGINS", "").split(",") if x.strip()),

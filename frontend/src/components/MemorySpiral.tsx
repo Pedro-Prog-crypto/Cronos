@@ -16,12 +16,14 @@ export const MemorySpiral=React.memo(function MemorySpiral({graph,onSelect,small
     return new Map(ordered.map((node,index)=>{
       const group=hubIndex.get(node.path)??groups.get(node.path)??Math.min(groupCount-1,Math.floor(index/Math.max(1,Math.ceil(ordered.length/groupCount))));
       const angle=group/groupCount*Math.PI*2-.35;
-      const cx=460+Math.cos(angle)*285,cy=430+Math.sin(angle)*290;
+      const spread=groupCount===1?0:Math.min(285,60+Math.sqrt(ordered.length)*18);
+      const cx=460+Math.cos(angle)*spread,cy=430+Math.sin(angle)*spread;
       const local=counts.get(group)||0;counts.set(group,local+1);
       const h=hash(node.path);const phase=local*2.39996;const radius=hubIndex.has(node.path)?0:24+Math.sqrt(local)*15;
       return [node.path,{x:cx+Math.cos(phase)*Math.min(115,radius),y:cy+Math.sin(phase)*Math.min(115,radius),node,size:Math.min(12,4+Math.sqrt(degrees.get(node.path)||0))}];
     }));
   },[graph.nodes,graph.edges,degrees]);
+  if(!graph.nodes.length)return null;
   const visible=[...positions.values()].filter(p=>Math.abs((p.x-460)*zoom)<455&&Math.abs((p.y-430)*zoom)<425).slice(0,1200);
   const shown=new Set(visible.map(p=>p.node.path));
   return <svg className={`memory-spiral ${small?'memory-small':''}`} viewBox="0 0 920 860" aria-label={`Memória Obsidian: ${graph.total} notas reais`} onWheel={event=>{if(!small)setZoom(value=>Math.max(.6,Math.min(4,value*(event.deltaY>0?.9:1.1))));}}>
@@ -30,16 +32,12 @@ export const MemorySpiral=React.memo(function MemorySpiral({graph,onSelect,small
       <filter id="memory-bloom" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="2.2"/></filter>
       <symbol id="memory-light" viewBox="-12 -12 24 24"><circle r="12" fill="url(#memory-aura)"/><circle r="1.8" fill="#e9ffff"/></symbol>
     </defs>
-    <g className="memory-flow" opacity=".75">
-      {Array.from({length:28},(_,index)=>{const a=index/28*Math.PI*2;const x=460+Math.cos(a)*420,y=430+Math.sin(a)*390;return <path key={index} d={`M 920 430 C 660 430 560 430 460 430 C ${460+Math.cos(a+.8)*180} ${430+Math.sin(a+.8)*180} ${460+Math.cos(a+.3)*330} ${430+Math.sin(a+.3)*330} ${x} ${y}`} fill="none" stroke={index%4?'#00b9ed':'#93f9ff'} strokeWidth={index%4?.9:1.7}/>;})}
-      {Array.from({length:12},(_,index)=>{const a=index/12*Math.PI*2;const x=460+Math.cos(a)*420,y=430+Math.sin(a)*390;return <circle key={'photon'+index} r="1.7" fill="#baffff"><animateMotion dur={`${8+index%4}s`} repeatCount="indefinite" path={`M 920 430 C 660 430 560 430 460 430 C ${460+Math.cos(a+.8)*180} ${430+Math.sin(a+.8)*180} ${460+Math.cos(a+.3)*330} ${430+Math.sin(a+.3)*330} ${x} ${y}`}/></circle>;})}
-    </g>
     <g transform={`translate(460 430) scale(${zoom}) translate(-460 -430)`}>
       <g stroke="#16d9ff" strokeWidth=".8" opacity=".7">{graph.edges.filter(e=>shown.has(e.source)&&shown.has(e.target)).map(edge=>{const a=positions.get(edge.source)!,b=positions.get(edge.target)!;return <path key={edge.source+'|'+edge.target} d={`M ${a.x} ${a.y} Q ${(a.x+b.x)/2+40} ${(a.y+b.y)/2-40} ${b.x} ${b.y}`} fill="none"/>;})}</g>
       {visible.map(({x,y,node,size})=><g key={node.path} transform={`translate(${x} ${y})`} role="button" tabIndex={small?-1:0} aria-label={node.title} onClick={()=>onSelect(node.path)} onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();onSelect(node.path);}}} className="memory-node">
         <title>{node.title}</title><use href="#memory-light" x="-14" y="-14" width="28" height="28"/><circle r={size} fill="#031b30" stroke="#76f4ff" strokeWidth="1"/><path d="M -2 -2 H 2 M -2 0 H 2 M -2 2 H 2" stroke="#9dffff" strokeWidth=".65"/><circle r="10" fill="transparent"/>
       </g>)}
     </g>
-    <circle cx="460" cy="430" r="38" fill="url(#memory-aura)" className="memory-center-light"/>
+
   </svg>;
 });
