@@ -11,6 +11,7 @@ dependencies = ["fastapi==0.143.0", "uvicorn==0.54.0", "httpx==0.28.1", "fish-au
 
 [project.optional-dependencies]
 dev = ["pytest==9.1.1"]
+desktop = ["pywebview==6.2.1; sys_platform == 'win32'"]
 
 [tool.setuptools.packages.find]
 include = ["cronos*"]

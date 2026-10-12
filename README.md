@@ -4,7 +4,34 @@ Primeira base do assistente: API Python/FastAPI, Gemini ou Ollama, personalidade
 Markdown, memória compatível com Obsidian e voz pelo Fish Audio. A interface é
 separada e consome o contrato em [docs/API.md](docs/API.md).
 
-## Windows
+## Programa Windows
+
+O objetivo do Cronos é um aplicativo desktop. A interface do navegador é uma
+bancada de testes; agora ela também abre em uma janela própria pelo WebView2.
+
+Extraia o ZIP inteiro, abra `Instalar-Cronos.bat` e configure `.env` no Bloco de
+Notas. Depois abra `Iniciar-Cronos.bat`: ele inicia o backend local, escolhe uma
+porta livre e abre a janela Cronos sem iniciar seu navegador. Se o token não
+estiver configurado, ele gera um token temporário para essa execução e conecta
+a janela automaticamente. As chaves dos provedores continuam necessárias.
+
+O instalador preserva `.env` existente. Ao atualizar a partir de outro ZIP,
+mantenha seu `.env` e o vault; não publique esses arquivos. O renderizador exige
+Microsoft Edge WebView2 Runtime. Se não estiver disponível, instale-o pela
+Microsoft. A captura de microfone na janela ainda precisa de validação no
+Windows; a transcrição por arquivo continua disponível.
+
+Esta versão desktop usa Python e scripts de inicialização; ainda não é um
+instalador `.exe` independente. Fechar a janela encerra o backend dessa execução.
+
+Comandos equivalentes, executados na pasta do projeto:
+
+```bat
+.\.venv\Scripts\python.exe -m pip install -e ".[desktop]"
+.\.venv\Scripts\python.exe -m cronos.desktop
+```
+
+## Desenvolvimento / interface no navegador
 
 Instale Python 3.11+ e execute no PowerShell, na pasta do repositório:
 
