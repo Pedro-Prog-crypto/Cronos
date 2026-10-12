@@ -204,3 +204,14 @@ estão inventariados, mas não foram portados nem anunciados como funcionais.
 Veja [a auditoria e seus limites](docs/SEGURANCA.md). Executáveis e plugins ficam desligados por padrão. `CRONOS_PRIVACY_MODE=local` restringe o assistente a modelos Ollama em loopback e desativa serviços externos, inclusive Fish Audio. A interface continua sendo a janela do programa Windows; a API local serve à comunicação interna.
 
 Com 4 GB de RAM, prefira modelos externos: você pode cadastrar vários provedores e trocar o modelo, mantendo a mesma personalidade e memória. Consultar vários modelos não funde seus parâmetros nem garante melhor resposta. O roteamento automático por tarefa é uma evolução futura; hoje a seleção é configurável e a consulta adicional exige confirmação. Assinaturas de chats não substituem credenciais de APIs oficiais.
+
+## Radar de diagnóstico
+
+A janela de testes agora mostra um radar e alertas do backend. Verifica RAM,
+espaço para salvar memória, disponibilidade e alteração da personalidade,
+exportações pendentes e configuração de acesso. Falhas em conversa/voz e várias
+tentativas bloqueadas também geram aviso. O radar indica o diagnóstico em execução,
+não uma varredura de invasores. Funciona enquanto o Cronos está aberto e não
+substitui antivírus. A janela oferece a opção de falar novos alertas pelo Fish
+Audio, com possível consumo de créditos. Nenhuma chamada de IA é feita para o
+monitoramento periódico. Veja [o contrato para sua futura interface](docs/API.md#radar-e-alertas).

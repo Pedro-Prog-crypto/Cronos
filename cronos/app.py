@@ -2,9 +2,10 @@ import asyncio
 import secrets
 from pathlib import Path
 from contextlib import asynccontextmanager
+from contextlib import suppress
 from uuid import UUID, uuid4
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -17,6 +18,7 @@ from cronos.engine import Engine, TurnError
 from cronos.integrations import provider_catalog, available_models
 from cronos.tools import create_registry, ToolError
 from cronos.security import SecurityMiddleware
+from cronos.monitor import Monitor
 
 
 class ChatInput(BaseModel):
@@ -47,9 +49,17 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
     async def lifespan(app):
         app.state.memory = Memory(settings.vault)
         app.state.lock = asyncio.Lock()
-        app.state.registry = create_registry(settings, app.state.memory)
+        app.state.monitor = Monitor(settings, app.state.memory)
+        app.state.registry = create_registry(settings, app.state.memory, app.state.monitor)
         app.state.engine = Engine(settings, app.state.memory, app.state.registry, provider)
-        yield
+        await asyncio.to_thread(app.state.monitor.collect)
+        task = asyncio.create_task(app.state.monitor.run())
+        try:
+            yield
+        finally:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
 
     app = FastAPI(title="Cronos", version="0.2.0", lifespan=lifespan, docs_url=None, redoc_url=None)
     static = Path(__file__).parent / "static"
@@ -73,6 +83,16 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
     @app.get("/health")
     async def health():
         return {"status": "ok"}
+
+    @app.get("/monitor", dependencies=[Depends(authenticate)])
+    async def monitor(request: Request, after: int = Query(default=0, ge=0)):
+        return request.app.state.monitor.snapshot(after)
+
+    @app.post("/monitor/alerts/{alert_id}/ack", dependencies=[Depends(authenticate)])
+    async def acknowledge_alert(alert_id: int, request: Request):
+        if not request.app.state.monitor.acknowledge(alert_id):
+            raise HTTPException(404, "Alerta ativo não encontrado.")
+        return {"acknowledged": True}
 
     @app.get("/status", dependencies=[Depends(authenticate)])
     async def status():

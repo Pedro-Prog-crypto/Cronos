@@ -53,3 +53,15 @@ O script `Auditar-Windows.ps1` apenas consulta portas, regras relacionadas ao da
 60 testes passaram, incluindo bloqueio de Host/Origin/cliente remoto, autenticação e limite de tentativas, upload com tamanho declarado e em chunks, links e caminhos Windows, modo local e confirmação humana. Integrações reais exigem chaves; não foram certificadas aqui.
 
 A auditoria de dependências com pip-audit/PyPI encontrou avisos no pip 25.0.1 do ambiente de desenvolvimento; o instalador foi atualizado para pip >=26.2. Nova consulta das 40 distribuições do ambiente não encontrou vulnerabilidades conhecidas. O teste de navegador também passou com provedores simulados. Não equivale a auditoria de binários Windows, pywebview ou das dependências antigas instaladas no notebook.
+
+## Monitor de diagnóstico
+
+O radar acrescenta detecção de sinais limitados, sem ampliar privilégios, abrir
+portas de rede ou executar comandos do sistema. Cinco bloqueios de acesso em um
+minuto geram aviso (inclusive erros de configuração); isso não comprova invasão.
+Mudanças na personalidade são comparadas a uma referência em RAM no início da
+execução. O monitor não certifica a integridade prévia desse arquivo. Eventos não
+incluem conversas, chaves, conteúdo das notas, IPs ou caminhos pessoais. Não existe
+reparo automático ou coleta de telemetria externa. A opção de falar avisos envia
+somente o texto genérico do aviso ao Fish Audio. A revisão de segurança anterior
+permanece válida dentro do escopo descrito; o monitor não remove os riscos residuais.

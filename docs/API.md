@@ -156,3 +156,46 @@ Não há ainda protocolo Gemini Live, wake word ou interrupção de fala.
 Erros usam `detail`, string ou objeto no caso de falha após ferramentas. Mensagens
 não incluem chaves ou o corpo bruto de erros do provedor. Não interprete
 `/health`, presença de credenciais ou testes simulados como validação real de IA.
+
+## Radar e alertas
+
+`GET /monitor?after=0` exige autenticação. Retorna `state` (`monitoring` ou
+`attention`), `checked_at` UTC, `interval_seconds`, `cursor`, `alerts` ativos,
+`events` posteriores ao cursor informado, `resources`, `components` e `scope`.
+Cada alerta tem `id`, `code`, `severity` (`warning`/`critical`), `message`,
+`suggestion`, `time`, `status` e `acknowledged`. Eventos de recuperação usam
+`status=resolved`, `severity=info`. Os estados dos componentes indicam apenas a
+última operação real observada, não disponibilidade garantida.
+
+`POST /monitor/alerts/{id}/ack` registra ciência, sem corpo; não remove o alerta
+nem corrige sua causa. Retorna 404 se o alerta não estiver mais ativo. A próxima
+operação bem-sucedida encerra o aviso de falha correspondente.
+
+Diagnóstico periódico de 15 segundos, sem chamadas a provedores: personalidade
+(hash relativo ao início da execução, leitura limitada), exportações pendentes,
+espaço do disco do vault (<250 MiB) e RAM do sistema (>=90%). Há avisos de token
+curto, plugins e executáveis habilitados. Cinco acessos negados em 60 segundos
+produzem alerta sem afirmar que houve invasão. Falhas de conversa/voz/sync são
+observadas na resposta HTTP, sem registrar prompts, tokens, IPs ou erros brutos.
+
+A interface consulta a cada cinco segundos, mostra alterações sem modificar a
+conversa e pode falar novos alertas se o usuário habilitar Fish Audio. Não fala
+alertas do próprio serviço de voz, não repete chamadas de síntese que falharam e
+mantém avisos escritos se reprodução/síntese falhar. Fala pode consumir créditos;
+modo local não usa Fish. O navegador pode restringir reprodução automática.
+A animação respeita a preferência de reduzir movimentos e pausa se o diagnóstico
+ficar atrasado ou a conexão falhar. Falhas de autenticação param o polling até
+verificar novamente a conexão.
+
+O serviço monitora enquanto o processo está aberto. Não protege o Windows inteiro,
+não verifica Defender/firewall em tempo real, não monitora câmera/microfone nem
+reconhece perigos físicos. Não há notificações nativas com o programa fechado.
+Eventos ficam somente na RAM (últimos 200) e reiniciar perde esse histórico; os
+alertas periódicos são recalculados. A mudança de personalidade precisa ser
+conferida pelo usuário e, após validada, reinício estabelece uma nova referência.
+Uma nova interface pode consumir estes endpoints sem usar o radar de teste.
+
+A ferramenta de leitura `system_diagnostics` permite ao modelo consultar o estado,
+alertas ativos, recursos e escopo reais durante uma conversa. Não realiza varredura
+extra nem retorna o histórico inteiro de eventos. Em modo online, esse diagnóstico
+genérico entra no contexto enviado ao provedor quando a ferramenta é utilizada.

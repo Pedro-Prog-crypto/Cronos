@@ -150,12 +150,19 @@ def file_path(root, relative):
         raise ToolError(str(exc)) from exc
 
 
-def create_registry(settings, memory):
+def create_registry(settings, memory, monitor=None):
     registry = Registry()
     root = settings.files_root.resolve()
 
     def add(name, description, schema, handler, confirm=False):
         registry.register(Tool(name, description, schema, handler, confirm))
+
+    if monitor is not None:
+        def diagnostics(args):
+            data = monitor.snapshot()
+            return {key: data[key] for key in ("state", "checked_at", "alerts", "resources", "components", "scope")}
+        add("system_diagnostics", "Consulta o diagnóstico local e alertas reais do Cronos. Observe data e escopo: não certifica ausência de invasões e não substitui antivírus.",
+            Arguments, diagnostics)
 
     add("obsidian_search", "Busca por conteúdo em todo o vault Obsidian; retorna fontes e trechos.", Query,
         lambda args: memory.search(args.query, args.limit))

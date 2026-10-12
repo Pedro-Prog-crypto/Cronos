@@ -64,6 +64,11 @@ class SecurityMiddleware:
         if scope['type'] != 'http':
             return await self.app(scope, receive, send)
         headers = Headers(scope=scope)
+        application = scope.get('app')
+        monitor = getattr(application.state, 'monitor', None) if application else None
+        def denied():
+            if monitor:
+                monitor.denied()
         host = headers.get('host', '')
         try:
             parsed = urlsplit('http://' + host)
@@ -72,6 +77,7 @@ class SecurityMiddleware:
         except ValueError:
             valid_host = False
         if not valid_host:
+            denied()
             return await JSONResponse({'detail': 'Host não autorizado.'}, 400)(scope, receive, send)
         client = scope.get('client')
         try:
@@ -79,11 +85,13 @@ class SecurityMiddleware:
         except ValueError:
             local = False
         if not local:
+            denied()
             return await JSONResponse({'detail': 'O Cronos aceita somente conexões deste computador.'}, 403)(scope, receive, send)
         origin = headers.get('origin')
         own_origin = scope.get('scheme', 'http') + '://' + host
         allowed = {own_origin, *[value.rstrip('/') for value in self.settings.origins]}
         if origin and origin not in allowed:
+            denied()
             return await JSONResponse({'detail': 'Origin não autorizada.'}, 403)(scope, receive, send)
         path = scope.get('path', '')
         public = path in {'/', '/health', '/docs', '/docs/oauth2-redirect', '/redoc', '/openapi.json'} or path.startswith('/static/')
@@ -100,6 +108,7 @@ class SecurityMiddleware:
             expected = ('Bearer ' + self.settings.token).encode('utf-8')
             if not secrets.compare_digest(supplied, expected):
                 self.failures.append(now)
+                denied()
                 return await JSONResponse({'detail': 'Autenticação necessária.'}, 401)(scope, receive, send)
         limit = 10 * 1024 * 1024 if path == '/voice/transcribe' else 256 * 1024
         try:
@@ -112,6 +121,8 @@ class SecurityMiddleware:
             return await JSONResponse({'detail': 'Requisição acima do limite de tamanho.'}, 413)(scope, receive, send)
         async def secure_send(event):
             if event['type'] == 'http.response.start':
+                if monitor:
+                    monitor.response(path, event['status'])
                 additions = {
                     'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY',
                     'referrer-policy': 'no-referrer', 'cache-control': 'no-store',
@@ -147,6 +158,11 @@ class SecurityMiddleware:
                     delivered = True
                     return {'type': 'http.request', 'body': bytes(body), 'more_body': False}
                 return await receive()
-            await self.app(scope, buffered_receive, secure_send)
+            try:
+                await self.app(scope, buffered_receive, secure_send)
+            except Exception:
+                if monitor:
+                    monitor.response(path, 500)
+                raise
         finally:
             self.active -= 1

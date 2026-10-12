@@ -21,7 +21,9 @@ async function api(path, options = {}) {
       renderTools(detail.tool_results || []);
       throw new Error(detail.message);
     }
-    throw new Error(typeof detail === "string" ? detail : `A requisição falhou (HTTP ${response.status}).`);
+    const error = new Error(typeof detail === "string" ? detail : `A requisição falhou (HTTP ${response.status}).`);
+    error.status = response.status;
+    throw error;
   }
   return response;
 }
@@ -91,6 +93,7 @@ function renderTools(results) {
 
 $("connect-form").addEventListener("submit", event => {
   event.preventDefault();
+  pauseMonitor();
   run("Verificando conexão…", async () => {
     [...$("status").children].forEach((item, index) => { item.textContent = `${["Backend", "IA", "Voz", "Personalidade"][index]}: não verificado`; item.classList.remove("good"); });
     const result = await (await api("/status")).json();
@@ -103,6 +106,9 @@ $("connect-form").addEventListener("submit", event => {
     $("status").replaceChildren(...values.map(([text, good]) => {
       const item = document.createElement("span"); item.textContent = text; item.classList.toggle("good", good); return item;
     }));
+    $("alert-voice").disabled = !result.fish_configured;
+    if (!result.fish_configured) $("alert-voice").checked = false;
+    startMonitor();
     notice("Backend conectado. Envie uma mensagem e teste o áudio para validar os provedores.");
   });
 });
@@ -239,3 +245,103 @@ $("record").addEventListener("click", async () => {
 
 $("player").addEventListener("error", () => notice("O navegador não conseguiu reproduzir o áudio recebido.", true));
 window.addEventListener("beforeunload", () => { releaseMicrophone(); if (audioUrl) URL.revokeObjectURL(audioUrl); });
+
+// Apenas consulta o diagnóstico; não chama modelos nem escaneia arquivos do usuário.
+let monitorTimer = null, monitorCursor = 0, monitorConnected = false, monitorPolling = false, monitorGeneration = 0;
+let alertAudioUrl = null, alertSpeaking = false;
+const pendingAlertSpeech = new Map();
+
+function stopAlertAudio() {
+  $("alert-player").pause(); $("alert-player").removeAttribute("src");
+  if (alertAudioUrl) URL.revokeObjectURL(alertAudioUrl);
+  alertAudioUrl = null;
+}
+
+async function speakAlert(alert) {
+  if (!$("alert-voice").checked || alertSpeaking || busy || !$("alert-player").paused || ($("player").src && !$("player").paused)) return false;
+  alertSpeaking = true;
+  try {
+    const response = await api("/voice/speech", {method:"POST", headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({text:`Atenção. ${alert.message} ${alert.suggestion}`})});
+    if (!$("alert-voice").checked) return;
+    stopAlertAudio(); alertAudioUrl = URL.createObjectURL(await response.blob());
+    $("alert-player").src = alertAudioUrl;
+    await $("alert-player").play();
+    $("alert-audio-status").textContent = "Alerta falado pelo Kronos.";
+  } catch {
+    $("alert-audio-status").textContent = "Não foi possível falar o alerta. Consulte o aviso escrito; não haverá repetição automática.";
+  } finally { alertSpeaking = false; }
+  return true;
+}
+
+function renderMonitor(result) {
+  const stale = !result.checked_at || Date.now() - new Date(result.checked_at).getTime() > result.interval_seconds * 3000;
+  $("radar").classList.toggle("paused", stale);
+  $("radar").classList.toggle("attention", result.alerts.length > 0);
+  const time = result.checked_at ? new Date(result.checked_at).toLocaleTimeString("pt-BR") : "pendente";
+  $("monitor-status").textContent = `${stale ? "Diagnóstico atrasado; estado atual não confirmado" : result.alerts.length ? `${result.alerts.length} alerta(s) ativo(s)` : "Sem alertas ativos nos sinais monitorados"}. Última verificação: ${time}.`;
+  const ram = result.resources.ram_used_percent;
+  const disk = result.resources.disk_free_mib;
+  $("monitor-resources").textContent = `RAM: ${ram == null ? "medição indisponível" : `${ram}% em uso`} · Disco do vault: ${disk == null ? "medição indisponível" : `${disk} MiB livres`}`;
+  $("monitor-alerts").replaceChildren();
+  for (const alert of result.alerts) {
+    const card = document.createElement("li"); card.className = `monitor-alert ${alert.severity}`;
+    const title = document.createElement("strong"); title.textContent = alert.message;
+    const detail = document.createElement("p"); detail.textContent = alert.suggestion;
+    card.append(title, detail);
+    const acknowledge = document.createElement("button"); acknowledge.className = "secondary";
+    acknowledge.textContent = alert.acknowledged ? "Você já tomou ciência" : "Estou ciente";
+    acknowledge.disabled = alert.acknowledged;
+    acknowledge.addEventListener("click", async () => {
+      acknowledge.disabled = true;
+      try { await api(`/monitor/alerts/${alert.id}/ack`, {method:"POST"}); await pollMonitor(); }
+      catch { acknowledge.disabled = false; $("monitor-status").textContent = "Não foi possível registrar sua ciência. O alerta continua ativo."; }
+    });
+    card.append(acknowledge); $("monitor-alerts").append(card);
+  }
+}
+
+async function pollMonitor() {
+  if (monitorPolling || !monitorConnected) return;
+  monitorPolling = true;
+  const generation = monitorGeneration;
+  try {
+    const response = await api(`/monitor?after=${monitorCursor}`, {signal:AbortSignal.timeout(5000)});
+    const result = await response.json();
+    if (generation !== monitorGeneration || !monitorConnected) return;
+    if (result.cursor < monitorCursor) monitorCursor = 0; // backend reiniciado
+    renderMonitor(result);
+    const fresh = result.events.filter(event => event.status === "active" && event.id > monitorCursor &&
+      result.alerts.some(alert => alert.id === event.id && !alert.acknowledged));
+    monitorCursor = result.cursor;
+    // Uma fala por lote: prioriza o alerta crítico e evita sobrepor vários áudios.
+    fresh.sort((a,b) => Number(b.severity === "critical") - Number(a.severity === "critical"));
+    for (const event of fresh) if ($("alert-voice").checked && event.code !== "service_voice") pendingAlertSpeech.set(event.id, event);
+    for (const id of pendingAlertSpeech.keys()) {
+      if (!result.alerts.some(alert => alert.id === id && !alert.acknowledged)) pendingAlertSpeech.delete(id);
+    }
+    const waiting = [...pendingAlertSpeech.values()].sort((a,b) => Number(b.severity === "critical") - Number(a.severity === "critical"));
+    if (waiting.length && await speakAlert(waiting[0])) pendingAlertSpeech.delete(waiting[0].id);
+  } catch (error) {
+    if (generation !== monitorGeneration) return;
+    if ([401, 403, 429].includes(error.status)) { monitorConnected = false; clearInterval(monitorTimer); }
+    $("radar").classList.add("paused");
+    $("monitor-status").textContent = "Monitor sem conexão. Não é possível confirmar o estado atual. Verifique a conexão para retomar.";
+  } finally { monitorPolling = false; }
+}
+
+function pauseMonitor() {
+  monitorGeneration++; monitorConnected = false; clearInterval(monitorTimer);
+  pendingAlertSpeech.clear(); stopAlertAudio();
+  $("radar").classList.add("paused");
+  $("monitor-status").textContent = "Monitor pausado. Verifique a conexão para acompanhar o estado atual.";
+}
+$("token").addEventListener("input", pauseMonitor);
+function startMonitor() {
+  monitorGeneration++;
+  clearInterval(monitorTimer); monitorConnected = true; monitorCursor = 0;
+  pollMonitor(); monitorTimer = setInterval(pollMonitor, 5000);
+}
+$("alert-voice").addEventListener("change", () => { if (!$("alert-voice").checked) { stopAlertAudio(); pendingAlertSpeech.clear(); } });
+document.addEventListener("visibilitychange", () => { if (!document.hidden) pollMonitor(); });
+window.addEventListener("beforeunload", () => { clearInterval(monitorTimer); stopAlertAudio(); });

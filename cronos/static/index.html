@@ -16,6 +16,18 @@
     <div id="status" class="status-grid" aria-live="polite"><span>Backend: não verificado</span><span>IA: não verificada</span><span>Voz: não verificada</span><span>Personalidade: não verificada</span></div>
   </section>
   <div id="notice" role="status" aria-live="polite" hidden></div>
+  <section class="panel monitor-panel" aria-labelledby="monitor-title">
+    <div id="radar" class="radar paused" aria-hidden="true"><div class="radar-sweep"></div><span class="radar-center"></span></div>
+    <div class="monitor-content"><span class="eyebrow">RADAR / DIAGNÓSTICO LOCAL</span><h2 id="monitor-title">Monitor do Kronos</h2>
+      <p id="monitor-status" role="status" aria-live="polite">Conecte o backend para iniciar o acompanhamento.</p>
+      <p id="monitor-resources" class="hint"></p>
+      <label class="monitor-voice"><input id="alert-voice" type="checkbox" disabled> Falar novos alertas pelo Fish Audio (pode consumir créditos)</label>
+      <audio id="alert-player" hidden></audio>
+      <p id="alert-audio-status" class="hint" aria-live="polite"></p>
+      <ul id="monitor-alerts" aria-label="Alertas ativos"></ul>
+      <p class="hint">Verifica sinais locais a cada 15 segundos enquanto o Cronos está aberto. Não substitui o Defender nem detecta toda invasão.</p>
+    </div>
+  </section>
   <div class="workspace">
     <section class="panel chat" aria-labelledby="chat-title">
       <div class="section-heading"><div><span class="eyebrow">01 / CONVERSA</span><h2 id="chat-title">Fale com o Cronos</h2></div><button id="new-chat" class="secondary" type="button">Nova conversa</button></div>
