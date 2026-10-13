@@ -22,8 +22,12 @@ def test_production_interface_keeps_animation_and_no_browser_ai_keys():
     package=Path(__file__).resolve().parents[1]
     for component in ('CronosOrb','StellarCore'):
         content=(package/'frontend/src/components'/f'{component}.tsx').read_text()
-        assert 'requestAnimationFrame(render)' in content
-        assert 'cancelAnimationFrame(animId)' in content
+        assert 'startCanvasWorker' in content
+        assert ('renderOrb' if component == 'CronosOrb' else 'renderStar') in content
+    renderers=(package/'frontend/src/animation/renderers.ts').read_text()
+    assert renderers.count('requestAnimationFrame(render)') >= 2
+    assert renderers.count('cancelAnimationFrame(animId)') == 2
+    assert (package/'frontend/src/animation/scene.worker.ts').exists()
     script=(package/'frontend/src/hooks/useCronosVoice.ts').read_text()
     assert "'/voice/speech'" in script and "'/voice/transcribe'" in script
     assert 'SpeechSynthesisUtterance' not in script and 'startSimulationLevel' not in script

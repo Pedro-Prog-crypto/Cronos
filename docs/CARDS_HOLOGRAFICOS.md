@@ -8,7 +8,8 @@ CSS, não uma promessa de igualdade pixel a pixel ou geometria 3D volumétrica.
 
 ## Comportamento
 
-- Pergunta ou transcrição na faixa horizontal; resposta nos cards laterais.
+- Pergunta por texto na faixa horizontal; resposta nos cards laterais.
+  Em conversas faladas, cards ficam ocultos até o comando mostrar texto/resposta.
 - Altura automática e largura conforme quantidade de texto e formato. Não há
   alça ou botão de redimensionamento. A área externa rola quando necessário.
 - Títulos Markdown e listas/parágrafos reconhecidos distribuem o texto real em

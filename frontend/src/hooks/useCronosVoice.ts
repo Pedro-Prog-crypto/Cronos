@@ -1,6 +1,19 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {api} from '../api';
 
+export function speechChunks(text:string):string[]{
+  const chunks:string[]=[];let remaining=text;
+  while(remaining.length){
+    const limit=chunks.length?360:220;
+    if(remaining.length<=limit){chunks.push(remaining);break;}
+    const prefix=remaining.slice(0,limit),sentences=[...prefix.matchAll(/[.!?](?:[\s]|$)/g)];
+    let cut=sentences.length?sentences[chunks.length?sentences.length-1:0].index!+1:prefix.lastIndexOf(' ');
+    if(cut<40)cut=limit;
+    chunks.push(remaining.slice(0,cut));remaining=remaining.slice(cut);
+  }
+  return chunks.filter(chunk=>chunk.trim());
+}
+
 interface VoiceProps { onSpeechStart?: () => void; onSpeechEnd?: () => void; onError?: (message: string) => void; }
 export function useCronosVoice({onSpeechStart,onSpeechEnd,onError}: VoiceProps = {}) {
   const [isSpeaking,setIsSpeaking]=useState(false), [isGenerating,setIsGenerating]=useState(false);
@@ -28,21 +41,35 @@ export function useCronosVoice({onSpeechStart,onSpeechEnd,onError}: VoiceProps =
       // Web Audio ativado no gesto do usuário; nunca simular fala se houver falha.
       context.current ||= new AudioContext(); await context.current.resume();
       const controller=new AbortController();pending.current=controller;
-      const response=await api('/voice/speech',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text}),signal:controller.signal});
-      const blob=await response.blob();if(current!==generation.current)return;
-      url.current=URL.createObjectURL(blob);const player=new Audio(url.current);audio.current=player;
-      const meter=context.current.createAnalyser();meter.fftSize=256;analyser.current=meter;
-      source.current=context.current.createMediaElementSource(player);source.current.connect(meter);meter.connect(context.current.destination);
-      const values=new Uint8Array(meter.fftSize);let last=0;
-      const measure=(time:number)=>{
-        if(current!==generation.current)return;
-        if(time-last>50){meter.getByteTimeDomainData(values);let sum=0;for(const value of values)sum+=((value-128)/128)**2;audioLevelSource.current=Math.min(1,Math.sqrt(sum/values.length)*4);last=time;}
-        frame.current=requestAnimationFrame(measure);
+      const chunks=speechChunks(text);
+      const fetchChunk=async(part:string)=>{
+        try{const response=await api('/voice/speech',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:part}),signal:controller.signal});return {blob:await response.blob(),error:null};}
+        catch(error){return {blob:null,error};}
       };
-      player.onplaying=()=>{setIsGenerating(false);setIsSpeaking(true);callbacks.current.onSpeechStart?.();frame.current=requestAnimationFrame(measure);};
-      player.onended=stop;
-      player.onerror=()=>{stop();callbacks.current.onError?.('O áudio recebido não pôde ser reproduzido. A resposta escrita continua disponível.');};
-      await player.play();
+      // Only the current chunk and one look-ahead are retained. No voice/model changes.
+      let next=fetchChunk(chunks[0]||text);
+      for(let index=0;index<chunks.length;index++){
+        const received=await next;if(current!==generation.current)return;
+        if(received.error)throw received.error;
+        if(index+1<chunks.length)next=fetchChunk(chunks[index+1]);
+        if(url.current)URL.revokeObjectURL(url.current);
+        source.current?.disconnect();analyser.current?.disconnect();cancelAnimationFrame(frame.current);
+        url.current=URL.createObjectURL(received.blob!);const player=new Audio(url.current);audio.current=player;
+        const meter=context.current.createAnalyser();meter.fftSize=256;analyser.current=meter;
+        source.current=context.current.createMediaElementSource(player);source.current.connect(meter);meter.connect(context.current.destination);
+        const values=new Uint8Array(meter.fftSize);let last=0;
+        const measure=(time:number)=>{if(current!==generation.current)return;if(time-last>50){meter.getByteTimeDomainData(values);let sum=0;for(const value of values)sum+=((value-128)/128)**2;audioLevelSource.current=Math.min(1,Math.sqrt(sum/values.length)*4);last=time;}frame.current=requestAnimationFrame(measure);};
+        player.onplaying=()=>{setIsGenerating(false);setIsSpeaking(true);if(!index)callbacks.current.onSpeechStart?.();frame.current=requestAnimationFrame(measure);};
+        await new Promise<void>((resolve,reject)=>{
+          const aborted=()=>{player.pause();resolve();};controller.signal.addEventListener('abort',aborted,{once:true});
+          const cleanup=()=>controller.signal.removeEventListener('abort',aborted);
+          player.onended=()=>{cleanup();resolve();};player.onerror=()=>{cleanup();reject(new Error('O áudio recebido não pôde ser reproduzido.'));};
+          player.play().catch(error=>{cleanup();reject(error);});
+        });
+        if(current!==generation.current)return;
+        if(index+1<chunks.length){setIsSpeaking(false);setIsGenerating(true);}
+      }
+      if(current===generation.current)stop();
     } catch(error) {
       if(current!==generation.current)return;
       stop();callbacks.current.onError?.(error instanceof Error?error.message:'Não foi possível gerar ou reproduzir a voz.');
@@ -67,7 +94,7 @@ async function localWave(blob:Blob){
 }
 
 export function useMicrophone(onTranscript:(text:string)=>void,onError:(message:string)=>void,local=false) {
-  const [recording,setRecording]=useState(false),[transcribing,setTranscribing]=useState(false);
+  const [recording,setRecording]=useState(false),[starting,setStarting]=useState(false),[transcribing,setTranscribing]=useState(false);
   const audioLevelSource=useRef(0);
   const refs=useRef<{recorder?:MediaRecorder;stream?:MediaStream;context?:AudioContext;timer?:ReturnType<typeof setTimeout>;frame?:number;abort?:AbortController}>({});
   const mounted=useRef(true), requesting=useRef(false);
@@ -77,7 +104,7 @@ export function useMicrophone(onTranscript:(text:string)=>void,onError:(message:
     if(r.recorder?.state==='recording'){r.recorder.stop();return;}
     if(requesting.current||transcribing)return;
     if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder){onError('Microfone não disponível nesta janela. Use texto ou arquivo de áudio no módulo Voz.');return;}
-    requesting.current=true;
+    requesting.current=true;setStarting(true);
     try {
       r.stream=await navigator.mediaDevices.getUserMedia({audio:true});
       if(!mounted.current){r.stream.getTracks().forEach(track=>track.stop());return;}
@@ -103,8 +130,8 @@ export function useMicrophone(onTranscript:(text:string)=>void,onError:(message:
       };
       recorder.start(1000);setRecording(true);r.frame=requestAnimationFrame(measure);r.timer=setTimeout(()=>{if(recorder.state==='recording')recorder.stop();},60000);
     } catch(error){release();onError(error instanceof Error?error.message:'Não foi possível acessar o microfone.');}
-    finally{requesting.current=false;}
+    finally{requesting.current=false;setStarting(false);}
   },[onTranscript,onError,release,transcribing,local]);
   useEffect(()=>()=>{mounted.current=false;refs.current.abort?.abort();if(refs.current.recorder?.state==='recording')refs.current.recorder.stop();refs.current.stream?.getTracks().forEach(track=>track.stop());refs.current.context?.close();if(refs.current.frame)cancelAnimationFrame(refs.current.frame);if(refs.current.timer)clearTimeout(refs.current.timer);},[]);
-  return {recording,transcribing,audioLevelSource,toggle};
+  return {recording,starting,transcribing,audioLevelSource,toggle};
 }

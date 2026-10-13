@@ -221,3 +221,5 @@ Interface e memória atualizadas: [Olho de Deus e Obsidian](docs/OLHO_DE_DEUS_OB
 O teste de compatibilidade legado com `s2.1-pro-free` retornou HTTP 400 no notebook. A disponibilidade desse identificador não foi comprovada; não há troca automática de modelo. `Testar-Voz-Isolada.bat` agora apresenta o motivo sanitizado da resposta para diagnóstico.
 
 Configuração real de voz recuperada: siga [Voz original](docs/VOZ_ORIGINAL.md).
+
+Microfone e início da voz: [correções e atualização](docs/MICROFONE_E_LATENCIA.md).

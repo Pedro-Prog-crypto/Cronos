@@ -22,6 +22,7 @@ export default function App(){
   const [draft,setDraft]=useState(''),[busy,setBusy]=useState(false),[tools,setTools]=useState<ToolResult[]>([]);
   const [autoVoice,setAutoVoice]=useState(true),[announceAlerts,setAnnounceAlerts]=useState(false),[monitor,setMonitor]=useState<any>(null);
   const [eyeOpen,setEyeOpen]=useState(false),[placeQuery,setPlaceQuery]=useState(''),[graph,setGraph]=useState<MemoryGraph>({nodes:[],edges:[],total:0}),[graphRevision,setGraphRevision]=useState(0),[note,setNote]=useState<{path:string;content:string}|null>(null);
+  const [showSpokenCards,setShowSpokenCards]=useState(false);
   const [displayTurn,setDisplayTurn]=useState<{question:string;source:'text'|'transcription';reply:string}|null>(null);
   const sendRef=useRef<(text:string)=>Promise<void>>(async()=>{});
   const commandRef=useRef<(text:string)=>boolean>(()=>false),eyeAnnouncement=useRef(false);
@@ -93,6 +94,7 @@ export default function App(){
   },[connected,graphRevision,tell]);
   useEffect(()=>{if(!connected)return;const timer=setInterval(()=>{if(!document.hidden&&!live.current.busy&&!live.current.recording&&!live.current.transcribing)setGraphRevision(value=>value+1);},60000);return()=>clearInterval(timer);},[connected]);
   const runCommand=(text:string)=>{
+    if(/^(?:kronos[, ]+|cronos[, ]+)?(?:mostrar|mostre|exibir) (?:o )?(?:texto|resposta)[.!?]*$/i.test(text.trim())){setShowSpokenCards(true);setChatOpen(false);return true;}
     const command=localCommand(text,eyeOpen);if(!command)return false;
     if((command.type==='eye'||command.type==='place')&&config?.privacy_mode==='local'){tell('O mapa mundial está desativado em modo local.',true);return true;}
     if(command.type==='eye'){voice.prepare();eyeAnnouncement.current=true;setEyeOpen(true);setChatOpen(false);setModule(null);setNote(null);}
@@ -116,13 +118,14 @@ export default function App(){
       setModuleActivity('IDLE');return;
     }
     if(busy||microphone.transcribing)return;
+    setChatOpen(false);setShowSpokenCards(false);
     if(autoVoice)voice.prepare();
     void microphone.toggle();
   };
   const sendText=async(value:string,source:'text'|'transcription'='text')=>{
     const text=value.trim();if(!text||inFlight.current)return;if(runCommand(text)){setDraft('');return;}
     if(!connected){tell('A conexão automática ainda não está disponível. Feche e abra o Kronos novamente.',true);return;}
-    setDisplayTurn({question:text,source,reply:''});setChatOpen(false);
+    setShowSpokenCards(source==='text');setDisplayTurn({question:text,source,reply:''});setChatOpen(false);
     inFlight.current=true;setBusy(true);voice.stop();if(autoVoice)voice.prepare();setDraft('');tell('Cronos está processando sua mensagem…');
     try{
       const result=await jsonApi('/chat',{message:text,session_id:session.current});session.current=result.session_id;setDisplayTurn({question:text,source,reply:result.reply});setGraphRevision(value=>value+1);
@@ -156,11 +159,11 @@ export default function App(){
     <div className={`eye-slot ${eyeOpen?'expanded':''}`}>
       {eyeOpen?<Suspense fallback={<HolographicGlobe onOpen={()=>{}}/>}><WorldMap query={placeQuery} onError={message=>tell(message,true)} onReady={worldReady}/></Suspense>:<HolographicGlobe onOpen={()=>{if(config?.privacy_mode==='local'){tell('O mapa mundial usa serviços externos e está desativado em modo local.',true);return;}voice.prepare();eyeAnnouncement.current=true;setEyeOpen(true);setNote(null);}}/>}
     </div>
-    <button className={`reference-mic ${microphone.recording?'recording':''}`} aria-label={microphone.recording?'Parar e transcrever':'Gravar pelo microfone'} onClick={handleMic} disabled={microphone.transcribing||(busy&&!microphone.recording)}><Mic size={16}/></button>
+    <button className={`reference-mic ${microphone.recording?'recording':microphone.starting?'starting':microphone.transcribing?'transcribing':busy?'thinking':voice.isGenerating?'generating':voice.isSpeaking?'speaking':''}`} aria-pressed={microphone.recording} title={microphone.starting?'Abrindo microfone':microphone.recording?'Microfone ligado':microphone.transcribing?'Transcrevendo':busy?'Aguardando Gemini':voice.isGenerating?'Preparando voz':voice.isSpeaking?'Falando':'Microfone desligado'} aria-label={microphone.recording?'Parar e transcrever':'Gravar pelo microfone'} onClick={handleMic} disabled={microphone.starting||microphone.transcribing||(busy&&!microphone.recording)}><Mic size={16}/></button>
     {notice&&error&&<div className="scene-notice" role="status">{notice}</div>}
     {note&&<section className="note-window" aria-label="Nota Obsidian"><button onClick={()=>setNote(null)} aria-label="Fechar nota"><X size={18}/></button><pre>{note.content}</pre></section>}
-    {displayTurn?.reply&&!chatOpen&&!module&&!eyeOpen&&<AnswerCards reply={displayTurn.reply}/>}
-    {displayTurn&&!chatOpen&&!module&&!eyeOpen&&<div className="spoken-question"><HolographicCard title={displayTurn.source==='transcription'?'TRANSCRIÇÃO':'PERGUNTA'} variant="ribbon"><p className="holo-text">{displayTurn.question}</p></HolographicCard></div>}
+    {displayTurn?.reply&&showSpokenCards&&!chatOpen&&!module&&!eyeOpen&&<AnswerCards reply={displayTurn.reply}/>}
+    {displayTurn&&showSpokenCards&&!chatOpen&&!module&&!eyeOpen&&<div className="spoken-question"><HolographicCard title={displayTurn.source==='transcription'?'TRANSCRIÇÃO':'PERGUNTA'} variant="ribbon"><p className="holo-text">{displayTurn.question}</p></HolographicCard></div>}
     {chatOpen&&<section className="card-composer" aria-label="Escrever para Kronos"><HolographicCard title="PERGUNTA" variant="layered">
       <button className="holo-close" onClick={()=>setChatOpen(false)} aria-label="Fechar conversa"><X size={17}/></button>
       <form onSubmit={send}><label htmlFor="chat-input">O que você quer perguntar?</label><textarea id="chat-input" value={draft} onChange={event=>{setDraft(event.target.value);event.target.style.height='auto';event.target.style.height=Math.min(260,event.target.scrollHeight)+'px';}} maxLength={16000} rows={2}/>

@@ -77,3 +77,7 @@
 .world-map-frame{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000b14}
 
 .memory-node{animation:memory-born 1.2s ease both}@keyframes memory-born{from{opacity:0}to{opacity:1}}
+.reference-mic.starting,.reference-mic.transcribing,.reference-mic.thinking,.reference-mic.generating{border-color:#ffbe68;box-shadow:0 0 13px #ffbe6855;animation:mic-wait .8s ease-in-out infinite alternate}
+.reference-mic.recording{background:#063a50;border-color:#77f6ff;color:white;box-shadow:0 0 18px #00eaffcc,inset 0 0 8px #00dfff55}
+.reference-mic.speaking{border-color:#73f2ff;background:#062337}
+@keyframes mic-wait{to{box-shadow:0 0 20px #ffbe6899}}
