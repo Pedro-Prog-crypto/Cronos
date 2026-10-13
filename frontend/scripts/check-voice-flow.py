@@ -45,7 +45,9 @@ async def main():
   await page.add_init_script("""window.micOpens=0;navigator.mediaDevices.getUserMedia=async()=>{window.micOpens++;await new Promise(r=>setTimeout(r,300));const ctx=new AudioContext(),osc=ctx.createOscillator(),gain=ctx.createGain(),dest=ctx.createMediaStreamDestination();osc.connect(gain);gain.connect(dest);gain.gain.value=0;osc.start();window.micGain=gain;window.micStream=dest.stream;return dest.stream;};""")
   await page.goto(f'http://127.0.0.1:{server.server_port}/ui/index.html')
   await expect(page.get_by_role('button',name='Desligar microfone')).to_have_attribute('aria-pressed','true',timeout=7000)
-  assert await page.locator('canvas[data-render-thread=worker]').count()==2
+  assert await page.locator('canvas[data-render-thread=worker]').count()==1
+  assert await page.locator('.function-tree animateMotion').count()==0
+  assert await page.locator('.cosmic-star').count()==38
   before=await page.locator('canvas').first.evaluate('c=>c.toDataURL()');await page.wait_for_timeout(150);assert before!=await page.locator('canvas').first.evaluate('c=>c.toDataURL()')
   async def say(gain=.15):
    await page.evaluate('(gain)=>{micGain.gain.value=gain;setTimeout(()=>micGain.gain.value=0,650)}',gain)

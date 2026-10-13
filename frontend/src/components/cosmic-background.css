@@ -1,0 +1,13 @@
+.cosmic-background{position:absolute;inset:0;overflow:hidden;pointer-events:none;background-position:center;background-size:cover;background-color:#020916}
+.cosmic-nebula{position:absolute;inset:0;background:radial-gradient(ellipse at -8% 27%,#087db543,transparent 48%),radial-gradient(ellipse at 108% 76%,#7763da30,transparent 42%),radial-gradient(ellipse at 52% 42%,#020a1300,#02091630)}
+.cosmic-star{position:absolute;border-radius:50%;background:#defaff;box-shadow:0 0 5px #63d8ff;animation:cosmic-twinkle 6s ease-in-out infinite;opacity:.55}
+@keyframes cosmic-twinkle{0%,100%{opacity:.23}50%{opacity:.9}}
+.cosmic-meteor{position:absolute;width:110px;height:1.5px;opacity:0;background:linear-gradient(90deg,transparent,#87daff,#fff);transform-origin:right;animation:cosmic-shoot 29s linear infinite}
+.meteor-one{top:14%;left:58%;animation-delay:-11s}.meteor-two{top:33%;left:25%;animation-duration:43s;animation-delay:-24s}
+@keyframes cosmic-shoot{0%,95%{opacity:0;transform:translate(0,0) rotate(-32deg)}96%{opacity:.8}99%{opacity:0;transform:translate(-400px,250px) rotate(-32deg)}100%{opacity:0;transform:translate(-400px,250px) rotate(-32deg)}}
+.cosmic-paused *{animation-play-state:paused!important}@media(prefers-reduced-motion:reduce){.cosmic-background *{animation:none!important}}
+.function-tree{position:absolute;right:8px;top:50%;width:380px;height:590px;transform:translateY(-50%);z-index:25}
+.function-tree>svg{width:380px;height:590px;overflow:visible}.function-tree text{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:600;letter-spacing:.6px}
+.function-tree .tree-node{cursor:pointer;outline:none}.function-tree .tree-node:hover,.function-tree .tree-node:focus-visible{filter:brightness(1.4)}
+.tree-star{pointer-events:none}.scene-under-panel{display:none!important}
+@media(max-width:1023px){.function-tree{width:170px;height:auto;top:10%;transform:none}.function-tree>svg{width:170px;height:500px}.function-tree .tree-link,.function-tree .tree-star{display:none}}

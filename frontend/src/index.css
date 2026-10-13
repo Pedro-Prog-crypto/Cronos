@@ -65,7 +65,7 @@
 .memory-node{cursor:pointer}.memory-node:hover circle{stroke:white;stroke-width:2}
 .memory-flow{animation:memory-shimmer 9s ease-in-out infinite}.memory-center-light{animation:memory-shimmer 4s ease-in-out infinite}
 @keyframes memory-shimmer{50%{opacity:.35}}
-.eye-slot{position:absolute;left:59%;top:29%;width:20%;height:40%;z-index:22;transition:left .9s ease,top .9s ease,width .9s ease,height .9s ease}
+.eye-slot{position:absolute;left:60%;top:29%;width:18%;height:40%;z-index:22;transition:left .9s ease,top .9s ease,width .9s ease,height .9s ease}
 .eye-slot.expanded{left:1%;top:5%;width:43%;height:86%;border-radius:50%;overflow:hidden;box-shadow:0 0 24px #00baff40,inset 0 0 14px #00cfff55;border:1px solid #00cfff55;background:#000a10}
 .holographic-globe{width:100%;height:100%;cursor:pointer;overflow:visible}.earth-grid{animation:earth-shimmer 8s ease-in-out infinite}.earth-beacons{animation:earth-shimmer 3s ease-in-out infinite}
 @keyframes earth-shimmer{50%{opacity:.4}}
