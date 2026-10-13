@@ -13,6 +13,7 @@ import re
 import time
 from cronos import conversation_metrics
 from cronos import usage
+from cronos.reply_stream import ready_reply,deliver,ready_intro,deliver_intro
 from cronos.providers import OUTPUT_RULES,ProviderError,parse_reply,record_gemini_error
 
 ORIGINAL_MODELS=('models/gemini-3.1-flash-live-preview','models/gemini-2.5-flash-native-audio-preview-12-2025')
@@ -24,6 +25,7 @@ def make_client(key):
 async def turn(client,model,system,messages):
     from google.genai import types
     started=time.perf_counter();metrics={}
+    delivered=False;intro_delivered=False
     config=types.LiveConnectConfig(response_modalities=['AUDIO'],output_audio_transcription={},system_instruction=system+'\n'+OUTPUT_RULES)
     async with client.aio.live.connect(model=model,config=config) as session:
         metrics['connection_ms']=round((time.perf_counter()-started)*1000)
@@ -36,6 +38,7 @@ async def turn(client,model,system,messages):
         await session.send_client_content(turns=turns,turn_complete=True)
         sent=time.perf_counter();chunks=[]
         async def drain():
+            nonlocal delivered,intro_delivered
             async for response in session.receive():
                 content=getattr(response,'server_content',None)
                 transcription=getattr(content,'output_transcription',None)
@@ -43,6 +46,16 @@ async def turn(client,model,system,messages):
                     if not chunks:metrics['first_transcription_ms']=round((time.perf_counter()-sent)*1000)
                     chunks.append(transcription.text)
                     candidate=re.sub(r'^```(?:json)?\s*|\s*```$','', ''.join(chunks).strip(),flags=re.I)
+                    if not intro_delivered:
+                        intro=ready_intro(candidate)
+                        if intro:
+                            await deliver_intro(intro);intro_delivered=True
+                            metrics['intro_ready_ms']=round((time.perf_counter()-sent)*1000)
+                    if not delivered:
+                        early=ready_reply(candidate)
+                        if early:
+                            await deliver(early);delivered=True
+                            metrics['reply_ready_ms']=round((time.perf_counter()-sent)*1000)
                     if candidate.endswith('}'):
                         try:parse_reply(candidate)
                         except ProviderError:pass

@@ -30,3 +30,26 @@ async function nativeConnection(){
 }
 window.addEventListener('pywebviewready',()=>void nativeConnection());
 void nativeConnection();
+
+// Deliver the finished answer while its memory metadata is still arriving.
+// No automatic retry: a repeated request could repeat tools or consume quota.
+export async function streamChat(body:unknown,signal:AbortSignal,onReply:(reply:string)=>void,onIntro?:(reply:string)=>void){
+  const response=await api('/chat/stream',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal});
+  const reader=response.body?.getReader();
+  let buffer='',result:any=null;
+  const event=(line:string)=>{
+    if(!line.trim())return;
+    const data=JSON.parse(line);
+    if(data.type==='intro')onIntro?.(data.reply);
+    if(data.type==='reply')onReply(data.reply);
+    if(data.type==='result')result=data.result;
+    if(data.type==='error')throw new ApiError(data.detail?.message||'Não foi possível conversar.',data.status,data.detail);
+  };
+  if(reader){
+    const decoder=new TextDecoder();
+    try{while(true){const next=await reader.read();buffer+=decoder.decode(next.value,{stream:!next.done});let end;while((end=buffer.indexOf('\n'))>=0){event(buffer.slice(0,end));buffer=buffer.slice(end+1);}if(next.done)break;}event(buffer);}
+    finally{await reader.cancel().catch(()=>{});reader.releaseLock();}
+  }else{for(const line of (await response.text()).split('\n'))event(line);}
+  if(!result)throw new ApiError('A resposta foi interrompida antes da conclusão.',502);
+  return result;
+}

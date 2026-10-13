@@ -38,8 +38,8 @@ async def main():
   await page.route('**/voice/transcribe',transcribe)
   reply='Sócrates foi um filósofo ateniense conhecido por suas perguntas. '+'Seu método questionava definições e procurava contradições. '*14
   async def chat(route):
-   chats.append(route.request.post_data);await route.fulfill(json={'reply':reply,'session_id':'latency-session','tool_results':[]})
-  await page.route('**/chat',chat)
+   chats.append(route.request.post_data);await route.fulfill(body='\n'.join(json.dumps(event) for event in [{'type':'intro','reply':reply[:reply.index('. ')+2]},{'type':'reply','reply':reply},{'type':'result','result':{'reply':reply,'session_id':'latency-session','tool_results':[]}}])+'\n',content_type='application/x-ndjson')
+  await page.route('**/chat/stream',chat)
   parts=[];completed=[]
   async def speech(route):
    text=json.loads(route.request.post_data)['text'];parts.append(text);index=len(parts)
@@ -130,12 +130,12 @@ async def main():
   await page.wait_for_timeout(2500);assert len(await page.evaluate('window.playTimes'))==stopped
   async def delayed_chat(route):
    await asyncio.sleep(1.5)
-   try:await route.fulfill(json={'reply':'Resposta atrasada que não deve tocar.','session_id':'cancelled','tool_results':[]})
+   try:await route.fulfill(body=json.dumps({'type':'result','result':{'reply':'Resposta atrasada que não deve tocar.','session_id':'cancelled','tool_results':[]}})+'\n',content_type='application/x-ndjson')
    except Exception:pass  # the client deliberately aborted this request
-  await page.route('**/chat',delayed_chat)
+  await page.route('**/chat/stream',delayed_chat)
   await ask('Cancelar antes da resposta');await page.wait_for_timeout(100);await page.keyboard.press('Escape')
   await page.wait_for_timeout(2000);assert len(await page.evaluate('window.playTimes'))==stopped
-  await page.unroute('**/chat',delayed_chat)
+  await page.unroute('**/chat/stream',delayed_chat)
   await ask('Nova pergunta após cancelar')
   await page.wait_for_function('(n)=>window.playTimes.length>n',arg=stopped,timeout=20000)
   await page.keyboard.press('Escape')

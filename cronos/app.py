@@ -1,4 +1,5 @@
 import asyncio
+import json
 import secrets
 from pathlib import Path
 from contextlib import asynccontextmanager
@@ -203,6 +204,56 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 raise HTTPException(500, "Não foi possível ler ou salvar personalidade/memória.")
         request.app.state.features.record("language", "passed", "Uma conversa foi processada e salva. Não certifica precisão de todas as respostas.")
         return result
+
+    @app.post("/chat/stream", dependencies=[Depends(authenticate)])
+    async def stream_chat(body: ChatInput, request: Request):
+        from cronos.reply_stream import reply_sink,intro_sink
+        if not body.message.strip():raise HTTPException(422,"A mensagem não pode ser vazia.")
+        session=body.session_id or uuid4()
+        async def events():
+            panels=request.app.state.panels;panels.active+=1
+            queue=asyncio.Queue(maxsize=4);spoken=None;intro_text=None
+            async def ready(reply):
+                nonlocal spoken
+                if spoken is None:
+                    spoken=reply
+                    await queue.put({'type':'reply','reply':reply,'session_id':str(session)})
+            async def intro(text):
+                nonlocal intro_text
+                if intro_text is not None:return
+                intro_text=text
+                await queue.put({'type':'intro','reply':text,'session_id':str(session)})
+            async def run():
+                token=reply_sink.set(ready);intro_token=intro_sink.set(intro)
+                try:
+                    async with request.app.state.lock:
+                        try:result=await request.app.state.engine.chat(session,body.message)
+                        finally:request.app.state.engine.phase='idle'
+                    if (spoken is not None and spoken!=result['reply']) or (intro_text is not None and not result['reply'].startswith(intro_text)):
+                        raise ProviderError('A resposta transmitida não corresponde ao resultado final.',502)
+                    request.app.state.features.record('language','passed','Conversa processada e salva.')
+                    await queue.put({'type':'result','result':result})
+                except ProviderError as exc:
+                    detail={'message':str(exc)}
+                    if isinstance(exc,TurnError):detail.update(session_id=str(exc.session),tool_results=exc.results)
+                    await queue.put({'type':'error','status':exc.status,'detail':detail})
+                except (OSError,ValueError):
+                    await queue.put({'type':'error','status':500,'detail':{'message':'Não foi possível ler ou salvar personalidade/memória.'}})
+                except Exception:
+                    await queue.put({'type':'error','status':500,'detail':{'message':'Falha ao concluir a conversa.'}})
+                finally:
+                    reply_sink.reset(token);intro_sink.reset(intro_token)
+            task=asyncio.create_task(run())
+            try:
+                while True:
+                    event=await queue.get()
+                    yield json.dumps(event,ensure_ascii=False)+'\n'
+                    if event['type'] in {'result','error'}:break
+            finally:
+                task.cancel()
+                with suppress(asyncio.CancelledError):await task
+                panels.active-=1;panels.requests+=1
+        return StreamingResponse(events(),media_type='application/x-ndjson',headers={'Cache-Control':'no-store','X-Accel-Buffering':'no'})
 
     @app.get("/conversations/{session_id}", dependencies=[Depends(authenticate)])
     async def conversation(session_id: UUID, request: Request):

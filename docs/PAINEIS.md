@@ -46,3 +46,11 @@ Pedidos explícitos de notícias atuais fazem a busca antes da primeira geraçã
 Processamento passa a exibir o tempo de busca e a quantidade de chamadas à IA. A primeira parte enviada ao Fish tem até 120 caracteres para iniciar a reprodução antes; as partes restantes continuam sendo reproduzidas integralmente. Modelos, chaves e ID da voz permanecem os mesmos.
 
 A busca de notícias limita a espera de rede a 3 segundos por operação do buscador. Nesse caminho, novas buscas no mesmo turno são bloqueadas, inclusive com argumentos diferentes, para evitar uma sequência de esperas após falha. Isso não garante um prazo total fixo: Gemini, rede e síntese de voz ainda têm latências próprias.
+
+## Início antecipado da resposta em todas as conversas
+
+A interface usa `POST /chat/stream` (NDJSON autenticado), mantendo `/chat` compatível com clientes existentes. No transporte Gemini Live, o JSON começa com `tool_calls`: pedidos de ferramenta não são anunciados como ações realizadas. Quando esse campo é vazio, uma frase inicial completa (ou um trecho curto em limite de palavra) pode ser enviada à voz enquanto o restante da resposta e os metadados de memória ainda chegam. A resposta integral continua sendo validada e salva; não é cortada para reduzir a espera. Resumos de memória evitam duplicar o texto inteiro.
+
+A interface reproduz o início e o restante na ordem, sem repetir o prefixo. ESC cancela leitura, síntese e reprodução; fechar o fluxo cancela a geração no servidor. Falhas mantêm o código do provedor e não disparam repetição automática. Caso o modelo não respeite a ordem dos campos, o sistema aguarda o resultado validado, sem tentar extrair texto de um pedido de ferramenta. A chave, o ID da voz, o modelo Fish e seu pedido JSON continuam os mesmos.
+
+`chat_ms` no diagnóstico do cliente mede agora a espera até o primeiro trecho enviado à voz quando há transmissão antecipada; a duração total do backend permanece disponível separadamente. Tempos de Gemini e Fish medidos na nuvem não garantem a mesma duração de ponta a ponta no Windows: captura, reconhecimento, rede e reprodução também participam.

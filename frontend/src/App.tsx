@@ -3,7 +3,7 @@ import React,{Suspense,lazy,useCallback,useEffect,useRef,useState} from 'react';
 import {Mic,X,Send} from 'lucide-react';
 import {IntegratedNeuralStage} from './components/IntegratedNeuralStage';
 import {useCronosVoice,useMicrophone} from './hooks/useCronosVoice';
-import {api,jsonApi,getToken,onConnection,ApiError} from './api';
+import {api,jsonApi,getToken,onConnection,ApiError,streamChat} from './api';
 
 import {MemorySpiral,MemoryGraph} from './components/MemorySpiral';
 import {HolographicGlobe} from './components/HolographicGlobe';
@@ -139,13 +139,34 @@ export default function App(){
     const turnLatency=latency.current;
     const version=++turnVersion.current,controller=new AbortController();chatAbort.current=controller;
     try{
-      const result=await(await api('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,session_id:session.current}),signal:controller.signal})).json();if(version!==turnVersion.current||controller.signal.aborted)return;turnLatency.chat_ms=Math.round(performance.now()-turnLatency.started);saveLatency(turnLatency);session.current=result.session_id;setDisplayTurn({question:text,source,reply:result.reply});setGraphRevision(value=>value+1);
+      let voiced=false,introText='',replyDelivered=false;let introSpeech:Promise<void>|null=null;
+      const intro=(reply:string)=>{
+        if(version!==turnVersion.current||controller.signal.aborted||voiced||!autoVoice||!config?.fish_speech_configured)return;
+        introText=reply;voiced=true;turnLatency.chat_ms=Math.round(performance.now()-turnLatency.started);latency.current=turnLatency;turnLatency.armed=true;saveLatency(turnLatency);introSpeech=voice.speak(reply,turnLatency.turn_id);
+      };
+      const ready=(reply:string)=>{
+        if(version!==turnVersion.current||controller.signal.aborted)return;
+        if(replyDelivered)return;replyDelivered=true;
+        setDisplayTurn({question:text,source,reply});setNotice('');
+        if(introText){
+          if(!reply.startsWith(introText))throw new ApiError('A resposta inicial divergiu da resposta completa.',502);
+          const rest=reply.slice(introText.length);
+          if(rest.trim())void introSpeech!.then(()=>{if(version===turnVersion.current&&!controller.signal.aborted)void voice.speak(rest,turnLatency.turn_id);});
+        }
+        if(autoVoice&&config?.fish_speech_configured&&!voiced){
+          voiced=true;turnLatency.chat_ms=Math.round(performance.now()-turnLatency.started);
+          latency.current=turnLatency;turnLatency.armed=true;saveLatency(turnLatency);
+          void voice.speak(reply,turnLatency.turn_id);
+        }
+      };
+      const result=await streamChat({message:text,session_id:session.current},controller.signal,ready,intro);if(version!==turnVersion.current||controller.signal.aborted)return;if(!voiced)turnLatency.chat_ms=Math.round(performance.now()-turnLatency.started);saveLatency(turnLatency);session.current=result.session_id;setDisplayTurn({question:text,source,reply:result.reply});setGraphRevision(value=>value+1);
       setTools(old=>[...old,...(result.tool_results||[])]);
       if(result.warnings?.length)tell(result.warnings.join('\n'),true);else setNotice('');
-      if(autoVoice&&config?.fish_speech_configured){latency.current=turnLatency;turnLatency.armed=true;void voice.speak(result.reply,turnLatency.turn_id);}
+      if(autoVoice&&config?.fish_speech_configured){ready(result.reply);}
       else if(autoVoice)tell('A resposta está escrita, mas a voz não está configurada. Confira a configuração da voz no arquivo .env.',true);
     }catch(error){
       if(version!==turnVersion.current||controller.signal.aborted)return;
+      controller.abort();voice.stop();
       if(error instanceof ApiError&&error.detail?.tool_results){session.current=error.detail.session_id;setTools(old=>[...old,...error.detail.tool_results]);}
       tell(error instanceof Error?error.message:'Não foi possível conversar.',true);
       setDraft(text); // Falha não elimina a pergunta; não repetir ações automaticamente.
