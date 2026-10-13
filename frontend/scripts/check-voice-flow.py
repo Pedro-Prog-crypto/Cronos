@@ -47,9 +47,9 @@ async def main():
   await expect(page.get_by_role('button',name='Desligar microfone')).to_have_attribute('aria-pressed','true',timeout=7000)
   assert await page.locator('canvas[data-render-thread=worker]').count()==2
   before=await page.locator('canvas').first.evaluate('c=>c.toDataURL()');await page.wait_for_timeout(150);assert before!=await page.locator('canvas').first.evaluate('c=>c.toDataURL()')
-  async def say():
-   await page.evaluate('()=>{micGain.gain.value=.15;setTimeout(()=>micGain.gain.value=0,650)}')
-  await say();await page.wait_for_function('()=>window.playTimes.length===1',timeout=20000)
+  async def say(gain=.15):
+   await page.evaluate('(gain)=>{micGain.gain.value=gain;setTimeout(()=>micGain.gain.value=0,650)}',gain)
+  await say(.008);await page.wait_for_function('()=>window.playTimes.length===1',timeout=20000)
   assert 2 not in completed
   # Simulate the assistant's sound reaching the input while it is speaking.
   await page.evaluate('()=>{micGain.gain.value=.15;setTimeout(()=>micGain.gain.value=0,700)}')
@@ -83,6 +83,15 @@ async def main():
   await say();await expect(page.locator('.world-map-frame')).to_have_count(0,timeout=20000)
   assert len(chats)==2
   print('PASS: spoken natural eye command opens real Cesium canvas without Gemini; closing unmounts it. External imagery not validated.',flush=True)
+  before_map_escape=len(await page.evaluate('window.playTimes'))
+  await page.get_by_role('button',name='ENTENDIMENTO DE LINGUAGEM',exact=True).click()
+  await page.locator('#chat-input').fill('abrir olho de Deus');await page.get_by_role('button',name='Enviar mensagem').click()
+  await expect(page.frame_locator('.world-map-frame').locator('.cesium-widget canvas')).to_be_visible(timeout=20000)
+  await page.wait_for_function('(n)=>window.playTimes.length>n',arg=before_map_escape,timeout=20000)
+  await page.frame_locator('.world-map-frame').locator('.cesium-widget canvas').click()
+  await page.keyboard.press('Escape');await expect(page.locator('.world-map-frame')).to_have_count(0)
+  assert len(chats)==2
+  print('PASS: ESC with focus inside map reaches parent and stops/closes it.',flush=True)
   await page.wait_for_function('()=>document.querySelector(".reference-mic").title==="Microfone ligado"',timeout=20000)
   await page.wait_for_timeout(900)
   transcript[0]='Cronos, na escuta?';before_presence=len(await page.evaluate('window.playTimes'))
@@ -100,6 +109,27 @@ async def main():
   await page.get_by_role('button',name='Desligar microfone').click()
   await page.get_by_role('button',name='ENTENDIMENTO DE LINGUAGEM',exact=True).click();await page.locator('#chat-input').fill('mostrar resposta');await page.get_by_role('button',name='Enviar mensagem').click()
   await expect(page.locator('.answer-card-deck')).to_contain_text('Sócrates')
+  # ESC must interrupt current audio and suppress a response that was still pending.
+  async def ask(text):
+   await page.get_by_role('button',name='ENTENDIMENTO DE LINGUAGEM',exact=True).click()
+   await page.locator('#chat-input').fill(text);await page.get_by_role('button',name='Enviar mensagem').click()
+  played=len(await page.evaluate('window.playTimes'))
+  await ask('Teste de interrupção da fala')
+  await page.wait_for_function('(n)=>window.playTimes.length>n',arg=played,timeout=20000)
+  await page.keyboard.press('Escape');stopped=len(await page.evaluate('window.playTimes'))
+  await page.wait_for_timeout(2500);assert len(await page.evaluate('window.playTimes'))==stopped
+  async def delayed_chat(route):
+   await asyncio.sleep(1.5)
+   try:await route.fulfill(json={'reply':'Resposta atrasada que não deve tocar.','session_id':'cancelled','tool_results':[]})
+   except Exception:pass  # the client deliberately aborted this request
+  await page.route('**/chat',delayed_chat)
+  await ask('Cancelar antes da resposta');await page.wait_for_timeout(100);await page.keyboard.press('Escape')
+  await page.wait_for_timeout(2000);assert len(await page.evaluate('window.playTimes'))==stopped
+  await page.unroute('**/chat',delayed_chat)
+  await ask('Nova pergunta após cancelar')
+  await page.wait_for_function('(n)=>window.playTimes.length>n',arg=stopped,timeout=20000)
+  await page.keyboard.press('Escape')
+  print('PASS: ESC stops audio, pending chunks and late chat response; a new question works afterwards.',flush=True)
   # The same drawing code must remain functional on older WebView2 without workers/offscreen.
   fallback=await b.new_page(viewport={'width':1366,'height':768})
   await fallback.add_init_script('window.Worker=undefined;window.OffscreenCanvas=undefined')

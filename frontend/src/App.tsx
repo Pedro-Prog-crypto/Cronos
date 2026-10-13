@@ -27,6 +27,7 @@ export default function App(){
   const sendRef=useRef<(text:string)=>Promise<void>>(async()=>{});
   const commandRef=useRef<(text:string)=>boolean>(()=>false),eyeAnnouncement=useRef(false);
   const pendingAlerts=useRef(new Map<number,any>());
+  const chatAbort=useRef<AbortController|null>(null),turnVersion=useRef(0),interrupt=useRef(()=>{});
   const session=useRef<string|null>(null),iframe=useRef<HTMLIFrameElement|null>(null),cursor=useRef(0),inFlight=useRef(false);
   const activity=useRef<'IDLE'|'LISTENING'|'SPEAKING'>('IDLE');const [moduleActivity,setModuleActivity]=useState(activity.current);
   const tell=useCallback((message:string,isError=false)=>{setNotice(message);setError(isError);},[]);
@@ -53,6 +54,7 @@ export default function App(){
   useEffect(()=>{
     const receive=(event:MessageEvent)=>{
       if(event.origin!==window.location.origin||event.source!==iframe.current?.contentWindow)return;
+      if(event.data?.type==='cronos:interrupt'){interrupt.current();return;}
       if(event.data?.type==='cronos:activity'&&['IDLE','LISTENING','SPEAKING'].includes(event.data.state))setModuleActivity(event.data.state);
     };
     window.addEventListener('message',receive);return()=>window.removeEventListener('message',receive);
@@ -110,7 +112,8 @@ export default function App(){
   };commandRef.current=runCommand;
   const selectNote=useCallback(async(path:string)=>{if(eyeOpen){setEyeOpen(false);return;}try{setNote(await jsonApi(`/memory/note?path=${encodeURIComponent(path)}`));}catch(error){tell('Não foi possível abrir essa nota.',true);}},[eyeOpen,tell]);
   const worldReady=()=>{if(eyeAnnouncement.current){eyeAnnouncement.current=false;if(config?.fish_speech_configured)void voice.speak('Ampliando sua perspectiva. Olho de Deus aberto.');}};
-  useEffect(()=>{const key=(event:KeyboardEvent)=>{if(event.key==='Escape'){setEyeOpen(false);setNote(null);setChatOpen(false);setShowSpokenCards(false);}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);},[]);
+  interrupt.current=()=>{turnVersion.current++;chatAbort.current?.abort();voice.stop();microphone.cancelCapture();eyeAnnouncement.current=false;pendingAlerts.current.clear();setBusy(false);inFlight.current=false;setModule(null);setEyeOpen(false);setNote(null);setChatOpen(false);setShowSpokenCards(false);setNotice('');};
+  useEffect(()=>{const key=(event:KeyboardEvent)=>{if(event.key==='Escape'){event.preventDefault();interrupt.current();}};window.addEventListener('keydown',key);return()=>{window.removeEventListener('keydown',key);chatAbort.current?.abort();};},[]);
   useEffect(()=>{if(!notice)return;const timer=setTimeout(()=>setNotice(''),8000);return()=>clearTimeout(timer);},[notice]);
 
   const autoMic=useRef(false);
@@ -124,17 +127,19 @@ export default function App(){
     if(!connected){tell('A conexão automática ainda não está disponível. Feche e abra o Kronos novamente.',true);return;}
     setShowSpokenCards(source==='text');setDisplayTurn({question:text,source,reply:''});setChatOpen(false);
     inFlight.current=true;setBusy(true);voice.stop();if(autoVoice)voice.prepare();setDraft('');tell('Cronos está processando sua mensagem…');
+    const version=++turnVersion.current,controller=new AbortController();chatAbort.current=controller;
     try{
-      const result=await jsonApi('/chat',{message:text,session_id:session.current});session.current=result.session_id;setDisplayTurn({question:text,source,reply:result.reply});setGraphRevision(value=>value+1);
+      const result=await(await api('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,session_id:session.current}),signal:controller.signal})).json();if(version!==turnVersion.current||controller.signal.aborted)return;session.current=result.session_id;setDisplayTurn({question:text,source,reply:result.reply});setGraphRevision(value=>value+1);
       setTools(old=>[...old,...(result.tool_results||[])]);
       if(result.warnings?.length)tell(result.warnings.join('\n'),true);else setNotice('');
       if(autoVoice&&config?.fish_speech_configured)void voice.speak(result.reply);
       else if(autoVoice)tell('A resposta está escrita, mas a voz não está configurada. Confira a configuração da voz no arquivo .env.',true);
     }catch(error){
+      if(version!==turnVersion.current||controller.signal.aborted)return;
       if(error instanceof ApiError&&error.detail?.tool_results){session.current=error.detail.session_id;setTools(old=>[...old,...error.detail.tool_results]);}
       tell(error instanceof Error?error.message:'Não foi possível conversar.',true);
       setDraft(text); // Falha não elimina a pergunta; não repetir ações automaticamente.
-    }finally{setBusy(false);inFlight.current=false;}
+    }finally{if(version===turnVersion.current){setBusy(false);inFlight.current=false;chatAbort.current=null;}}
   };
   sendRef.current=text=>sendText(text,'transcription');
   const send=(event:React.FormEvent)=>{event.preventDefault();void sendText(draft);};

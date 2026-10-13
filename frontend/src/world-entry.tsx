@@ -11,7 +11,8 @@ function World(){
    if(event.source!==window.parent||event.origin!==window.location.origin||event.data?.type!=='cronos:world')return;
    if(typeof event.data.token!=='string'||!event.data.token)return;
    connect(event.data.token);setQuery(typeof event.data.query==='string'?event.data.query.slice(0,160):'');setReady(true);
-  };window.addEventListener('message',receive);parent('cronos:world-boot');return()=>window.removeEventListener('message',receive);
+  };const key=(event:KeyboardEvent)=>{if(event.key==='Escape'){event.preventDefault();parent('cronos:interrupt');}};
+  window.addEventListener('keydown',key);window.addEventListener('message',receive);parent('cronos:world-boot');return()=>{window.removeEventListener('message',receive);window.removeEventListener('keydown',key);};
  },[]);
  return ready?<WorldView query={query} onError={message=>parent('cronos:world-error',message)} onReady={()=>parent('cronos:world-ready')}/>:null;
 }

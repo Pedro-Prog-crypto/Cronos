@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID, uuid4
 from cronos.security import safe_path
-from cronos.memory_policy import knowledge_topics,graph_note
+from cronos.memory_policy import knowledge_topics,graph_note,substantive_question
 
 
 def fold(text):
@@ -267,12 +267,13 @@ class Memory:
                 index_body = f"- [[{target['path'][:-3]}|{target['title'].replace(']', '').replace('|', '-')}]]\n"
                 db.execute("INSERT OR IGNORE INTO exports(path,marker,header,body) VALUES(?,?,?,?)",
                            ("Mapa de Conhecimento.md", "index:" + target["path"], "# Mapa de Conhecimento\n\n", index_body))
-            if topics:
+            if topics or substantive_question(message):
                 knowledge = f"Memorias/{event}.md"
                 links = " · ".join(f"[[{path[:-3]}]]" for path in files)
                 db.execute("INSERT INTO exports(path,marker,header,body) VALUES(?,?,?,?)",
                            (knowledge, event + ':memory', f"# {message[:100].replace(chr(10), ' ')}\n",
                             f"\nCriada: {stamp}\n\nOrigem: [[Conversas/{session}]]\n\nTemas: {links}\n\n### Você\n{quoted(message)}\n\n### Resposta de IA, não verificada\n{quoted(reply)}\n"))
+                if not topics:files.append(knowledge)
         self.flush_exports()
         try:
             self.sync_notes()

@@ -248,6 +248,11 @@ $("record").addEventListener("click", async () => {
 
 $("player").addEventListener("error", () => notice("O navegador não conseguiu reproduzir o áudio recebido.", true));
 window.addEventListener("beforeunload", () => { releaseMicrophone(); if (audioUrl) URL.revokeObjectURL(audioUrl); });
+window.addEventListener('keydown',event=>{
+  if(event.key!=='Escape')return;
+  event.preventDefault();clearAudio();stopAlertAudio();
+  if(window.parent!==window)window.parent.postMessage({type:'cronos:interrupt'},window.location.origin);
+});
 
 // Apenas consulta o diagnóstico; não chama modelos nem escaneia arquivos do usuário.
 let monitorTimer = null, monitorCursor = 0, monitorConnected = false, monitorPolling = false, monitorGeneration = 0;

@@ -12,6 +12,23 @@ class LocalRecognizer:
         self.model=None
         self.lock=threading.Lock()
 
+    def _load(self):
+        try:
+            from vosk import Model,KaldiRecognizer,SetLogLevel
+        except ImportError:
+            raise ValueError('Execute Instalar-Cronos.bat para instalar o reconhecimento local.') from None
+        if self.model is None:
+            try:folder=wake.verify_model()
+            except ValueError:
+                raise ValueError('Modelo português ausente. Execute Instalar-Cronos.bat para prepará-lo.') from None
+            SetLogLevel(-1)
+            try:self.model=Model(str(folder))
+            except Exception:raise ValueError('Não foi possível carregar o modelo português local.') from None
+        return KaldiRecognizer
+
+    def prepare(self):
+        with self.lock:self._load()
+
     def transcribe(self,audio):
         try:
             with wave.open(io.BytesIO(audio),'rb') as reader:
@@ -22,22 +39,19 @@ class LocalRecognizer:
         except (wave.Error,EOFError):
             raise ValueError('Áudio WAV inválido para reconhecimento local.') from None
         with self.lock:
-            try:
-                from vosk import Model,KaldiRecognizer,SetLogLevel
-            except ImportError:
-                raise ValueError('Execute Instalar-Cronos.bat para instalar o reconhecimento local.') from None
-            if self.model is None:
-                try:folder=wake.verify_model()
-                except ValueError:
-                    raise ValueError('Modelo português ausente. Execute Instalar-Cronos.bat para prepará-lo.') from None
-                SetLogLevel(-1)
-                try:self.model=Model(str(folder))
-                except Exception:raise ValueError('Não foi possível carregar o modelo português local.') from None
-            recognizer=KaldiRecognizer(self.model,16000);parts=[]
+            KaldiRecognizer=self._load()
+            recognizer=KaldiRecognizer(self.model,16000);parts=[];confidences=[]
+            if hasattr(recognizer,'SetWords'):recognizer.SetWords(True)
+            def collect(data):
+                parts.append(data.get('text',''))
+                confidences.extend(word['conf'] for word in data.get('result',[]) if isinstance(word,dict) and isinstance(word.get('conf'),(float,int)))
             for start in range(0,len(frames),8000):
-                if recognizer.AcceptWaveform(frames[start:start+8000]):parts.append(json.loads(recognizer.Result()).get('text',''))
-            parts.append(json.loads(recognizer.FinalResult()).get('text',''))
-            return ' '.join(text.strip() for text in parts if text.strip())
+                if recognizer.AcceptWaveform(frames[start:start+8000]):collect(json.loads(recognizer.Result()))
+            collect(json.loads(recognizer.FinalResult()))
+            text=' '.join(text.strip() for text in parts if text.strip())
+            if not text or (confidences and sum(confidences)/len(confidences)<.55):
+                raise ValueError('Não consegui reconhecer a fala com segurança. Repita a pergunta mais perto do microfone; ela não foi enviada à IA.')
+            return text
 
 
 def main():

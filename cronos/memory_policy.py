@@ -26,3 +26,7 @@ def graph_note(path,title):
     if path.startswith('Conversas/') or path=='Mapa de Conhecimento.md':return False
     if path.startswith(('Memorias/','Temas/')) and (normalized(title) in GENERIC_TITLES or (social_or_control(title) and (normalized(title) or path.startswith('Memorias/')))):return False
     return True
+
+def substantive_question(message):
+    if social_or_control(message):return False
+    return bool(re.search(r'(?:^| )(?:quem|como|por que|porque|o que|qual|quais|quanto|quantos|quantas|explique|calcule|demonstre|fale sobre|me fale sobre|conte sobre|noticias)(?: |$)',normalized(message)))

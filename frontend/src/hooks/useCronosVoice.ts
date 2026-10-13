@@ -97,9 +97,11 @@ export function useMicrophone(onTranscript:(text:string)=>void,onError:(message:
   const [recording,setRecording]=useState(false),[capturing,setCapturing]=useState(false),[starting,setStarting]=useState(false),[transcribing,setTranscribing]=useState(false);
   const audioLevelSource=useRef(0),enabled=useRef(false),opening=useRef(false),processing=useRef(false),mounted=useRef(true);
   const latest=useRef({onTranscript,onError,local,blocked});latest.current={onTranscript,onError,local,blocked};
+  const captureVersion=useRef(0),resumeAfter=useRef(0);
   const resources=useRef<{stream?:MediaStream;context?:AudioContext;recorder?:MediaRecorder;node?:AudioWorkletNode;timer?:ReturnType<typeof setInterval>;abort?:AbortController}>({});
+  const cancelCapture=useCallback(()=>{captureVersion.current++;processing.current=false;resumeAfter.current=performance.now()+250;resources.current.abort?.abort();resources.current.node?.port.postMessage({blocked:true});if(resources.current.recorder?.state==='recording')resources.current.recorder.stop();audioLevelSource.current=0;if(mounted.current){setCapturing(false);setTranscribing(false);}},[]);
   const stop=useCallback(()=>{
-    enabled.current=false;resources.current.abort?.abort();
+    enabled.current=false;captureVersion.current++;processing.current=false;resources.current.abort?.abort();
     if(resources.current.timer)clearInterval(resources.current.timer);
     const recorder=resources.current.recorder;if(recorder?.state==='recording')recorder.stop();
     if(resources.current.node){resources.current.node.port.onmessage=null;resources.current.node.disconnect();}
@@ -111,7 +113,7 @@ export function useMicrophone(onTranscript:(text:string)=>void,onError:(message:
     if(enabled.current||opening.current)return;
     enabled.current=true;opening.current=true;setStarting(true);
     try{
-      const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+      const stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:{ideal:1},echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
       if(!enabled.current||!mounted.current){stream.getTracks().forEach(track=>track.stop());return;}
       resources.current.stream=stream;const context=new AudioContext(latest.current.local?{sampleRate:16000}:undefined);resources.current.context=context;await context.resume();if(!enabled.current||!mounted.current)return;
       const meter=context.createAnalyser();meter.fftSize=256;context.createMediaStreamSource(stream).connect(meter);
@@ -119,33 +121,35 @@ export function useMicrophone(onTranscript:(text:string)=>void,onError:(message:
         await context.audioWorklet.addModule(new URL('../audio/capture.worklet.js',import.meta.url).href);if(!enabled.current||!mounted.current)return;
         const node=new AudioWorkletNode(context,'cronos-capture');resources.current.node=node;
         context.createMediaStreamSource(stream).connect(node);node.connect(context.destination);
-        const values=new Uint8Array(256);let resumeAfter=0;
+        const values=new Uint8Array(256);
         node.port.onmessage=async event=>{
           if(typeof event.data.active==='boolean'){if(mounted.current)setCapturing(event.data.active);return;}
           if(!enabled.current||latest.current.blocked||processing.current)return;
           const samples=event.data.samples as Int16Array,rate=event.data.rate as number;
           if(rate!==16000||samples.length>61*rate)return;
           processing.current=true;setTranscribing(true);node.port.postMessage({blocked:true});
+          const version=captureVersion.current;
           const abort=new AbortController();resources.current.abort=abort;
           try{
             const bytes=new ArrayBuffer(44),view=new DataView(bytes);
             const write=(offset:number,value:string)=>{for(let i=0;i<value.length;i++)view.setUint8(offset+i,value.charCodeAt(i));};
             write(0,'RIFF');view.setUint32(4,36+samples.length*2,true);write(8,'WAVE');write(12,'fmt ');view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);view.setUint32(24,rate,true);view.setUint32(28,rate*2,true);view.setUint16(32,2,true);view.setUint16(34,16,true);write(36,'data');view.setUint32(40,samples.length*2,true);
             const response=await api('/voice/transcribe',{method:'POST',headers:{'Content-Type':'audio/wav'},body:new Blob([bytes,samples.buffer as ArrayBuffer],{type:'audio/wav'}),signal:abort.signal});
-            const result=await response.json();if(enabled.current&&mounted.current&&result.text?.trim())latest.current.onTranscript(result.text);
+            const result=await response.json();if(version===captureVersion.current&&!abort.signal.aborted&&enabled.current&&mounted.current&&result.text?.trim())latest.current.onTranscript(result.text);
           }catch(error){if(enabled.current&&!abort.signal.aborted)latest.current.onError(error instanceof Error?error.message:'Transcrição indisponível.');}
-          finally{processing.current=false;resumeAfter=performance.now()+650;if(mounted.current)setTranscribing(false);}
+          finally{if(version===captureVersion.current){processing.current=false;resumeAfter.current=performance.now()+250;if(mounted.current)setTranscribing(false);}}
         };
         setRecording(true);setStarting(false);
         resources.current.timer=setInterval(()=>{
-          if(latest.current.blocked||processing.current)resumeAfter=performance.now()+650;
-          const blocked=latest.current.blocked||processing.current||performance.now()<resumeAfter;
+          if(latest.current.blocked||processing.current)resumeAfter.current=performance.now()+250;
+          const blocked=latest.current.blocked||processing.current||performance.now()<resumeAfter.current;
           node.port.postMessage({blocked});meter.getByteTimeDomainData(values);let sum=0;for(const value of values)sum+=((value-128)/128)**2;audioLevelSource.current=blocked?0:Math.min(1,Math.sqrt(sum/values.length)*4);
         },80);
         return;
       }
-      const values=new Uint8Array(256);let heard=false,lastSpeech=0,started=0,discard=false,resumeAfter=0;
+      const values=new Uint8Array(256);let heard=false,lastSpeech=0,started=0,discard=false;
       const begin=()=>{
+        const version=captureVersion.current;
         const type=['audio/webm;codecs=opus','audio/mp4','audio/ogg;codecs=opus'].find(type=>MediaRecorder.isTypeSupported(type));
         const recorder=new MediaRecorder(stream,type?{mimeType:type}:undefined);resources.current.recorder=recorder;
         const parts:BlobPart[]=[];let bytes=0;heard=false;discard=false;started=performance.now();lastSpeech=started;
@@ -153,15 +157,15 @@ export function useMicrophone(onTranscript:(text:string)=>void,onError:(message:
         recorder.onerror=()=>{discard=true;latest.current.onError('Falha na gravação do microfone.');stop();};
         recorder.onstop=async()=>{
           if(resources.current.recorder===recorder)resources.current.recorder=undefined;if(mounted.current)setCapturing(false);
-          if(!enabled.current||!mounted.current||discard||!heard||!bytes)return;
+          if(version!==captureVersion.current||!enabled.current||!mounted.current||discard||!heard||!bytes)return;
           processing.current=true;setTranscribing(true);const abort=new AbortController();resources.current.abort=abort;
           try{
             const blob=new Blob(parts,{type:recorder.mimeType}),audio=latest.current.local?await localWave(blob):blob;
             if(!enabled.current||abort.signal.aborted)return;
             const response=await api('/voice/transcribe',{method:'POST',headers:{'Content-Type':audio.type},body:audio,signal:abort.signal});
-            const result=await response.json();if(enabled.current&&mounted.current&&result.text?.trim())latest.current.onTranscript(result.text);
+            const result=await response.json();if(version===captureVersion.current&&!abort.signal.aborted&&enabled.current&&mounted.current&&result.text?.trim())latest.current.onTranscript(result.text);
           }catch(error){if(enabled.current&&!abort.signal.aborted)latest.current.onError(error instanceof Error?error.message:'Transcrição indisponível.');}
-          finally{processing.current=false;if(mounted.current)setTranscribing(false);}
+          finally{if(version===captureVersion.current){processing.current=false;if(mounted.current)setTranscribing(false);}}
         };
         recorder.start(500);
       };
@@ -169,18 +173,18 @@ export function useMicrophone(onTranscript:(text:string)=>void,onError:(message:
       resources.current.timer=setInterval(()=>{
         if(!enabled.current)return;
         const recorder=resources.current.recorder;
-        if(latest.current.blocked||processing.current){resumeAfter=performance.now()+650;audioLevelSource.current=0;if(recorder?.state==='recording'){discard=true;recorder.stop();}return;}
-        if(performance.now()<resumeAfter)return;
+        if(latest.current.blocked||processing.current){resumeAfter.current=performance.now()+250;audioLevelSource.current=0;if(recorder?.state==='recording'){discard=true;recorder.stop();}return;}
+        if(performance.now()<resumeAfter.current)return;
         if(!recorder){begin();return;}if(recorder.state!=='recording')return;
         meter.getByteTimeDomainData(values);let sum=0;for(const value of values)sum+=((value-128)/128)**2;
         const rms=Math.sqrt(sum/values.length),now=performance.now();audioLevelSource.current=Math.min(1,rms*4);
-        if(rms>.018){if(!heard)setCapturing(true);heard=true;lastSpeech=now;}
-        if((heard&&now-lastSpeech>1400)||(now-started>(heard?58000:3000)))recorder.stop();
+        if(rms>.006){if(!heard)setCapturing(true);heard=true;lastSpeech=now;}
+        if((heard&&now-lastSpeech>750)||(now-started>(heard?58000:3000)))recorder.stop();
       },80);
     }catch(error){stop();latest.current.onError(error instanceof Error?error.message:'Não foi possível abrir o microfone.');}
     finally{opening.current=false;if(mounted.current)setStarting(false);}
   },[stop]);
   const toggle=useCallback(()=>{if(enabled.current){stop();return Promise.resolve();}return start();},[start,stop]);
   useEffect(()=>()=>{mounted.current=false;stop();},[stop]);
-  return {recording,capturing,starting,transcribing,audioLevelSource,toggle,start,stop};
+  return {recording,capturing,starting,transcribing,audioLevelSource,toggle,start,stop,cancelCapture};
 }

@@ -60,10 +60,28 @@ def test_local_recognizer_reuses_model_and_decodes_pcm(monkeypatch):
     with wave.open(output,'wb') as writer:
         writer.setnchannels(1);writer.setsampwidth(2);writer.setframerate(16000);writer.writeframes(b'\0\0'*1600)
     service=LocalRecognizer()
+    service.prepare()
     assert service.transcribe(output.getvalue())=='abrir cronos'
     assert service.transcribe(output.getvalue())=='abrir cronos'
     assert len(calls)==1
     with pytest.raises(ValueError):service.transcribe(b'not-wav')
+
+@pytest.mark.parametrize('text,confidence',[('',1),('texto duvidoso',.2)])
+def test_unclear_local_speech_is_not_sent_as_a_guessed_question(monkeypatch,text,confidence):
+    import io,sys,wave
+    from types import SimpleNamespace
+    from cronos.recognition import LocalRecognizer
+    class Recognizer:
+        def __init__(self,*args):pass
+        def SetWords(self,value):assert value is True
+        def AcceptWaveform(self,frames):return False
+        def FinalResult(self):return json.dumps({'text':text,'result':[{'conf':confidence}]})
+    monkeypatch.setitem(sys.modules,'vosk',SimpleNamespace(Model=lambda folder:object(),KaldiRecognizer=Recognizer,SetLogLevel=lambda value:None))
+    monkeypatch.setattr('cronos.recognition.wake.verify_model',lambda:Path('local-model'))
+    output=io.BytesIO()
+    with wave.open(output,'wb') as writer:
+        writer.setnchannels(1);writer.setsampwidth(2);writer.setframerate(16000);writer.writeframes(b'\0\0'*1600)
+    with pytest.raises(ValueError,match='não foi enviada à IA'):LocalRecognizer().transcribe(output.getvalue())
 
 
 def test_official_portuguese_flat_layout_is_supported(tmp_path,monkeypatch):

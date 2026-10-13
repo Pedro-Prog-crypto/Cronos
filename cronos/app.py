@@ -42,6 +42,26 @@ class ApprovalInput(BaseModel):
     accepted: bool
 
 
+async def chat_until_disconnect(engine,session,message,request):
+    if await request.is_disconnected():raise HTTPException(499,'Conversa interrompida.')
+    task=asyncio.create_task(engine.chat(session,message))
+    async def watch():
+        while not task.done():
+            if await request.is_disconnected():return
+            await asyncio.sleep(.1)
+    watcher=asyncio.create_task(watch())
+    try:
+        done,_=await asyncio.wait({task,watcher},return_when=asyncio.FIRST_COMPLETED)
+        if task in done:return await task
+        task.cancel()
+        with suppress(asyncio.CancelledError):await task
+        raise HTTPException(499,'Conversa interrompida antes da resposta.')
+    finally:
+        watcher.cancel()
+        if not task.done():task.cancel()
+        await asyncio.gather(task,watcher,return_exceptions=True)
+
+
 class MemoryQuery(BaseModel):
     query: str = Field(min_length=1, max_length=3000)
     limit: int = Field(default=8, ge=1, le=100)
@@ -67,9 +87,16 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         await asyncio.to_thread(app.state.monitor.collect)
         task = asyncio.create_task(app.state.monitor.run())
         windows_task = asyncio.create_task(app.state.windows.watch())
+        async def warm_recognition():
+            if settings.transcription_provider!='vosk':return
+            try:await asyncio.to_thread(local_recognizer.prepare)
+            except ValueError:pass # The transcription endpoint reports configuration errors on use.
+        recognition_task=asyncio.create_task(warm_recognition())
         try:
             yield
         finally:
+            recognition_task.cancel()
+            with suppress(asyncio.CancelledError):await recognition_task
             task.cancel()
             with suppress(asyncio.CancelledError):
                 await task
@@ -150,7 +177,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         # Uma instância/worker: protege ordem das conversas e arquivos compartilhados.
         async with request.app.state.lock:
             try:
-                result = await request.app.state.engine.chat(session, body.message)
+                result = await chat_until_disconnect(request.app.state.engine,session,body.message,request)
             except TurnError as exc:
                 raise HTTPException(exc.status, {"message": str(exc), "session_id": str(exc.session), "tool_results": exc.results}) from exc
             except ProviderError as exc:
