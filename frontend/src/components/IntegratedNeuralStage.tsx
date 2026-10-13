@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Cpu,
   Eye,
@@ -21,6 +21,7 @@ import bgSpace from '../assets/images/deep_space_void_1791823511313.jpg';
 
 interface IntegratedNeuralStageProps {
   state: CronosState;
+  audioLevelSource?: React.RefObject<number>;
   audioLevel?: number;
   onOrbClick?: () => void;
   onMicToggle?: () => void;
@@ -43,6 +44,7 @@ interface FloatingFunctionNode {
 export const IntegratedNeuralStage: React.FC<IntegratedNeuralStageProps> = ({
   state,
   audioLevel = 0,
+  audioLevelSource,
   onOrbClick,
   onMicToggle,
   className = '',
@@ -187,6 +189,17 @@ export const IntegratedNeuralStage: React.FC<IntegratedNeuralStageProps> = ({
   const trunkExitX = starCx + 42;
   const trunkExitY = starCy + 26;
 
+  // Rasterize stationary conduit bloom once per hover/state, rather than on every moving packet.
+  const conduitBloom = useMemo(() => {
+    const paths = functions.map((fn, idx) => {
+      const y = 28 + idx * 45;
+      const active = hoveredId === fn.id || (state === 'SPEAKING' && (idx === 0 || idx === 2));
+      const d = `M ${starCx} ${starCy} C ${trunkExitX} ${trunkExitY}, ${lineTouchX - 54 - (idx % 2) * 8} ${y}, ${lineTouchX} ${y}`;
+      return `<g stroke="${fn.pathColor}" fill="none" filter="url(#b)"><path d="${d}" stroke-width="${active ? 2.8 : 1.6}" opacity=".85"/><circle cx="${symbolX}" cy="${y}" r="${symbolRadius}" stroke-width="${active ? 1.4 : 1}"/></g>`;
+    }).join('');
+    return 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="470" height="590" viewBox="0 0 470 590"><defs><filter id="b" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="2.4" result="a"/><feGaussianBlur stdDeviation="1" result="c"/><feMerge><feMergeNode in="a"/><feMergeNode in="c"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>${paths}</svg>`);
+  }, [hoveredId, state]);
+
   return (
     <div
       className={`relative w-full h-full overflow-hidden select-none ${className}`}
@@ -203,6 +216,7 @@ export const IntegratedNeuralStage: React.FC<IntegratedNeuralStageProps> = ({
         <CronosOrb
           state={state}
           audioLevel={audioLevel}
+          audioLevelSource={audioLevelSource}
           onOrbClick={onOrbClick}
           size={440}
           weaveDensity={1.0}
@@ -234,6 +248,7 @@ export const IntegratedNeuralStage: React.FC<IntegratedNeuralStageProps> = ({
             <StellarCore
               state={state}
               audioLevel={audioLevel}
+          audioLevelSource={audioLevelSource}
               onClick={onMicToggle}
               size={starVisualSize}
             />
@@ -274,20 +289,13 @@ export const IntegratedNeuralStage: React.FC<IntegratedNeuralStageProps> = ({
                 </filter>
 
                 {/* Intense Electric Blue Glow for the moving Photonic Data Packets */}
-                <filter id="intenseBlueSparkGlow" x="-100%" y="-100%" width="300%" height="300%">
-                  <feGaussianBlur stdDeviation="3.2" result="sparkBlur1" />
-                  <feGaussianBlur stdDeviation="1.4" result="sparkBlur2" />
-                  <feMerge>
-                    <feMergeNode in="sparkBlur1" />
-                    <feMergeNode in="sparkBlur2" />
-                    <feMergeNode in="SourceGraphic" />
-                  </feMerge>
-                </filter>
+                <radialGradient id="packet-light"><stop stopColor="#efffff"/><stop offset=".25" stopColor="#00f0ff" stopOpacity=".95"/><stop offset=".5" stopColor="#38bdf8" stopOpacity=".5"/><stop offset="1" stopColor="#00f0ff" stopOpacity="0"/></radialGradient>
 
                 <filter id="textShadowGlow" x="-20%" y="-20%" width="140%" height="140%">
                   <feDropShadow dx="0" dy="0" stdDeviation="2.2" floodColor="#000000" floodOpacity="0.9" />
                 </filter>
               </defs>
+              <image href={conduitBloom} width="470" height="590" pointerEvents="none" />
 
               {/* UNIFIED TRUNK INSIDE THE STAR:
                   Where all 12 lines are physically united into a single incandescent beam!
@@ -302,7 +310,7 @@ export const IntegratedNeuralStage: React.FC<IntegratedNeuralStageProps> = ({
                   stroke="#00f0ff"
                   strokeWidth={state === 'SPEAKING' ? 4.8 : 3.4}
                   strokeOpacity={0.95}
-                  filter="url(#brilliantCyanLineGlow)"
+
                 />
                 {/* Incandescent white core of the merged trunk */}
                 <line
@@ -320,7 +328,7 @@ export const IntegratedNeuralStage: React.FC<IntegratedNeuralStageProps> = ({
                   cy={starCy}
                   r={3.2}
                   fill="#ffffff"
-                  filter="url(#brilliantCyanLineGlow)"
+
                 />
               </g>
 
@@ -362,11 +370,7 @@ export const IntegratedNeuralStage: React.FC<IntegratedNeuralStageProps> = ({
                           ? 0.88
                           : 0.82
                       }
-                      filter={
-                        isRed
-                          ? 'url(#brilliantRedLineGlow)'
-                          : 'url(#brilliantCyanLineGlow)'
-                      }
+
                     />
 
                     {/* 2. Sharp vibrant optic fiber body */}
@@ -391,9 +395,8 @@ export const IntegratedNeuralStage: React.FC<IntegratedNeuralStageProps> = ({
                         - Highly luminous glow filter
                     */}
                     <circle
-                      r={isVoiceActive ? 3.6 : 2.8}
-                      fill="#00f0ff"
-                      filter="url(#intenseBlueSparkGlow)"
+                      r={isVoiceActive ? 10.8 : 8.4}
+                      fill="url(#packet-light)"
                     >
                       <animateMotion
                         path={pathD}
@@ -418,9 +421,8 @@ export const IntegratedNeuralStage: React.FC<IntegratedNeuralStageProps> = ({
 
                     {/* 5. Secondary trailing electric blue spark (larger & brighter) */}
                     <circle
-                      r={1.7}
-                      fill="#38bdf8"
-                      filter="url(#intenseBlueSparkGlow)"
+                      r={5.1}
+                      fill="url(#packet-light)"
                     >
                       <animateMotion
                         path={pathD}
@@ -438,7 +440,7 @@ export const IntegratedNeuralStage: React.FC<IntegratedNeuralStageProps> = ({
                       fill="#00f0ff"
                       stroke="#ffffff"
                       strokeWidth={0.8}
-                      filter="url(#intenseBlueSparkGlow)"
+
                     />
                   </g>
                 );
@@ -508,11 +510,7 @@ export const IntegratedNeuralStage: React.FC<IntegratedNeuralStageProps> = ({
                           : '#0284c7'
                       }
                       strokeWidth={isHovered || isVoiceActive ? 1.4 : 1.0}
-                      filter={
-                        isRed
-                          ? 'url(#brilliantRedLineGlow)'
-                          : 'url(#brilliantCyanLineGlow)'
-                      }
+
                     />
 
                     {/* Inner Icon embedded directly at the symbol center */}

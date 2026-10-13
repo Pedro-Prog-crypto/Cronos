@@ -3,6 +3,7 @@ import { CronosState } from '../types/cronos';
 
 interface CronosOrbProps {
   state: CronosState;
+  audioLevelSource?: React.RefObject<number>;
   audioLevel?: number; // 0.0 to 1.0, real-time speech output volume
   onOrbClick?: () => void;
   className?: string;
@@ -36,6 +37,7 @@ interface SparkNode {
 export const CronosOrb: React.FC<CronosOrbProps> = ({
   state,
   audioLevel = 0,
+  audioLevelSource,
   onOrbClick,
   className = '',
   size = 580,
@@ -70,16 +72,19 @@ export const CronosOrb: React.FC<CronosOrbProps> = ({
     let active = true;
     let previousFrame = performance.now();
     // Ceder tempo aos controles; preservar todos os filamentos, brilho e geometria.
-    function schedule(delay = 16) {
-      timer = window.setTimeout(() => { if (active) animId = requestAnimationFrame(render); }, delay);
+    function schedule(delay = 0) {
+      if (delay) timer = window.setTimeout(() => { if (active) animId = requestAnimationFrame(render); }, delay);
+      else if (active) animId = requestAnimationFrame(render);
     }
     const width = 1200, height = 1200;
     // Match bitmap to displayed size; preserve original geometry in logical coordinates.
     const renderScale = Math.min(1200, Math.ceil(size * Math.min(window.devicePixelRatio || 1, 1.25))) / 1200;
     canvas.width = Math.ceil(width * renderScale);canvas.height = Math.ceil(height * renderScale);
     ctx.setTransform(renderScale,0,0,renderScale,0,0);
-    const glowCanvas = document.createElement('canvas');glowCanvas.width=canvas.width;glowCanvas.height=canvas.height;
-    const glowCtx=glowCanvas.getContext('2d')!;glowCtx.setTransform(renderScale,0,0,renderScale,0,0);
+    const glowCanvas = document.createElement('canvas');glowCanvas.width=Math.ceil(canvas.width/2);glowCanvas.height=Math.ceil(canvas.height/2);
+    const glowCtx=glowCanvas.getContext('2d')!;glowCtx.setTransform(renderScale/2,0,0,renderScale/2,0,0);
+    const bloomCanvas = document.createElement('canvas');bloomCanvas.width=glowCanvas.width;bloomCanvas.height=glowCanvas.height;
+    const bloomCtx=bloomCanvas.getContext('2d')!;
     const centerX = width / 2;
     const centerY = height / 2;
 
@@ -253,12 +258,13 @@ export const CronosOrb: React.FC<CronosOrbProps> = ({
         previousFrame = performance.now(); schedule(150); return;
       }
       const now = performance.now();
+      if (now - previousFrame < 1000 / 30 - 1) { schedule(); return; }
       const frameDelta = Math.min(3, Math.max(.5, (now - previousFrame) / (1000 / 60)));
       previousFrame = now;
       ctx.clearRect(0, 0, width, height);
 
       const currentState = stateRef.current;
-      const currentAudio = audioLevelRef.current;
+      const currentAudio = audioLevelSource?.current ?? audioLevelRef.current;
 
       if (currentState === 'SPEAKING') {
         targetMajorRadius =
@@ -476,8 +482,9 @@ export const CronosOrb: React.FC<CronosOrbProps> = ({
         glowCtx.stroke();
       }
 
-      ctx.save();ctx.shadowBlur=0;ctx.filter=`blur(${5*renderScale}px)`;
-      ctx.drawImage(glowCanvas,0,0,width,height);ctx.restore();
+      bloomCtx.clearRect(0,0,bloomCanvas.width,bloomCanvas.height);
+      bloomCtx.filter=`blur(${2.5*renderScale}px)`;bloomCtx.drawImage(glowCanvas,0,0);
+      ctx.save();ctx.shadowBlur=0;ctx.drawImage(bloomCanvas,0,0,width,height);ctx.restore();
 
       // Pass B: Sharp crisp core beam of each strand
       for (let sIdx = 0; sIdx < strands.length; sIdx++) {
@@ -567,7 +574,7 @@ export const CronosOrb: React.FC<CronosOrbProps> = ({
       active = false; window.clearTimeout(timer);
       cancelAnimationFrame(animId);
     };
-  }, [weaveDensity]);
+  }, [weaveDensity, audioLevelSource]);
 
   return (
     <div
@@ -576,6 +583,7 @@ export const CronosOrb: React.FC<CronosOrbProps> = ({
       onClick={onOrbClick}
     >
       {/* 3D Interwoven Fabric Hologram Canvas: All organic waves, inner aura & outer aura rendered dynamically */}
+      <div className={`filament-aura ${state === 'SPEAKING' ? 'speaking' : ''}`} />
       <canvas
         ref={canvasRef}
         width={1200}

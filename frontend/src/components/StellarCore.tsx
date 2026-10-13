@@ -3,6 +3,7 @@ import { CronosState } from '../types/cronos';
 
 interface StellarCoreProps {
   state: CronosState;
+  audioLevelSource?: React.RefObject<number>;
   audioLevel?: number;
   onClick?: () => void;
   size?: number; // default 210
@@ -12,6 +13,7 @@ interface StellarCoreProps {
 export const StellarCore: React.FC<StellarCoreProps> = ({
   state,
   audioLevel = 0,
+  audioLevelSource,
   onClick,
   size = 210,
   className = '',
@@ -39,8 +41,9 @@ export const StellarCore: React.FC<StellarCoreProps> = ({
     let active = true;
     let previousFrame = performance.now();
     // Ceder tempo aos controles; preservar todos os filamentos, brilho e geometria.
-    function schedule(delay = 16) {
-      timer = window.setTimeout(() => { if (active) animId = requestAnimationFrame(render); }, delay);
+    function schedule(delay = 0) {
+      if (delay) timer = window.setTimeout(() => { if (active) animId = requestAnimationFrame(render); }, delay);
+      else if (active) animId = requestAnimationFrame(render);
     }
     const width = 600, height = 600;
     // Match bitmap to displayed size; preserve original geometry in logical coordinates.
@@ -84,12 +87,13 @@ export const StellarCore: React.FC<StellarCoreProps> = ({
         previousFrame = performance.now(); schedule(150); return;
       }
       const now = performance.now();
+      if (now - previousFrame < 1000 / 30 - 1) { schedule(); return; }
       const frameDelta = Math.min(3, Math.max(.5, (now - previousFrame) / (1000 / 60)));
       previousFrame = now;
       ctx.clearRect(0, 0, width, height);
 
       const currentState = stateRef.current;
-      const currentAudio = audioLevelRef.current;
+      const currentAudio = audioLevelSource?.current ?? audioLevelRef.current;
 
       // ============================================================
       // SUAVE ONDULAÇÃO DE INTENSIDADE DA LUZ (Indo e Voltando)
@@ -139,7 +143,7 @@ export const StellarCore: React.FC<StellarCoreProps> = ({
         ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
         ctx.fillStyle = `rgba(225, 248, 255, ${p.alpha * twinkle * light})`;
         ctx.shadowColor = '#00f0ff';
-        ctx.shadowBlur = (4) * renderScale;
+        ctx.shadowBlur = 0;
         ctx.fill();
       });
       ctx.restore();
@@ -185,7 +189,7 @@ export const StellarCore: React.FC<StellarCoreProps> = ({
         ctx.strokeStyle = `rgba(235, 252, 255, ${Math.min(1, dynamicAlpha)})`;
         ctx.lineWidth = ray.width;
         ctx.shadowColor = '#7dd3fc';
-        ctx.shadowBlur = (8) * renderScale;
+        ctx.shadowBlur = 0;
         ctx.stroke();
       });
 
@@ -327,7 +331,7 @@ export const StellarCore: React.FC<StellarCoreProps> = ({
       active = false; window.clearTimeout(timer);
       cancelAnimationFrame(animId);
     };
-  }, []);
+  }, [audioLevelSource]);
 
   return (
     <div

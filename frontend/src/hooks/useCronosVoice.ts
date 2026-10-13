@@ -3,7 +3,8 @@ import {api} from '../api';
 
 interface VoiceProps { onSpeechStart?: () => void; onSpeechEnd?: () => void; onError?: (message: string) => void; }
 export function useCronosVoice({onSpeechStart,onSpeechEnd,onError}: VoiceProps = {}) {
-  const [isSpeaking,setIsSpeaking]=useState(false), [audioLevel,setAudioLevel]=useState(0), [isGenerating,setIsGenerating]=useState(false);
+  const [isSpeaking,setIsSpeaking]=useState(false), [isGenerating,setIsGenerating]=useState(false);
+  const audioLevelSource=useRef(0);
   const callbacks=useRef({onSpeechStart,onSpeechEnd,onError});
   callbacks.current={onSpeechStart,onSpeechEnd,onError};
   const context=useRef<AudioContext|null>(null), audio=useRef<HTMLAudioElement|null>(null);
@@ -19,7 +20,7 @@ export function useCronosVoice({onSpeechStart,onSpeechEnd,onError}: VoiceProps =
     audio.current?.pause(); if(audio.current)audio.current.removeAttribute('src');
     source.current?.disconnect();source.current=null;analyser.current?.disconnect();analyser.current=null;
     cancelAnimationFrame(frame.current);if(url.current)URL.revokeObjectURL(url.current);url.current='';
-    setAudioLevel(0);setIsSpeaking(false);setIsGenerating(false);callbacks.current.onSpeechEnd?.();
+    audioLevelSource.current=0;setIsSpeaking(false);setIsGenerating(false);callbacks.current.onSpeechEnd?.();
   },[]);
   const speak=useCallback(async(text:string)=>{
     stop();const current=generation.current;setIsGenerating(true);
@@ -35,7 +36,7 @@ export function useCronosVoice({onSpeechStart,onSpeechEnd,onError}: VoiceProps =
       const values=new Uint8Array(meter.fftSize);let last=0;
       const measure=(time:number)=>{
         if(current!==generation.current)return;
-        if(time-last>50){meter.getByteTimeDomainData(values);let sum=0;for(const value of values)sum+=((value-128)/128)**2;setAudioLevel(Math.min(1,Math.sqrt(sum/values.length)*4));last=time;}
+        if(time-last>50){meter.getByteTimeDomainData(values);let sum=0;for(const value of values)sum+=((value-128)/128)**2;audioLevelSource.current=Math.min(1,Math.sqrt(sum/values.length)*4);last=time;}
         frame.current=requestAnimationFrame(measure);
       };
       player.onplaying=()=>{setIsGenerating(false);setIsSpeaking(true);callbacks.current.onSpeechStart?.();frame.current=requestAnimationFrame(measure);};
@@ -48,7 +49,7 @@ export function useCronosVoice({onSpeechStart,onSpeechEnd,onError}: VoiceProps =
     }
   },[stop]);
   useEffect(()=>()=>{generation.current++;pending.current?.abort();audio.current?.pause();cancelAnimationFrame(frame.current);if(url.current)URL.revokeObjectURL(url.current);source.current?.disconnect();context.current?.close();},[]);
-  return {isSpeaking,isGenerating,audioLevel,speak,stop,prepare};
+  return {isSpeaking,isGenerating,audioLevelSource,speak,stop,prepare};
 }
 
 async function localWave(blob:Blob){
@@ -66,10 +67,11 @@ async function localWave(blob:Blob){
 }
 
 export function useMicrophone(onTranscript:(text:string)=>void,onError:(message:string)=>void,local=false) {
-  const [recording,setRecording]=useState(false),[transcribing,setTranscribing]=useState(false),[level,setLevel]=useState(0);
+  const [recording,setRecording]=useState(false),[transcribing,setTranscribing]=useState(false);
+  const audioLevelSource=useRef(0);
   const refs=useRef<{recorder?:MediaRecorder;stream?:MediaStream;context?:AudioContext;timer?:ReturnType<typeof setTimeout>;frame?:number;abort?:AbortController}>({});
   const mounted=useRef(true), requesting=useRef(false);
-  const release=useCallback(()=>{const r=refs.current;r.stream?.getTracks().forEach(track=>track.stop());r.context?.close();if(r.frame)cancelAnimationFrame(r.frame);if(r.timer)clearTimeout(r.timer);r.stream=undefined;r.context=undefined;setLevel(0);},[]);
+  const release=useCallback(()=>{const r=refs.current;r.stream?.getTracks().forEach(track=>track.stop());r.context?.close();if(r.frame)cancelAnimationFrame(r.frame);if(r.timer)clearTimeout(r.timer);r.stream=undefined;r.context=undefined;audioLevelSource.current=0;},[]);
   const toggle=useCallback(async()=>{
     const r=refs.current;
     if(r.recorder?.state==='recording'){r.recorder.stop();return;}
@@ -84,7 +86,7 @@ export function useMicrophone(onTranscript:(text:string)=>void,onError:(message:
       const parts:BlobPart[]=[];let size=0,failed=false;
       r.context=new AudioContext();const meter=r.context.createAnalyser();meter.fftSize=256;r.context.createMediaStreamSource(r.stream).connect(meter);
       const values=new Uint8Array(256);let last=0,lastSpeech=performance.now(),heardSpeech=false;const started=lastSpeech;
-      const measure=(time:number)=>{if(recorder.state!=='recording')return;if(time-last>50){meter.getByteTimeDomainData(values);let sum=0;for(const value of values)sum+=((value-128)/128)**2;const rms=Math.sqrt(sum/values.length);setLevel(Math.min(1,rms*4));last=time;
+      const measure=(time:number)=>{if(recorder.state!=='recording')return;if(time-last>50){meter.getByteTimeDomainData(values);let sum=0;for(const value of values)sum+=((value-128)/128)**2;const rms=Math.sqrt(sum/values.length);audioLevelSource.current=Math.min(1,rms*4);last=time;
         if(rms>.012){heardSpeech=true;lastSpeech=time;}
         if(!heardSpeech&&time-started>8000){failed=true;onError('Não detectei fala no microfone. Tente novamente ou confira o dispositivo de entrada.');recorder.stop();return;}
         if(heardSpeech&&time-lastSpeech>1400&&time-started>1000){recorder.stop();return;}}r.frame=requestAnimationFrame(measure);};
@@ -104,5 +106,5 @@ export function useMicrophone(onTranscript:(text:string)=>void,onError:(message:
     finally{requesting.current=false;}
   },[onTranscript,onError,release,transcribing,local]);
   useEffect(()=>()=>{mounted.current=false;refs.current.abort?.abort();if(refs.current.recorder?.state==='recording')refs.current.recorder.stop();refs.current.stream?.getTracks().forEach(track=>track.stop());refs.current.context?.close();if(refs.current.frame)cancelAnimationFrame(refs.current.frame);if(refs.current.timer)clearTimeout(refs.current.timer);},[]);
-  return {recording,transcribing,level,toggle};
+  return {recording,transcribing,audioLevelSource,toggle};
 }

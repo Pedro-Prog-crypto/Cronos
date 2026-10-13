@@ -29,9 +29,9 @@ export default function App(){
   const activity=useRef<'IDLE'|'LISTENING'|'SPEAKING'>('IDLE');const [moduleActivity,setModuleActivity]=useState(activity.current);
   const tell=useCallback((message:string,isError=false)=>{setNotice(message);setError(isError);},[]);
   const voice=useCronosVoice({onError:message=>tell(message,true)});
-  const microphone=useMicrophone(useCallback(text=>{if(!text.trim()){tell('Não consegui entender a fala. Tente novamente.',true);return;}if(commandRef.current(text))return;setChatOpen(true);void sendRef.current(text);},[tell]),useCallback(message=>tell(message,true),[tell]),config?.transcription_provider==='vosk');
+  const microphone=useMicrophone(useCallback(text=>{if(!text.trim()){tell('Não consegui entender a fala. Tente novamente.',true);return;}if(commandRef.current(text))return;setChatOpen(false);void sendRef.current(text);},[tell]),useCallback(message=>tell(message,true),[tell]),config?.transcription_provider==='vosk');
   const state=voice.isSpeaking?'SPEAKING':microphone.recording?'LISTENING':moduleActivity;
-  const audioLevel=voice.isSpeaking?voice.audioLevel:microphone.level;
+  const audioLevelSource=voice.isSpeaking?voice.audioLevelSource:microphone.audioLevelSource;
   const live=useRef({busy:false,recording:false,transcribing:false,speaking:false,generating:false,module:null as string|null,announce:false,fish:false});
   live.current={busy,recording:microphone.recording,transcribing:microphone.transcribing,speaking:voice.isSpeaking,generating:voice.isGenerating,module,announce:announceAlerts,fish:Boolean(config?.fish_configured)};
   const voiceRef=useRef(voice);voiceRef.current=voice;
@@ -150,7 +150,7 @@ export default function App(){
   const diagnostic=!connected?'DESCONECTADO':!monitor||!fresh?'DIAGNÓSTICO INDISPONÍVEL':activeAlerts.length?`${activeAlerts.length} ALERTA(S)`:'SEM ALERTAS NOS SINAIS MONITORADOS';
   const lastReply=[...messages].reverse().find(message=>message.role==='assistant')?.content;
   return <div className="relative h-screen w-screen overflow-hidden bg-black text-slate-100 flex flex-col select-none">
-    <main className="absolute inset-0"><IntegratedNeuralStage state={state} audioLevel={audioLevel} onOrbClick={handleMic} onMicToggle={handleMic} onModuleClick={openModule}/></main>
+    <main className="absolute inset-0"><IntegratedNeuralStage state={state} audioLevelSource={audioLevelSource} onOrbClick={handleMic} onMicToggle={handleMic} onModuleClick={openModule}/></main>
     <div className={`memory-slot ${eyeOpen?'small':''}`}><MemorySpiral graph={graph} small={eyeOpen} onSelect={selectNote}/></div>
     <div className={`eye-slot ${eyeOpen?'expanded':''}`}>
       {eyeOpen?<Suspense fallback={<HolographicGlobe onOpen={()=>{}}/>}><WorldMap query={placeQuery} onError={message=>tell(message,true)} onReady={worldReady}/></Suspense>:<HolographicGlobe onOpen={()=>{if(config?.privacy_mode==='local'){tell('O mapa mundial usa serviços externos e está desativado em modo local.',true);return;}voice.prepare();eyeAnnouncement.current=true;setEyeOpen(true);setNote(null);}}/>}
