@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from urllib.parse import urlsplit
 from fastapi.testclient import TestClient
 from playwright.async_api import async_playwright, expect
+from cronos import usage
 from cronos.app import create_app
 from cronos.config import Settings
 from cronos.providers import Gemini
@@ -136,7 +137,7 @@ async def main(client):
   assert await page.locator('.cronos-panel').evaluate('p=>p.scrollWidth<=p.clientWidth+1')
   await b.close()
 with tempfile.TemporaryDirectory() as directory:
- root=Path(directory);personality=root/'personality.md';personality.write_text('Personalidade de teste.')
+ root=Path(directory);usage.ROOT=root/'measurements';personality=root/'personality.md';personality.write_text('Personalidade de teste.')
  settings=Settings(root/'vault',personality,TOKEN,'gemini','test-gemini','gemini-test','test-fish','original-voice','s1','http://127.0.0.1:11434','test-model',fish_format='wav',providers_file=root/'providers.json')
  with TestClient(create_app(settings,provider=Provider(),vision_provider=Provider(),windows_runner=runner,windows_platform='win32',fish_factory=Fish),base_url='http://127.0.0.1',client=('127.0.0.1',50000)) as client:
   for i in range(150):

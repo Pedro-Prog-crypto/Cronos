@@ -125,3 +125,17 @@ def test_retention_archives_old_backups_without_deleting_notes(settings):
         assert (root/'archive'/r['name']).is_file()
         assert not (root/r['name']).exists()
         assert client.get('/panels',headers=AUTH).json()['archived_backups']==1
+
+
+def test_latency_metadata_contains_no_conversation_and_rejects_text(settings):
+    with TestClient(create_app(settings)) as client:
+        data={'turn_id':str(uuid4()),'source':'voice','chat_ms':1300,'recognition_ms':150,'first_audio_ms':1700,'speech_request_ms':350}
+        assert client.post('/panels/latency',json=data).status_code==401
+        assert client.post('/panels/latency',json={**data,'question':'private question'},headers=AUTH).status_code==422
+        assert client.post('/panels/latency',json={**data,'chat_ms':-1},headers=AUTH).status_code==422
+        assert client.post('/panels/latency',json=data,headers=AUTH).status_code==200
+        measured=client.get('/panels',headers=AUTH).json()['client_latency']
+        assert measured['chat_ms']==1300 and measured['first_audio_ms']==1700
+        assert 'question' not in measured
+        assert client.post('/panels/latency',json={**data,'first_audio_ms':None},headers=AUTH).status_code==200
+        assert client.get('/panels',headers=AUTH).json()['client_latency']['first_audio_ms']==1700

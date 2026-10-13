@@ -22,6 +22,10 @@ async def main():
   b=await p.chromium.launch(executable_path=os.getenv('CRONOS_TEST_CHROMIUM') or ('/usr/bin/chromium' if Path('/usr/bin/chromium').exists() else None),headless=True,args=['--no-sandbox','--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream','--autoplay-policy=no-user-gesture-required']);page=await b.new_page(viewport={'width':1366,'height':768},permissions=['microphone'])
   c=await page.context.new_cdp_session(page);await c.send('Performance.enable');await c.send('Emulation.setCPUThrottlingRate',{'rate':4})
   await page.add_init_script("window.pywebview={api:{connection:async()=>({token:'test'})}};window.playTimes=[];const originalPlay=HTMLMediaElement.prototype.play;HTMLMediaElement.prototype.play=function(){this.addEventListener('playing',()=>window.playTimes.push(performance.now()),{once:true});return originalPlay.call(this)}")
+  latencies=[]
+  async def latency(route):
+   latencies.append(json.loads(route.request.post_data));await route.fulfill(json={'recorded':True})
+  await page.route('**/panels/latency',latency)
   await page.route('**/status',lambda r:r.fulfill(json={'fish_configured':True,'fish_speech_configured':True,'transcription_provider':'vosk'}))
   await page.route('**/monitor?*',lambda r:r.fulfill(json={'cursor':0,'alerts':[],'events':[]}))
   await page.route('**/memory/sync',lambda r:r.fulfill(json={}))
@@ -52,6 +56,10 @@ async def main():
   async def say(gain=.15):
    await page.evaluate('(gain)=>{micGain.gain.value=gain;setTimeout(()=>micGain.gain.value=0,650)}',gain)
   await say(.008);await page.wait_for_function('()=>window.playTimes.length===1',timeout=20000)
+  await page.wait_for_timeout(100)
+  assert latencies[-1]['source']=='voice' and latencies[-1]['first_audio_ms']>=latencies[-1]['chat_ms']
+  assert latencies[-1]['recognition_ms']>=0 and latencies[-1]['speech_request_ms']>0
+  assert 'question' not in latencies[-1] and 'text' not in latencies[-1]
   assert 2 not in completed
   # Simulate the assistant's sound reaching the input while it is speaking.
   await page.evaluate('()=>{micGain.gain.value=.15;setTimeout(()=>micGain.gain.value=0,700)}')

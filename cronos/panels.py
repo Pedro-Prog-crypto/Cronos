@@ -11,7 +11,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
-from uuid import uuid4
+from uuid import uuid4, UUID
 
 import httpx
 from fastapi import Depends, HTTPException, Request
@@ -56,6 +56,8 @@ class Preferences(BaseModel):
     input_label: str = Field(default='', max_length=300)
     output_label: str = Field(default='', max_length=300)
     device_auto_connect: bool = True
+    microphone_sensitivity: int = Field(default=70,ge=0,le=100)
+    microphone_gain: float = Field(default=2,ge=1,le=4)
     vision_threshold: int = Field(default=78, ge=0, le=100)
     vision_ocr: bool = True
     vision_realtime: bool = False
@@ -142,7 +144,7 @@ class PanelState:
                 'database_bytes':state.memory.database.stat().st_size, 'disk_used_bytes':disk.used,
                 'disk_total_bytes':disk.total, 'folders':[p.name for p in state.memory.vault.iterdir() if p.is_dir() and not p.name.startswith('.') and not p.is_symlink()]},
                 'backup':self.backup_info or self.last_backup(), 'archived_backups':len(list((self.backup_root/'archive').glob('memory-*.zip'))) if (self.backup_root/'archive').exists() else 0, 'cpu_percent':self.cpu(), 'ram_percent':memory_pressure(),
-                'timings_ms':conversation_metrics.read(), 'processing_phase':getattr(state.engine,'phase','idle'), 'active_requests':self.active, 'completed_requests':self.requests,
+                'timings_ms':conversation_metrics.read(), 'live_timings_ms':conversation_metrics.read_live(), 'client_latency':conversation_metrics.read_client(), 'processing_phase':getattr(state.engine,'phase','idle'), 'active_requests':self.active, 'completed_requests':self.requests,
                 'network':self.last_network, 'searches':searches, 'monitor':state.monitor.snapshot(),
                 'modules':state.features.catalog(), 'windows_audit':state.windows.last_audit,
                 'windows_available':state.windows.platform == 'win32', 'encrypted_storage':False,
@@ -235,6 +237,18 @@ class Adapter(BaseModel):
     spec: ProviderSpec
 
 
+class ClientLatency(BaseModel):
+    model_config = ConfigDict(extra='forbid',allow_inf_nan=False)
+    turn_id: UUID
+    source: Literal['text','voice']
+    chat_ms: float = Field(ge=0,le=1_800_000)
+    recognition_ms: float | None = Field(default=None,ge=0,le=1_800_000)
+    endpoint_ms: float | None = Field(default=None,ge=0,le=60000)
+    speech_request_ms: float | None = Field(default=None,ge=0,le=1_800_000)
+    playback_ms: float | None = Field(default=None,ge=0,le=1_800_000)
+    first_audio_ms: float | None = Field(default=None,ge=0,le=1_800_000)
+
+
 class VaultSelection(BaseModel):
     model_config = ConfigDict(extra='forbid')
     path: str = Field(min_length=1,max_length=2000)
@@ -247,6 +261,11 @@ class NativeAction(BaseModel):
 
 def install_panels(app, authenticate):
     auth = [Depends(authenticate)]
+
+    @app.post('/panels/latency', dependencies=auth)
+    async def latency(body: ClientLatency):
+        await asyncio.to_thread(conversation_metrics.save_client, body.model_dump(mode='json'))
+        return {'recorded':True}
 
     @app.get('/panels', dependencies=auth)
     async def snapshot(request: Request):

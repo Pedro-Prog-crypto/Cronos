@@ -96,3 +96,40 @@ def test_429_after_tool_preserves_results_and_status(settings):
     with TestClient(create_app(settings,Provider())) as client:
         response=client.post('/chat',headers={'Authorization':'Bearer test-token'},json={'message':'Procure Platão nas notas'})
         assert response.status_code==429 and response.json()['detail']['tool_results']
+
+def test_live_returns_full_valid_json_without_waiting_for_discarded_audio(settings,monkeypatch):
+    closed=[]
+    raw=json.dumps({'reply':'Resposta completa','topics':[{'title':'Platão','summary':'Registro completo'}],
+                    'tool_calls':[{'name':'obsidian_search','arguments':{'query':'Platão'}}]})
+    class Session:
+        async def send_client_content(self,**kwargs):pass
+        async def receive(self):
+            yield NS(server_content=NS(output_transcription=NS(text=raw[:30]),turn_complete=False))
+            yield NS(server_content=NS(output_transcription=NS(text=raw[30:]),turn_complete=False))
+            raise AssertionError('Discarded Gemini audio must not delay a validated response')
+    class Connection:
+        async def __aenter__(self):return Session()
+        async def __aexit__(self,*args):closed.append(True)
+    class Client:
+        def __init__(self):self.aio=self;self.live=self
+        def connect(self,**kwargs):return Connection()
+        async def aclose(self):pass
+    monkeypatch.setattr(gemini_live,'make_client',lambda key:Client())
+    result=asyncio.run(Gemini(replace(settings,gemini_transport='live',gemini_key='test')).reply('persona',[{'role':'user','content':'Pergunta'}]))
+    assert result['reply']=='Resposta completa' and result['topics'][0]['title']=='Platão'
+    assert result['tool_calls'][0]['arguments']=={'query':'Platão'} and closed==[True]
+
+
+def test_live_does_not_return_early_for_incomplete_json(settings,monkeypatch):
+    raw='{"reply":"Texto com } e \\\" aspas","topics":[],"tool_calls":[]}'
+    class Session:
+        async def send_client_content(self,**kw):pass
+        async def receive(self):
+            yield NS(server_content=NS(output_transcription=NS(text=raw[:20]),turn_complete=False))
+            yield NS(server_content=NS(output_transcription=NS(text=raw[20:]),turn_complete=True))
+    class Connection:
+        async def __aenter__(self):return Session()
+        async def __aexit__(self,*args):pass
+    client=NS(aio=NS(live=NS(connect=lambda **kwargs:Connection())))
+    result=asyncio.run(gemini_live.turn(client,settings.gemini_live_model,'persona',[{'role':'user','content':'Pergunta'}]))
+    assert result['reply']=='Texto com } e " aspas'

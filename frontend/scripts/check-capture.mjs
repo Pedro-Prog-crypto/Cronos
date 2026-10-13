@@ -12,3 +12,8 @@ const noise=new Capture();feed(noise,.2,.004);feed(noise,2,.004);assert.equal(no
 const click=new Capture();feed(click,.2,0);feed(click,.04,.1);feed(click,.8,0);assert.equal(click.events.filter(e=>e.samples).length,0);
 const aborted=new Capture();feed(aborted,.2,0);feed(aborted,.5,.1);aborted.port.onmessage({data:{blocked:true}});feed(aborted,1,0);assert.equal(aborted.events.filter(e=>e.samples).length,0);
 console.log('PASS: soft speech, brief pauses, bounded endpoint delay, ambient noise, short clicks and capture interruption.');
+const distant=new Capture();feed(distant,.2,0);feed(distant,.8,.003);feed(distant,.76,0);
+const distantClip=distant.events.find(e=>e.samples);assert.ok(distantClip,'faint speech above the calibrated floor must be detected');
+assert.ok(Math.max(...distantClip.samples)>140,'capture gain must amplify the faint PCM signal');
+const insensitive=new Capture();insensitive.port.onmessage({data:{blocked:false,sensitivity:0,gain:1}});feed(insensitive,.2,0);feed(insensitive,.8,.003);feed(insensitive,.76,0);assert.equal(insensitive.events.filter(e=>e.samples).length,0,'sensitivity control must change detection');
+console.log('PASS: quieter speech, PCM gain and adjustable sensitivity.');

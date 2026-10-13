@@ -10,6 +10,8 @@ proactive messages, OS commands, or microphone/speaker ownership.
 import asyncio
 import hashlib
 import re
+import time
+from cronos import conversation_metrics
 from cronos import usage
 from cronos.providers import OUTPUT_RULES,ProviderError,parse_reply,record_gemini_error
 
@@ -21,8 +23,10 @@ def make_client(key):
 
 async def turn(client,model,system,messages):
     from google.genai import types
+    started=time.perf_counter();metrics={}
     config=types.LiveConnectConfig(response_modalities=['AUDIO'],output_audio_transcription={},system_instruction=system+'\n'+OUTPUT_RULES)
     async with client.aio.live.connect(model=model,config=config) as session:
+        metrics['connection_ms']=round((time.perf_counter()-started)*1000)
         turns=[]
         for message in messages:
             parts=[{'text':message['content']}]
@@ -30,12 +34,19 @@ async def turn(client,model,system,messages):
                 image=message['image'];parts.append({'inline_data':{'mime_type':image['mime_type'],'data':image['data']}})
             turns.append({'role':'model' if message['role']=='assistant' else 'user','parts':parts})
         await session.send_client_content(turns=turns,turn_complete=True)
-        chunks=[]
+        sent=time.perf_counter();chunks=[]
         async def drain():
             async for response in session.receive():
                 content=getattr(response,'server_content',None)
                 transcription=getattr(content,'output_transcription',None)
-                if getattr(transcription,'text',None):chunks.append(transcription.text)
+                if getattr(transcription,'text',None):
+                    if not chunks:metrics['first_transcription_ms']=round((time.perf_counter()-sent)*1000)
+                    chunks.append(transcription.text)
+                    candidate=re.sub(r'^```(?:json)?\s*|\s*```$','', ''.join(chunks).strip(),flags=re.I)
+                    if candidate.endswith('}'):
+                        try:parse_reply(candidate)
+                        except ProviderError:pass
+                        else:return True  # Full validated payload; discarded audio needs no further draining.
                 if getattr(content,'turn_complete',False):return True
             return False
         complete=await drain()
@@ -45,7 +56,10 @@ async def turn(client,model,system,messages):
         raw=''.join(chunks).strip()
         # Some Live models wrap valid structured output in markdown fences.
         raw=re.sub(r'^```(?:json)?\s*|\s*```$','',raw,flags=re.I)
-        return parse_reply(raw)
+        result=parse_reply(raw)
+        metrics['response_ready_ms']=round((time.perf_counter()-sent)*1000)
+        conversation_metrics.save_live(metrics)
+        return result
 
 async def reply(settings,system,messages):
     primary=settings.gemini_live_model

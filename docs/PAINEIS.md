@@ -28,3 +28,13 @@ O pareamento Bluetooth abre o próprio Windows. Não existe um serviço de sincr
 `python frontend/scripts/check-panels.py` usa Playwright/Chromium com uma memória temporária, APIs de teste e um executor Windows simulado. Abre os 12 painéis, verifica controles, câmera, reprodução e ondas de áudio, e gera capturas em `.cronos-local/panel-previews`. As notas dessas capturas são demonstrações e nunca entram no cofre do usuário. Nenhuma chave real é usada.
 
 `python frontend/scripts/check-voice-flow.py` verifica microfone contínuo, fala, ESC e Olho de Deus, com provedores simulados. O desempenho físico do Samsung Flash F30, os periféricos reais e a integração Windows precisam ser conferidos no notebook.
+
+## Demora da resposta e captação
+
+O transporte Gemini Live continua usando o mesmo modelo e modo AUDIO. Quando a transcrição já contém o JSON completo e validado (incluindo temas e chamadas de ferramentas), a sessão é encerrada sem esperar pelo áudio Gemini descartado. Nenhuma resposta parcial é enviada à memória ou executada como ferramenta.
+
+O painel Processamento informa os tempos de reconhecimento, conversa, primeira síntese Fish e reprodução. São medições sem texto nem chaves, salvas em `.cronos-local/last-client-latency.json`; os tempos de conexão/primeira transcrição Live ficam em `.cronos-local/last-live-timing.json`. O tempo “da pergunta enviada até a voz” não inclui a gravação: a detecção de fim da fala ainda usa aproximadamente 750 ms de silêncio. Comparar as etapas permite verificar se a espera vem do reconhecimento, da IA ou do áudio, sem atribuir tudo ao Google.
+
+Dispositivos oferece sensibilidade e ganho do microfone. O padrão agora detecta sinais mais baixos e aplica ganho 2x ao áudio de entrada do transcritor; ruído constante e cliques curtos continuam filtrados. Ganho não cria palavras ausentes nem separa uma voz distante de ruído alto. As configurações do provedor e a voz personalizada continuam intactas.
+
+O fundo dos painéis e os desenhos de Processamento, Internet e Segurança reutilizam regiões das imagens originais. Essas ilustrações são estáticas; os dados e controles permanecem elementos funcionais separados.
