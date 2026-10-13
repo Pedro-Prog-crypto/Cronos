@@ -14,15 +14,18 @@ export function speechChunks(text:string):string[]{
   return chunks.filter(chunk=>chunk.trim());
 }
 
-interface VoiceProps { onSpeechStart?: () => void; onSpeechEnd?: () => void; onError?: (message: string) => void; }
-export function useCronosVoice({onSpeechStart,onSpeechEnd,onError}: VoiceProps = {}) {
+interface VoiceProps { preferences?: any; onSpeechStart?: () => void; onSpeechEnd?: () => void; onError?: (message: string) => void; }
+export function useCronosVoice({preferences,onSpeechStart,onSpeechEnd,onError}: VoiceProps = {}) {
   const [isSpeaking,setIsSpeaking]=useState(false), [isGenerating,setIsGenerating]=useState(false);
   const audioLevelSource=useRef(0);
+  const prefs=useRef(preferences);prefs.current=preferences;
   const callbacks=useRef({onSpeechStart,onSpeechEnd,onError});
   callbacks.current={onSpeechStart,onSpeechEnd,onError};
   const context=useRef<AudioContext|null>(null), audio=useRef<HTMLAudioElement|null>(null);
   const frame=useRef(0), url=useRef(''), pending=useRef<AbortController|null>(null);
   const source=useRef<MediaElementAudioSourceNode|null>(null), analyser=useRef<AnalyserNode|null>(null);
+  const outputGain=useRef<GainNode|null>(null),renderedSpeed=useRef(1);
+  useEffect(()=>{if(outputGain.current)outputGain.current.gain.value=preferences?.voice_volume??1;if(audio.current)audio.current.playbackRate=2**(((preferences?.voice_pitch??.5)-.5)*.7)*(preferences?.voice_speed??renderedSpeed.current)/renderedSpeed.current;},[preferences?.voice_volume,preferences?.voice_pitch,preferences?.voice_speed]);
   const generation=useRef(0);
   const prepare=useCallback(()=>{
     context.current ||= new AudioContext();
@@ -30,6 +33,7 @@ export function useCronosVoice({onSpeechStart,onSpeechEnd,onError}: VoiceProps =
   },[]);
   const stop=useCallback(()=>{
     generation.current++; pending.current?.abort();pending.current=null;
+    outputGain.current?.disconnect();outputGain.current=null;
     audio.current?.pause(); if(audio.current)audio.current.removeAttribute('src');
     source.current?.disconnect();source.current=null;analyser.current?.disconnect();analyser.current=null;
     cancelAnimationFrame(frame.current);if(url.current)URL.revokeObjectURL(url.current);url.current='';
@@ -43,8 +47,9 @@ export function useCronosVoice({onSpeechStart,onSpeechEnd,onError}: VoiceProps =
       const controller=new AbortController();pending.current=controller;
       const chunks=speechChunks(text);
       const fetchChunk=async(part:string)=>{
-        try{const response=await api('/voice/speech',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:part}),signal:controller.signal});return {blob:await response.blob(),error:null};}
-        catch(error){return {blob:null,error};}
+        const speed=prefs.current?.voice_speed;
+        try{const response=await api('/voice/speech',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:part,...(speed!==undefined?{speed}:{})}),signal:controller.signal});return {blob:await response.blob(),error:null,speed};}
+        catch(error){return {blob:null,error,speed};}
       };
       // Only the current chunk and one look-ahead are retained. No voice/model changes.
       let next=fetchChunk(chunks[0]||text);
@@ -55,8 +60,11 @@ export function useCronosVoice({onSpeechStart,onSpeechEnd,onError}: VoiceProps =
         if(url.current)URL.revokeObjectURL(url.current);
         source.current?.disconnect();analyser.current?.disconnect();cancelAnimationFrame(frame.current);
         url.current=URL.createObjectURL(received.blob!);const player=new Audio(url.current);audio.current=player;
+        renderedSpeed.current=received.speed??1;player.playbackRate=2**(((prefs.current?.voice_pitch??.5)-.5)*.7)*(prefs.current?.voice_speed??renderedSpeed.current)/renderedSpeed.current;player.preservesPitch=false;
+        const output=prefs.current?.output_label;
+        if(output){const devices=await navigator.mediaDevices.enumerateDevices();const chosen=devices.find(d=>d.kind==='audiooutput'&&d.label===output);const ctx=context.current as any;if(!chosen||!ctx.setSinkId)throw new Error('Seleção de saída não disponível neste WebView. Use o dispositivo padrão do Windows.');await ctx.setSinkId(chosen.deviceId);}else if((context.current as any).setSinkId){await (context.current as any).setSinkId('');}
         const meter=context.current.createAnalyser();meter.fftSize=256;analyser.current=meter;
-        source.current=context.current.createMediaElementSource(player);source.current.connect(meter);meter.connect(context.current.destination);
+        source.current=context.current.createMediaElementSource(player);source.current.connect(meter);outputGain.current?.disconnect();const gain=context.current.createGain();outputGain.current=gain;gain.gain.value=prefs.current?.voice_volume??1;meter.connect(gain);gain.connect(context.current.destination);
         const values=new Uint8Array(meter.fftSize);let last=0;
         const measure=(time:number)=>{if(current!==generation.current)return;if(time-last>50){meter.getByteTimeDomainData(values);let sum=0;for(const value of values)sum+=((value-128)/128)**2;audioLevelSource.current=Math.min(1,Math.sqrt(sum/values.length)*4);last=time;}frame.current=requestAnimationFrame(measure);};
         player.onplaying=()=>{setIsGenerating(false);setIsSpeaking(true);if(!index)callbacks.current.onSpeechStart?.();frame.current=requestAnimationFrame(measure);};
@@ -75,8 +83,8 @@ export function useCronosVoice({onSpeechStart,onSpeechEnd,onError}: VoiceProps =
       stop();callbacks.current.onError?.(error instanceof Error?error.message:'Não foi possível gerar ou reproduzir a voz.');
     }
   },[stop]);
-  useEffect(()=>()=>{generation.current++;pending.current?.abort();audio.current?.pause();cancelAnimationFrame(frame.current);if(url.current)URL.revokeObjectURL(url.current);source.current?.disconnect();context.current?.close();},[]);
-  return {isSpeaking,isGenerating,audioLevelSource,speak,stop,prepare};
+  useEffect(()=>()=>{generation.current++;pending.current?.abort();audio.current?.pause();cancelAnimationFrame(frame.current);if(url.current)URL.revokeObjectURL(url.current);source.current?.disconnect();outputGain.current?.disconnect();context.current?.close();},[]);
+  return {isSpeaking,isGenerating,audioLevelSource,speak,stop,prepare,audio,analyser};
 }
 
 async function localWave(blob:Blob){
@@ -93,10 +101,10 @@ async function localWave(blob:Blob){
   return new Blob([bytes],{type:'audio/wav'});
 }
 
-export function useMicrophone(onTranscript:(text:string)=>void,onError:(message:string)=>void,local=false,blocked=false) {
+export function useMicrophone(onTranscript:(text:string)=>void,onError:(message:string)=>void,local=false,blocked=false,preferences?:any) {
   const [recording,setRecording]=useState(false),[capturing,setCapturing]=useState(false),[starting,setStarting]=useState(false),[transcribing,setTranscribing]=useState(false);
   const audioLevelSource=useRef(0),enabled=useRef(false),opening=useRef(false),processing=useRef(false),mounted=useRef(true);
-  const latest=useRef({onTranscript,onError,local,blocked});latest.current={onTranscript,onError,local,blocked};
+  const latest=useRef({onTranscript,onError,local,blocked,preferences});latest.current={onTranscript,onError,local,blocked,preferences};
   const captureVersion=useRef(0),resumeAfter=useRef(0);
   const resources=useRef<{stream?:MediaStream;context?:AudioContext;recorder?:MediaRecorder;node?:AudioWorkletNode;timer?:ReturnType<typeof setInterval>;abort?:AbortController}>({});
   const cancelCapture=useCallback(()=>{captureVersion.current++;processing.current=false;resumeAfter.current=performance.now()+250;resources.current.abort?.abort();resources.current.node?.port.postMessage({blocked:true});if(resources.current.recorder?.state==='recording')resources.current.recorder.stop();audioLevelSource.current=0;if(mounted.current){setCapturing(false);setTranscribing(false);}},[]);
@@ -113,7 +121,9 @@ export function useMicrophone(onTranscript:(text:string)=>void,onError:(message:
     if(enabled.current||opening.current)return;
     enabled.current=true;opening.current=true;setStarting(true);
     try{
-      const stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:{ideal:1},echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+      let deviceId:string|undefined;
+      if(latest.current.preferences?.input_label){const devices=await navigator.mediaDevices.enumerateDevices();deviceId=devices.find(d=>d.kind==='audioinput'&&d.label===latest.current.preferences.input_label)?.deviceId;if(!deviceId)throw new Error('Microfone selecionado não disponível. Escolha outro dispositivo.');}
+      const stream=await navigator.mediaDevices.getUserMedia({audio:{...(deviceId?{deviceId:{exact:deviceId}}:{}),channelCount:{ideal:1},echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
       if(!enabled.current||!mounted.current){stream.getTracks().forEach(track=>track.stop());return;}
       resources.current.stream=stream;const context=new AudioContext(latest.current.local?{sampleRate:16000}:undefined);resources.current.context=context;await context.resume();if(!enabled.current||!mounted.current)return;
       const meter=context.createAnalyser();meter.fftSize=256;context.createMediaStreamSource(stream).connect(meter);

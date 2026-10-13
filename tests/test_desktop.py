@@ -14,6 +14,8 @@ def test_desktop_starts_private_server_and_connects_window(tmp_path, monkeypatch
     monkeypatch.setattr(desktop, "load_dotenv", lambda *args, **kwargs: None)
     monkeypatch.setattr(desktop, "sys", SimpleNamespace(platform="win32"))
     state = {}
+    locks=[]
+    monkeypatch.setattr(__import__("ctypes"),"windll",SimpleNamespace(user32=SimpleNamespace(LockWorkStation=lambda:locks.append(True))),raising=False)
 
     class Loaded:
         def __init__(self): self.callbacks = []
@@ -22,8 +24,11 @@ def test_desktop_starts_private_server_and_connects_window(tmp_path, monkeypatch
             return self
 
     class Window:
-        events = SimpleNamespace(loaded=Loaded())
+        events = SimpleNamespace(loaded=Loaded(), minimized=Loaded())
         def get_current_url(self): return state["url"]
+        def create_file_dialog(self,kind):
+            assert kind=="folder"
+            return [str(tmp_path)]
         def evaluate_js(self, script):
             state["script"] = script
 
@@ -47,11 +52,19 @@ def test_desktop_starts_private_server_and_connects_window(tmp_path, monkeypatch
         assert response.status_code == 200
         assert "requestSubmit" in state["script"]
         assert state["bridge"].connection()=={"token":token}
+        assert state['bridge'].choose_vault()==str(tmp_path)
+        for callback in state['window'].events.minimized.callbacks:callback()
+        assert not locks
+        response=httpx.patch(state['url']+'/panels/preferences',json={'lock_minimize':True},headers={'Authorization':'Bearer '+token})
+        assert response.status_code==200
+        for callback in state['window'].events.minimized.callbacks:callback()
+        assert locks==[True]
         original=state["url"];state["url"]="https://example.org"
         assert state["bridge"].connection() is None
+        assert state["bridge"].choose_vault() is None
         state["url"]=original
 
-    monkeypatch.setitem(sys.modules, "webview", SimpleNamespace(create_window=create_window, start=start))
+    monkeypatch.setitem(sys.modules, "webview", SimpleNamespace(create_window=create_window, start=start,FileDialog=SimpleNamespace(FOLDER="folder")))
     desktop.main()
     # Fechar a janela deve encerrar o servidor e liberar a porta.
     with pytest.raises(httpx.ConnectError):

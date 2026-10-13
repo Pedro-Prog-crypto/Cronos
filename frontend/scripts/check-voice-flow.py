@@ -86,7 +86,7 @@ async def main():
   assert len(chats)==2
   print('PASS: spoken natural eye command opens real Cesium canvas without Gemini; closing unmounts it. External imagery not validated.',flush=True)
   before_map_escape=len(await page.evaluate('window.playTimes'))
-  await page.get_by_role('button',name='ENTENDIMENTO DE LINGUAGEM',exact=True).click()
+  await page.get_by_role('button',name='ENTENDIMENTO DE LINGUAGEM',exact=True).click();await page.locator('.phrase-card').click()
   await page.locator('#chat-input').fill('abrir olho de Deus');await page.get_by_role('button',name='Enviar mensagem').click()
   await expect(page.frame_locator('.world-map-frame').locator('.cesium-widget canvas')).to_be_visible(timeout=20000)
   await page.wait_for_function('(n)=>window.playTimes.length>n',arg=before_map_escape,timeout=20000)
@@ -109,11 +109,11 @@ async def main():
   assert await page.evaluate('micOpens')==2
   print('PASS: automatic persistent microphone, silence does not disable it, two turns reuse one stream, manual off/on, no voice boxes, early full ordered speech, active workers.',flush=True)
   await page.get_by_role('button',name='Desligar microfone').click()
-  await page.get_by_role('button',name='ENTENDIMENTO DE LINGUAGEM',exact=True).click();await page.locator('#chat-input').fill('mostrar resposta');await page.get_by_role('button',name='Enviar mensagem').click()
+  await page.get_by_role('button',name='ENTENDIMENTO DE LINGUAGEM',exact=True).click();await page.locator('.phrase-card').click();await page.locator('#chat-input').fill('mostrar resposta');await page.get_by_role('button',name='Enviar mensagem').click()
   await expect(page.locator('.answer-card-deck')).to_contain_text('Sócrates')
   # ESC must interrupt current audio and suppress a response that was still pending.
   async def ask(text):
-   await page.get_by_role('button',name='ENTENDIMENTO DE LINGUAGEM',exact=True).click()
+   await page.get_by_role('button',name='ENTENDIMENTO DE LINGUAGEM',exact=True).click();await page.locator('.phrase-card').click()
    await page.locator('#chat-input').fill(text);await page.get_by_role('button',name='Enviar mensagem').click()
   played=len(await page.evaluate('window.playTimes'))
   await ask('Teste de interrupção da fala')

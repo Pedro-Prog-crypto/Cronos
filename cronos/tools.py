@@ -104,6 +104,7 @@ class Registry:
         self.tools = {}
         self.pending = {}
         self.load_errors = []
+        self.permission_policy = lambda name: (True, False)
 
     def register(self, tool):
         if not isinstance(tool, Tool) or not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", tool.name) or not callable(tool.handler) or not issubclass(tool.arguments, Arguments):
@@ -137,7 +138,10 @@ class Registry:
             parsed = tool.arguments.model_validate(arguments)
         except ValidationError:
             return {"name": name, "status": "failed", "error": "Argumentos inválidos para esta ferramenta."}
-        if tool.confirm:
+        allowed, extra_confirmation = self.permission_policy(name)
+        if not allowed:
+            return {"name": name, "status": "failed", "error": "Ferramenta desativada nas permissões do usuário."}
+        if tool.confirm or extra_confirmation:
             approval = str(uuid4())
             self.pending = {key: value for key, value in self.pending.items() if value["expires"] > time.monotonic()}
             self.pending[approval] = {"tool": tool, "arguments": parsed, "session": str(session), "expires": time.monotonic() + 300}
@@ -154,6 +158,8 @@ class Registry:
             raise ToolError("Confirmação expirada. Solicite a ação novamente.")
         if not accepted:
             return {"name": pending["tool"].name, "status": "cancelled", "approval_id": approval}
+        if not self.permission_policy(pending['tool'].name)[0]:
+            return {'name':pending['tool'].name, 'status':'failed', 'error':'Permissão revogada antes da execução.'}
         return {**await self._run(pending["tool"], pending["arguments"]), "approval_id": approval}
 
 

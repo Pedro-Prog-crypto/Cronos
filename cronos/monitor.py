@@ -47,6 +47,7 @@ class Monitor:
         self.events = deque(maxlen=200)
         self.denials = deque(maxlen=100)
         self.sequence = 0
+        self.record_events = True
         self.checked_at = None
         self.resources = {}
         self.baseline = None
@@ -70,7 +71,7 @@ class Monitor:
         event = {"id": self.sequence, "code": code, "status": status, "severity": severity,
                  "message": message, "suggestion": suggestion,
                  "time": datetime.now(timezone.utc).isoformat()}
-        self.events.append(event)
+        if self.record_events:self.events.append(event)
         return event
 
     def denied(self):

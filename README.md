@@ -228,3 +228,5 @@ Configuração real de voz recuperada: siga [Voz original](docs/VOZ_ORIGINAL.md)
 
 Microfone e início da voz: [correções e atualização](docs/MICROFONE_E_LATENCIA.md).
 Escuta contínua, memória e comandos do mapa: [atualização](docs/ESCUTA_CONTINUA.md).
+
+Painéis desktop e controles disponíveis: [documentação dos 12 painéis](docs/PAINEIS.md).

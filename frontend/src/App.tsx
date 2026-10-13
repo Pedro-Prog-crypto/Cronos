@@ -10,12 +10,18 @@ import {HolographicGlobe} from './components/HolographicGlobe';
 import {AnswerCards,HolographicCard} from './components/HolographicCards';
 import {localCommand} from './commands';
 const WorldMap=lazy(()=>import('./components/WorldMap'));
+const ModulePanel=lazy(()=>import('./panels/ModulePanel'));
 
 const moduleIds=['processing','vision','voice','language','planning','tools','integrations','database','internet','devices','security','monitoring'];
 const moduleNames=['Processamento','Visão computacional','Síntese de voz','Entendimento de linguagem','Planejamento','Ferramentas','Integrações','Banco de dados','Internet','Dispositivos','Segurança','Monitoramento'];
 type ToolResult={name:string;status:string;approval_id?:string;session_id?:string;arguments?:unknown;result?:unknown;error?:string};
 
 export default function App(){
+  const [panelPrefs,setPanelPrefs]=useState<any>(null),[pageHidden,setPageHidden]=useState(document.hidden);
+  const prefsRef=useRef(panelPrefs);prefsRef.current=panelPrefs;
+  useEffect(()=>{document.documentElement.dataset.cronosEconomy=panelPrefs?.processing_mode==='economy'?'true':'false';},[panelPrefs?.processing_mode]);
+  const updatePreferences=useCallback((value:any)=>setPanelPrefs(value),[]);
+  useEffect(()=>{const update=()=>setPageHidden(document.hidden);document.addEventListener('visibilitychange',update);return()=>document.removeEventListener('visibilitychange',update);},[]);
   const [connected,setConnected]=useState(false),[config,setConfig]=useState<any>(null);
   const [notice,setNotice]=useState(''),[error,setError]=useState(false);
   const [chatOpen,setChatOpen]=useState(false),[module,setModule]=useState<string|null>(null);
@@ -31,8 +37,8 @@ export default function App(){
   const session=useRef<string|null>(null),iframe=useRef<HTMLIFrameElement|null>(null),cursor=useRef(0),inFlight=useRef(false);
   const activity=useRef<'IDLE'|'LISTENING'|'SPEAKING'>('IDLE');const [moduleActivity,setModuleActivity]=useState(activity.current);
   const tell=useCallback((message:string,isError=false)=>{setNotice(message);setError(isError);},[]);
-  const voice=useCronosVoice({onError:message=>tell(message,true)});
-  const microphone=useMicrophone(useCallback(text=>{if(!text.trim()){tell('Não consegui entender a fala. Tente novamente.',true);return;}if(commandRef.current(text))return;setChatOpen(false);void sendRef.current(text);},[tell]),useCallback(message=>tell(message,true),[tell]),config?.transcription_provider==='vosk',busy||voice.isSpeaking||voice.isGenerating||Boolean(module));
+  const voice=useCronosVoice({preferences:panelPrefs,onError:message=>tell(message,true)});
+  const microphone=useMicrophone(useCallback(text=>{if(!text.trim()){tell('Não consegui entender a fala. Tente novamente.',true);return;}if(commandRef.current(text))return;if(prefsRef.current?.called_only&&!/\b(?:cronos|kronos)\b/i.test(text))return;setChatOpen(false);void sendRef.current(text);},[tell]),useCallback(message=>tell(message,true),[tell]),config?.transcription_provider==='vosk',busy||voice.isSpeaking||voice.isGenerating||(pageHidden&&panelPrefs?.background_processing===false),panelPrefs);
   const state=voice.isSpeaking?'SPEAKING':microphone.capturing?'LISTENING':moduleActivity;
   const audioLevelSource=voice.isSpeaking?voice.audioLevelSource:microphone.audioLevelSource;
   const live=useRef({busy:false,recording:false,transcribing:false,speaking:false,generating:false,module:null as string|null,announce:false,fish:false});
@@ -43,7 +49,7 @@ export default function App(){
   const connectBackend=useCallback(async()=>{
     setConnected(false);
     try{
-      const status=await jsonApi('/status');setConfig(status);setConnected(true);setNotice('');
+      const status=await jsonApi('/status');setConfig(status);try{const panel=await jsonApi('/panels');updatePreferences(panel.preferences);}catch{/* Older backend keeps the existing defaults. */}setConnected(true);setNotice('');
 
       // Compartilha só com a bancada da própria origem, nunca por URL/storage.
       iframe.current?.contentWindow?.postMessage({type:'cronos:connect',token:getToken()},window.location.origin);
@@ -94,7 +100,7 @@ export default function App(){
     }catch(error){if(alive)tell('Não consegui carregar as notas da memória.',true);}})();
     return()=>{alive=false;controller.abort();};
   },[connected,graphRevision,tell]);
-  useEffect(()=>{if(!connected)return;const timer=setInterval(()=>{if(!document.hidden&&!live.current.busy&&!live.current.recording&&!live.current.transcribing)setGraphRevision(value=>value+1);},60000);return()=>clearInterval(timer);},[connected]);
+  useEffect(()=>{if(!connected)return;const timer=setInterval(()=>{if(prefsRef.current?.auto_index!==false&&!document.hidden&&!live.current.busy&&!live.current.recording&&!live.current.transcribing)setGraphRevision(value=>value+1);},60000);return()=>clearInterval(timer);},[connected]);
   const runCommand=(text:string)=>{
     if(/^(?:kronos[, ]+|cronos[, ]+)?(?:mostrar|mostre|exibir) (?:o )?(?:texto|resposta)[.!?]*$/i.test(text.trim())){setShowSpokenCards(true);setChatOpen(false);return true;}
     const command=localCommand(text,eyeOpen);if(!command)return false;
@@ -117,7 +123,7 @@ export default function App(){
   useEffect(()=>{if(!notice)return;const timer=setTimeout(()=>setNotice(''),8000);return()=>clearTimeout(timer);},[notice]);
 
   const autoMic=useRef(false);
-  useEffect(()=>{if(connected&&!autoMic.current){autoMic.current=true;void microphone.start();}},[connected,microphone.start]);
+  useEffect(()=>{if(connected&&!autoMic.current){autoMic.current=true;if(prefsRef.current?.device_auto_connect!==false)void microphone.start();}},[connected,microphone.start]);
   const handleMic=()=>{
     if(!connected){tell('A conexão automática ainda não está disponível.',true);return;}
     setChatOpen(false);setShowSpokenCards(false);void microphone.toggle();
@@ -149,7 +155,7 @@ export default function App(){
       setTools(old=>old.map(item=>item===result?outcome:item));tell(outcome.status==='completed'?'Solicitação atendida; confira seu resultado.':outcome.error||outcome.status,outcome.status==='failed');
     }catch(error){tell(error instanceof Error?error.message:'Falha na confirmação.',true);}finally{setBusy(false);inFlight.current=false;}
   };
-  const openModule=(index:number)=>{if(index===7){setEyeOpen(false);setGraphRevision(value=>value+1);return;}if(index===3){setChatOpen(true);return;}setModule(moduleIds[index]);setModuleActivity('IDLE');};
+  const openModule=(index:number)=>{setEyeOpen(false);setChatOpen(false);setNote(null);setModule(moduleIds[index]);setModuleActivity('IDLE');};
   useEffect(()=>{document.documentElement.dataset.cronosPanel=module?'true':'false';return()=>{delete document.documentElement.dataset.cronosPanel;};},[module]);
   const closeModule=()=>{(iframe.current?.contentWindow as (Window & {cronosPanelClose?:()=>void})|null)?.cronosPanelClose?.();setModule(null);setModuleActivity('IDLE');setGraphRevision(value=>value+1);if(connected)void jsonApi('/status').then(setConfig).catch(()=>{});};
   const handlers=useRef({mic:handleMic,module:openModule});handlers.current={mic:handleMic,module:openModule};
@@ -159,7 +165,7 @@ export default function App(){
   const fresh=monitor?.checked_at&&Date.now()-Date.parse(monitor.checked_at)<45000;
   const diagnostic=!connected?'DESCONECTADO':!monitor||!fresh?'DIAGNÓSTICO INDISPONÍVEL':activeAlerts.length?`${activeAlerts.length} ALERTA(S)`:'SEM ALERTAS NOS SINAIS MONITORADOS';
   return <div className="relative h-screen w-screen overflow-hidden bg-black text-slate-100 flex flex-col select-none">
-    <main className="absolute inset-0"><IntegratedNeuralStage state={state} audioLevelSource={audioLevelSource} onOrbClick={stageMic} onMicToggle={stageMic} onModuleClick={stageModule}/></main>
+    <main className={`absolute inset-0 ${module?'scene-under-panel':''}`}><IntegratedNeuralStage state={state} audioLevelSource={audioLevelSource} onOrbClick={stageMic} onMicToggle={stageMic} onModuleClick={stageModule}/></main>
     <div className={`memory-slot ${eyeOpen?'small':''}`}><MemorySpiral graph={graph} small={eyeOpen} onSelect={selectNote}/></div>
     <div className={`eye-slot ${eyeOpen?'expanded':''}`}>
       {eyeOpen?<Suspense fallback={<HolographicGlobe onOpen={()=>{}}/>}><WorldMap query={placeQuery} onError={message=>tell(message,true)} onReady={worldReady}/></Suspense>:<HolographicGlobe onOpen={()=>{if(config?.privacy_mode==='local'){tell('O mapa mundial usa serviços externos e está desativado em modo local.',true);return;}voice.prepare();eyeAnnouncement.current=true;setEyeOpen(true);setNote(null);}}/>}
@@ -176,10 +182,8 @@ export default function App(){
       </form>
     </HolographicCard></section>}
     {tools.some(result=>result.status==='pending_confirmation')&&<section className="holo-tool-deck" aria-label="Ações pendentes">{tools.filter(result=>result.status==='pending_confirmation').map((result,index)=><HolographicCard key={index} title={result.name} variant="layered"><pre>{JSON.stringify(result.arguments,null,2)}</pre><div className="footer-actions"><button disabled={busy} onClick={()=>approve(result,true)}>Confirmar ação</button><button disabled={busy} onClick={()=>approve(result,false)}>Cancelar</button></div></HolographicCard>)}</section>}
-    {module&&<section className="module-window holo-module" role="dialog" aria-label={moduleNames[moduleIds.indexOf(module)]}>
-      <div className="drawer-heading"><h2>{moduleNames[moduleIds.indexOf(module)]}</h2><button onClick={closeModule} aria-label="Fechar módulo"><X size={19}/></button></div>
-      <iframe ref={iframe} title={`Módulo ${module}`} src={`/tests#module=${module}`} onLoad={()=>{if(connected)iframe.current?.contentWindow?.postMessage({type:'cronos:connect',token:getToken()},window.location.origin);}}/>
-    </section>}
+    {module&&<Suspense fallback={<div className="panel-loading">Abrindo painel…</div>}><ModulePanel id={module} onSelect={openModule} onClose={closeModule} graph={graph} onSync={()=>setGraphRevision(v=>v+1)} onNote={path=>{closeModule();void selectNote(path);}} preferences={panelPrefs} onPreferences={updatePreferences} voice={voice} microphone={microphone} lastTurn={displayTurn} busy={busy} onComposer={()=>{closeModule();setChatOpen(true);}} onEye={()=>{closeModule();voice.prepare();eyeAnnouncement.current=true;setEyeOpen(true);}} onAsk={text=>void sendText(text)}/></Suspense>}
+
 
   </div>;
 }

@@ -11,3 +11,4 @@
 .function-tree .tree-node{cursor:pointer;outline:none}.function-tree .tree-node:hover,.function-tree .tree-node:focus-visible{filter:brightness(1.4)}
 .tree-star{pointer-events:none}.scene-under-panel{display:none!important}
 @media(max-width:1023px){.function-tree{width:170px;height:auto;top:10%;transform:none}.function-tree>svg{width:170px;height:500px}.function-tree .tree-link,.function-tree .tree-star{display:none}}
+@media(max-width:1023px){.function-tree{right:0;width:180px;height:550px;top:5%;overflow:hidden}.function-tree>svg{width:380px;height:590px;max-width:none;transform:translateX(-204px)}.function-tree .tree-link,.function-tree .tree-star{display:none}}

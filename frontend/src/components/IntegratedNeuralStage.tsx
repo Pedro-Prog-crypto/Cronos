@@ -14,7 +14,7 @@ export const IntegratedNeuralStage=React.memo(function Stage({state,audioLevelSo
    <CronosOrb state={state} audioLevel={audioLevel} audioLevelSource={audioLevelSource} onOrbClick={onOrbClick} size={440} weaveDensity={1} showCrossLinks/>
    <div className="-mt-7 flex flex-col items-center"><CronosLogo isSpeaking={state==='SPEAKING'} size="sm"/></div>
   </div>
-  <div className="function-tree hidden lg:block">
+  <div className="function-tree">
    <svg viewBox="0 0 380 590" fill="none" aria-label="Funções do Kronos">
     <defs>
      <radialGradient id="stationary-star"><stop stopColor="#ffffff"/><stop offset=".15" stopColor="#caffff"/><stop offset=".33" stopColor="#4bddff" stopOpacity=".5"/><stop offset="1" stopColor="#00cfff" stopOpacity="0"/></radialGradient>

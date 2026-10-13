@@ -51,6 +51,12 @@ def _run():
                     return None
                 return {"token": settings.token}
 
+            def choose_vault(self):
+                if (window.get_current_url() or '').rstrip('/') != address:return None
+                chosen=window.create_file_dialog(webview.FileDialog.FOLDER)
+                if (window.get_current_url() or '').rstrip('/') != address:return None
+                return chosen[0] if chosen else None
+
         window = webview.create_window("Cronos", address, js_api=DesktopBridge(),
                                        width=1200, height=850, min_size=(700, 600))
 
@@ -67,6 +73,13 @@ def _run():
                 "})(0);"
             )
 
+        def on_minimized():
+            application = server.config.app
+            panels = getattr(application.state, 'panels', None)
+            if panels and panels.preferences.lock_minimize:
+                import ctypes
+                ctypes.windll.user32.LockWorkStation()
+        window.events.minimized += on_minimized
         window.events.loaded += connect
         webview.start(gui="edgechromium", debug=False)
     finally:

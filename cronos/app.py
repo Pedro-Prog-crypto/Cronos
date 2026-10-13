@@ -24,6 +24,7 @@ from cronos.features import Features
 from cronos.windows_system import WindowsSystem
 from cronos.geography import install_geography
 from cronos.control import install_routes
+from cronos.panels import PanelState, install_panels
 
 
 class ChatInput(BaseModel):
@@ -84,6 +85,8 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         app.state.engine = Engine(settings, app.state.memory, app.state.registry, provider)
         app.state.vision_provider = vision_provider
         app.state.features = Features(app)
+        app.state.panels = PanelState(app)
+        panel_task = asyncio.create_task(app.state.panels.maintain())
         await asyncio.to_thread(app.state.monitor.collect)
         task = asyncio.create_task(app.state.monitor.run())
         windows_task = asyncio.create_task(app.state.windows.watch())
@@ -95,6 +98,8 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         try:
             yield
         finally:
+            panel_task.cancel()
+            with suppress(asyncio.CancelledError):await panel_task
             recognition_task.cancel()
             with suppress(asyncio.CancelledError):await recognition_task
             task.cancel()
@@ -126,7 +131,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
 
     if settings.origins:
         app.add_middleware(CORSMiddleware, allow_origins=list(settings.origins),
-                           allow_methods=["GET", "POST"], allow_headers=["Authorization", "Content-Type"])
+                           allow_methods=["GET", "POST", "PATCH"], allow_headers=["Authorization", "Content-Type"])
     app.add_middleware(SecurityMiddleware, settings=settings)
 
     async def authenticate(authorization: str | None = Header(default=None)):
@@ -134,6 +139,18 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
             raise HTTPException(503, "Configure CRONOS_API_TOKEN antes de acessar os dados.")
         if not secrets.compare_digest((authorization or "").encode('utf-8'), ("Bearer " + settings.token).encode('utf-8')):
             raise HTTPException(401, "Autenticação necessária.")
+
+    @app.middleware('http')
+    async def panel_metrics(request, call_next):
+        measured = request.url.path in {'/chat', '/voice/speech', '/voice/transcribe', '/vision/analyze'}
+        panels = getattr(request.app.state, 'panels', None)
+        if measured and panels:panels.active += 1
+        try:return await call_next(request)
+        finally:
+            if measured and panels:
+                panels.active -= 1
+                panels.requests += 1
+                if request.url.path=='/chat':request.app.state.engine.phase="idle"
 
     @app.get("/health")
     async def health():
@@ -359,6 +376,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
             raise HTTPException(502, fish_error(exc, "transcrição do microfone")) from exc
 
     install_routes(app, authenticate)
+    install_panels(app, authenticate)
     install_geography(app, authenticate)
     return app
 

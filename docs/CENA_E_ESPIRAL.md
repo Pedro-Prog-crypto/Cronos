@@ -6,4 +6,4 @@ O cofre vazio não desenha pontos nem rastros. Cada nota real recebe um ponto br
 
 Para conferir a aparência com 850 notas sintéticas e com um cofre vazio, execute `python frontend/scripts/preview-memory.py` em um ambiente com Playwright/Chromium. As capturas ficam em `.cronos-local/visual-preview`. Nenhuma nota de demonstração é gravada no Obsidian e nenhuma API de IA é chamada.
 
-A redução de processamento foi verificada no navegador de testes. O desempenho físico do Samsung Flash F30 ainda precisa ser conferido no notebook. Esta alteração da cena não conclui o redesenho dos 12 painéis.
+A redução de processamento foi verificada no navegador de testes. O desempenho físico do Samsung Flash F30 ainda precisa ser conferido no notebook. Os 12 painéis próprios estão descritos em [PAINEIS.md](PAINEIS.md).

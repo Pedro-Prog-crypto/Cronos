@@ -1,5 +1,5 @@
 import {CronosState} from '../types/cronos';
-export type SceneInput={state:CronosState;audio:number;hidden:boolean;links:boolean};
+export type SceneInput={state:CronosState;audio:number;hidden:boolean;links:boolean;fps?:number};
 type SceneCanvas=HTMLCanvasElement|OffscreenCanvas;
 function context(canvas:SceneCanvas){return canvas.getContext('2d') as CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D|null;}
 function buffer():SceneCanvas{return typeof OffscreenCanvas!=='undefined'?new OffscreenCanvas(1,1):document.createElement('canvas');}
@@ -220,7 +220,7 @@ export function renderOrb(canvas:SceneCanvas,size:number,weaveDensity:number,pix
         previousFrame = performance.now(); schedule(150); return;
       }
       const now = performance.now();
-      if (now - previousFrame < 1000 / 30 - 1) { schedule(); return; }
+      if (now - previousFrame < 1000 / (input().fps || 30) - 1) { schedule(); return; }
       const frameDelta = Math.min(3, Math.max(.5, (now - previousFrame) / (1000 / 60)));
       previousFrame = now;
       ctx.clearRect(0, 0, width, height);
@@ -592,7 +592,7 @@ export function renderStar(canvas:SceneCanvas,size:number,weaveDensity:number,pi
         previousFrame = performance.now(); schedule(150); return;
       }
       const now = performance.now();
-      if (now - previousFrame < 1000 / 30 - 1) { schedule(); return; }
+      if (now - previousFrame < 1000 / (input().fps || 30) - 1) { schedule(); return; }
       const frameDelta = Math.min(3, Math.max(.5, (now - previousFrame) / (1000 / 60)));
       previousFrame = now;
       ctx.clearRect(0, 0, width, height);

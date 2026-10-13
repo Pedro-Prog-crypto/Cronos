@@ -193,6 +193,14 @@ def install_routes(app, authenticate):
             except ValueError as exc:
                 raise HTTPException(404, str(exc)) from exc
 
+    @app.patch('/missions/{identifier}', dependencies=auth)
+    async def update_mission(identifier: UUID, body: Plan, request: Request):
+        async with request.app.state.lock:
+            try:
+                return await asyncio.to_thread(request.app.state.missions.update, identifier, body)
+            except ValueError as exc:
+                raise HTTPException(404, str(exc)) from None
+
     @app.get("/windows/audit", dependencies=auth)
     async def audit(request: Request):
         try:

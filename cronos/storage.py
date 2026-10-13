@@ -247,8 +247,9 @@ class Memory:
             db.executemany("INSERT INTO turns(session,role,content,created) VALUES(?,?,?,?)",
                            [(str(session), "user", message, stamp), (str(session), "assistant", reply, stamp)])
             body = f"\n## {stamp}\n\n### Você\n{quoted(message)}\n\n### Cronos — resposta de IA, não verificada\n{quoted(reply)}\n"
-            db.execute("INSERT INTO exports(path,marker,header,body) VALUES(?,?,?,?)",
-                       (conversation, event, f"# Conversa {session}\n", body))
+            if getattr(self, 'save_diary', True):
+                db.execute("INSERT INTO exports(path,marker,header,body) VALUES(?,?,?,?)",
+                           (conversation, event, f"# Conversa {session}\n", body))
             seen = set()
             for topic in topics:
                 target = self._topic(db, topic["title"], topic.get("aliases", []))
@@ -314,3 +315,8 @@ class Memory:
             rows = db.execute("SELECT payload FROM tool_events WHERE session=? ORDER BY id DESC LIMIT ?",
                               (str(session), limit)).fetchall()
         return [json.loads(row[0]) for row in reversed(rows)]
+
+    def tool_history_any(self):
+        with self.connect() as db:
+            row = db.execute('SELECT payload,created FROM tool_events ORDER BY id DESC LIMIT 1').fetchone()
+        return {**json.loads(row['payload']), 'time':row['created']} if row else None
