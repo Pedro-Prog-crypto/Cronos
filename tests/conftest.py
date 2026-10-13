@@ -1,6 +1,10 @@
 import pytest
 from fastapi.testclient import TestClient
 
+@pytest.fixture(autouse=True)
+def explicit_rest_transport_for_existing_tests(monkeypatch):
+    monkeypatch.setenv('GEMINI_TRANSPORT','rest')
+
 
 @pytest.fixture(autouse=True)
 def local_http_client_defaults(monkeypatch):

@@ -13,7 +13,7 @@ def test_429_blocks_second_call_for_same_key_model(tmp_path,monkeypatch):
         return httpx.Response(429,json={'error':{'message':'private-content'}},headers={'Retry-After':'60'})
     client=httpx.AsyncClient
     monkeypatch.setattr(httpx,'AsyncClient',lambda **kwargs:client(transport=httpx.MockTransport(respond),**kwargs))
-    provider=Gemini(replace(settings,gemini_key='dummy-quota-key'))
+    provider=Gemini(replace(settings,gemini_key='dummy-quota-key',gemini_transport='rest'))
     async def run():
         for _ in range(2):
             with pytest.raises(ProviderError,match='429') as error:

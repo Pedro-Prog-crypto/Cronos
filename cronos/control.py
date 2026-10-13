@@ -94,7 +94,10 @@ def install_routes(app, authenticate):
                     if body.provider == "gemini":
                         if not re.fullmatch(r"[a-zA-Z0-9._-]+", model):
                             raise ValueError("Use o ID do modelo Gemini sem o prefixo models/.")
-                        changes["gemini_model"] = model
+                        if 'live' in model or 'native-audio' in model:
+                            changes.update(gemini_transport='live',gemini_live_model='models/'+model)
+                        else:
+                            changes.update(gemini_transport='rest',gemini_model=model)
                         state.features.checks.pop("vision", None)
                     elif body.provider == "ollama":
                         changes["ollama_model"] = model

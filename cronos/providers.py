@@ -20,7 +20,9 @@ def record_gemini_error(status,message):
 
 
 class ProviderError(Exception):
-    pass
+    def __init__(self,message,status=503):
+        super().__init__(message)
+        self.status=status if status in {429,502,503,504} else 503
 
 
 def quota_details(response):
@@ -103,12 +105,15 @@ class Gemini:
         key = self.settings.gemini_key.strip()
         if not key:
             raise ProviderError("Configure GEMINI_API_KEY para usar o Gemini.")
+        if self.settings.gemini_transport=='live':
+            from cronos.gemini_live import reply
+            return await reply(self.settings,system,messages)
         model = self.settings.gemini_model
         if not model or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._" for c in model):
             raise ProviderError("GEMINI_MODEL inválido.")
         identity=hashlib.sha256((key+'|'+model).encode()).hexdigest()
         remaining=max(self.cooldowns.get(identity,0)-time.monotonic(),usage.remaining(identity))
-        if remaining>0:raise ProviderError(f'Gemini: limite recente (HTTP 429). Aguarde {int(remaining)+1} segundos antes de tentar novamente. Nenhuma nova chamada foi enviada.')
+        if remaining>0:raise ProviderError(f'Gemini: limite recente (HTTP 429). Aguarde {int(remaining)+1} segundos antes de tentar novamente. Nenhuma nova chamada foi enviada.',429)
         characters=len(system)+len(OUTPUT_RULES)+sum(len(m['content']) for m in messages)
         try:
             async with httpx.AsyncClient(timeout=self.settings.provider_timeout) as client:
@@ -180,7 +185,7 @@ class Gemini:
                 usage.pause(identity,delay)
                 message+=f" Nova tentativa bloqueada localmente por {int(delay)} segundos."
             record_gemini_error(status,message)
-            raise ProviderError(message) from exc
+            raise ProviderError(message,status) from exc
         except httpx.TimeoutException as exc:
             usage.audit(model,0,characters)
             raise ProviderError("Gemini: tempo de resposta esgotado. Confira a conexão e tente novamente.") from exc

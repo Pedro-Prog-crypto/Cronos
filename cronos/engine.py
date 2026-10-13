@@ -9,8 +9,8 @@ from cronos.providers import ProviderError, make_provider
 
 
 class TurnError(ProviderError):
-    def __init__(self, message, session, results):
-        super().__init__(message)
+    def __init__(self, message, session, results,status=503):
+        super().__init__(message,status)
         self.session, self.results = session, results
 
 
@@ -61,7 +61,7 @@ class Engine:
                     result = await provider.reply(system, messages)
             except ProviderError as exc:
                 if results:
-                    raise TurnError(str(exc), session, results) from exc
+                    raise TurnError(str(exc), session, results,exc.status) from exc
                 raise
             calls = result.get("tool_calls", [])
             if not calls:
@@ -86,7 +86,7 @@ class Engine:
                 with request_scope('conversation',turn):
                     final = await provider.reply(system + "\nNão solicite mais ferramentas; relate os resultados existentes e limitações.", messages)
             except ProviderError as exc:
-                raise TurnError(str(exc), session, results) from exc
+                raise TurnError(str(exc), session, results,exc.status) from exc
             if final.get("tool_calls"):
                 raise TurnError("O modelo não concluiu o plano dentro do orçamento de ferramentas. Confira os resultados já registrados antes de repetir ações.", session, results)
         notes = await asyncio.to_thread(self.memory.record, session, message, final["reply"], final["topics"])

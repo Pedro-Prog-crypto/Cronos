@@ -25,9 +25,11 @@ def main(argv=None):
     print("Diagnóstico de conexão do Cronos")
     print("Provedor:", settings.provider)
     if settings.provider == "gemini":
-        print("Modelo:", settings.gemini_model)
+        model=settings.gemini_live_model if settings.gemini_transport=='live' else settings.gemini_model
+        print('Rota Gemini:',settings.gemini_transport)
+        print("Modelo:", model)
         print("Chave Gemini:", "configurada" if settings.gemini_key.strip() else "ausente")
-        identity=hashlib.sha256((settings.gemini_key.strip()+'|'+settings.gemini_model).encode()).hexdigest()
+        identity=hashlib.sha256((settings.gemini_key.strip()+('|live|' if settings.gemini_transport=='live' else '|')+model).encode()).hexdigest()
         remaining=usage.remaining(identity)
         if remaining>0:print('Pausa ativa preservada entre reinícios:',int(remaining)+1,'segundos. Não confirma horário de renovação da cota.')
     counts={};total=0
@@ -38,7 +40,7 @@ def main(argv=None):
             for line in path.read_text(encoding='utf-8').splitlines():
                 try:row=json.loads(line)
                 except ValueError:continue
-                if row.get('model')!=settings.gemini_model:continue
+                if row.get('model')!=(settings.gemini_live_model if settings.gemini_transport=='live' else settings.gemini_model):continue
                 total+=1;source=row.get('source','operation');counts[source]=counts.get(source,0)+1
         except OSError:pass
     print('Tentativas Gemini registradas localmente para este modelo:',total)

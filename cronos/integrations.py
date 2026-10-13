@@ -104,7 +104,7 @@ def configured_provider(settings, provider_id=None):
     if settings.privacy_mode != 'online' and spec.kind != 'ollama':
         raise ProviderError("Modo local: provedores externos estão desabilitados.")
     if spec.kind == "gemini":
-        return Gemini(replace(settings, gemini_model=spec.model, gemini_key=os.getenv(spec.key_env, ""),
+        return Gemini(replace(settings, gemini_transport='rest',gemini_model=spec.model, gemini_key=os.getenv(spec.key_env, ""),
                               output_tokens=spec.max_output_tokens, provider_timeout=spec.timeout_seconds))
     if spec.kind == "ollama":
         return Ollama(replace(settings, ollama_model=spec.model, ollama_url=checked_url(spec.base_url),
@@ -113,7 +113,7 @@ def configured_provider(settings, provider_id=None):
 
 
 def provider_catalog(settings):
-    entries = [{"id": "gemini", "kind": "gemini", "model": settings.gemini_model, "configured": bool(settings.gemini_key)},
+    entries = [{"id": "gemini", "kind": "gemini", "model": settings.gemini_live_model if settings.gemini_transport=='live' else settings.gemini_model, "configured": bool(settings.gemini_key)},
                {"id": "ollama", "kind": "ollama", "model": settings.ollama_model, "configured": True}]
     entries.extend({"id": spec.id, "kind": spec.kind, "model": spec.model,
                     "configured": not spec.key_env or bool(os.getenv(spec.key_env))} for spec in specs(settings))

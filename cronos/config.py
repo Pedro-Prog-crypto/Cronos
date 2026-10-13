@@ -33,8 +33,12 @@ class Settings:
     allow_executables: bool = False
     fish_format: str = "mp3"
     transcription_provider: str = "fish"
+    gemini_transport: str = "live"
+    gemini_live_model: str = "models/gemini-3.1-flash-live-preview"
 
     def __post_init__(self):
+        if self.gemini_transport not in {'live','rest'}:
+            raise ValueError('GEMINI_TRANSPORT deve ser live ou rest.')
         if self.transcription_provider not in {"fish", "vosk"}:
             raise ValueError("CRONOS_TRANSCRIPTION_PROVIDER deve ser fish ou vosk.")
         if self.fish_format not in {"mp3", "wav"}:
@@ -51,6 +55,8 @@ class Settings:
             provider=os.getenv("CRONOS_PROVIDER", "gemini"),
             gemini_key=os.getenv("GEMINI_API_KEY", ""),
             gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+            gemini_transport=os.getenv('GEMINI_TRANSPORT','live').strip().lower(),
+            gemini_live_model=os.getenv('GEMINI_LIVE_MODEL','models/gemini-3.1-flash-live-preview').strip(),
             fish_key=os.getenv("FISH_API_KEY", ""),
             fish_reference=os.getenv("FISH_REFERENCE_ID", ""),
             fish_model=os.getenv("FISH_MODEL", "").strip().lower(),

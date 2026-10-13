@@ -152,9 +152,9 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
             try:
                 result = await request.app.state.engine.chat(session, body.message)
             except TurnError as exc:
-                raise HTTPException(503, {"message": str(exc), "session_id": str(exc.session), "tool_results": exc.results}) from exc
+                raise HTTPException(exc.status, {"message": str(exc), "session_id": str(exc.session), "tool_results": exc.results}) from exc
             except ProviderError as exc:
-                raise HTTPException(503, str(exc)) from exc
+                raise HTTPException(exc.status, str(exc)) from exc
             except (OSError, ValueError):
                 raise HTTPException(500, "Não foi possível ler ou salvar personalidade/memória.")
         request.app.state.features.record("language", "passed", "Uma conversa foi processada e salva. Não certifica precisão de todas as respostas.")
