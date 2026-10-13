@@ -4,11 +4,12 @@ import {api} from '../api';
 export function speechChunks(text:string):string[]{
   const chunks:string[]=[];let remaining=text;
   while(remaining.length){
-    const limit=chunks.length?360:220;
+    const limit=chunks.length?360:120;
     if(remaining.length<=limit){chunks.push(remaining);break;}
     const prefix=remaining.slice(0,limit),sentences=[...prefix.matchAll(/[.!?](?:[\s]|$)/g)];
     let cut=sentences.length?sentences[chunks.length?sentences.length-1:0].index!+1:prefix.lastIndexOf(' ');
-    if(cut<40)cut=limit;
+    if(cut<20)cut=prefix.lastIndexOf(' ');
+    if(cut<1)cut=limit;
     chunks.push(remaining.slice(0,cut));remaining=remaining.slice(cut);
   }
   return chunks.filter(chunk=>chunk.trim());

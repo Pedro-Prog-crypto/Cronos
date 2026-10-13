@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 import time
+from datetime import datetime, timezone
 import webbrowser
 from dataclasses import dataclass
 from pathlib import Path
@@ -281,7 +282,42 @@ def create_registry(settings, memory, monitor=None, windows=None, missions=None)
                 message = "Busca indisponível. Confira instalação, proxy, conexão e acesso ao DuckDuckGo."
             raise ToolError(message) from None
 
+    news_cache = {}
+    def news(args):
+        from cronos.news import current_news_query
+        query=current_news_query(args.query) or args.query.strip()
+        now=time.monotonic();key=(query.casefold(),args.limit)
+        cached=news_cache.get(key)
+        if cached and now-cached[0]<90:
+            return {**cached[1], 'cached':True}
+        try:
+            from ddgs import DDGS
+            proxy=os.getenv('DDGS_PROXY') or os.getenv('HTTPS_PROXY') or os.getenv('https_proxy')
+            certificates=os.getenv('SSL_CERT_FILE') or os.getenv('REQUESTS_CA_BUNDLE') or True
+            with DDGS(timeout=3,proxy=proxy,verify=certificates) as client:
+                raw=list(client.news(query,max_results=args.limit,backend='duckduckgo',timelimit='d',region='br-pt'))
+            articles=[]
+            for item in raw:
+                url=item.get('url') or item.get('href') or ''
+                parsed=urlsplit(url)
+                if parsed.scheme not in {'http','https'} or not parsed.hostname or parsed.username or parsed.password:continue
+                articles.append({'title':str(item.get('title',''))[:400], 'url':url[:2000],
+                                 'excerpt':str(item.get('body',''))[:1200], 'published':str(item.get('date',''))[:100],
+                                 'source':str(item.get('source',''))[:200]})
+            if not articles:raise ToolError('O buscador não retornou notícias recentes. Nenhuma manchete foi inventada.')
+            result={'articles':articles, 'fetched_at':datetime.now(timezone.utc).isoformat(), 'cached':False,
+                    'scope':'Resultados do filtro das últimas 24 horas; confira as datas publicadas e as fontes.'}
+            news_cache.clear() if len(news_cache)>=20 else None
+            news_cache[key]=(now,result)
+            return result
+        except ImportError:
+            raise ToolError('Busca de notícias não instalada. Execute pip install -e ".[search]".') from None
+        except ToolError:raise
+        except Exception:
+            raise ToolError('A busca de notícias não foi concluída. Confira conexão, certificados e acesso ao buscador; nenhuma notícia foi inventada.') from None
+
     if settings.privacy_mode == 'online':
+        add('web_news', 'Busca notícias recentes (filtro das últimas 24 horas), com fontes e datas; cache local por no máximo 90 segundos.', Query, news)
         add("web_search", "Pesquisa informações atuais na web e retorna URLs de fontes; exige o extra search.", Query, search)
 
     async def council(args):

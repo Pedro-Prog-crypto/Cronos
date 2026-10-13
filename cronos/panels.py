@@ -97,7 +97,7 @@ class PanelState:
 
     def policy(self, name):
         p = self.preferences
-        group = 'web_enabled' if name in {'web_search', 'browser_open', 'browser_search'} else 'apps_enabled' if name == 'desktop_open_app' else 'commands_enabled' if name == 'desktop_run_executable' else 'files_enabled' if name.startswith('files_') or name == 'desktop_open_folder' else None
+        group = 'web_enabled' if name in {'web_search', 'web_news', 'browser_open', 'browser_search'} else 'apps_enabled' if name == 'desktop_open_app' else 'commands_enabled' if name == 'desktop_run_executable' else 'files_enabled' if name.startswith('files_') or name == 'desktop_open_folder' else None
         return (not group or getattr(p, group)), p.confirm_tools or (p.confirm_critical and name == 'desktop_run_executable')
 
     def save(self, changes):
@@ -138,7 +138,7 @@ class PanelState:
         stats = state.memory.stats()
         with state.memory.connect() as db:
             searches = [dict(row) for row in db.execute("SELECT payload,created FROM tool_events ORDER BY id DESC LIMIT 200")]
-        searches = [{'time':r['created'], **json.loads(r['payload'])} for r in searches if json.loads(r['payload']).get('name') == 'web_search'][:30]
+        searches = [{'time':r['created'], **json.loads(r['payload'])} for r in searches if json.loads(r['payload']).get('name') in {'web_search','web_news'}][:30]
         disk = shutil.disk_usage(state.memory.vault)
         return {'preferences':self.preferences.model_dump(), 'memory':{**stats, 'vault':str(state.memory.vault),
                 'database_bytes':state.memory.database.stat().st_size, 'disk_used_bytes':disk.used,

@@ -38,3 +38,11 @@ O painel Processamento informa os tempos de reconhecimento, conversa, primeira s
 Dispositivos oferece sensibilidade e ganho do microfone. O padrão agora detecta sinais mais baixos e aplica ganho 2x ao áudio de entrada do transcritor; ruído constante e cliques curtos continuam filtrados. Ganho não cria palavras ausentes nem separa uma voz distante de ruído alto. As configurações do provedor e a voz personalizada continuam intactas.
 
 O fundo dos painéis e os desenhos de Processamento, Internet e Segurança reutilizam regiões das imagens originais. Essas ilustrações são estáticas; os dados e controles permanecem elementos funcionais separados.
+
+### Notícias do dia
+
+Pedidos explícitos de notícias atuais fazem a busca antes da primeira geração: o Gemini já recebe as fontes e pode responder com uma única chamada, em vez de decidir a busca em uma chamada anterior. Notas e resultados de buscas antigas não são usados como fontes atuais nesse caminho. A ferramenta `web_news` usa o filtro das últimas 24 horas, preserva datas/URLs e mantém um cache por até 90 segundos. Permissões, modo local e confirmação de ferramentas continuam sendo respeitados. Se a busca falha, a falha é fornecida ao modelo; nenhuma manchete é preenchida com exemplos.
+
+Processamento passa a exibir o tempo de busca e a quantidade de chamadas à IA. A primeira parte enviada ao Fish tem até 120 caracteres para iniciar a reprodução antes; as partes restantes continuam sendo reproduzidas integralmente. Modelos, chaves e ID da voz permanecem os mesmos.
+
+A busca de notícias limita a espera de rede a 3 segundos por operação do buscador. Nesse caminho, novas buscas no mesmo turno são bloqueadas, inclusive com argumentos diferentes, para evitar uma sequência de esperas após falha. Isso não garante um prazo total fixo: Gemini, rede e síntese de voz ainda têm latências próprias.
