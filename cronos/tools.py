@@ -283,9 +283,11 @@ def create_registry(settings, memory, monitor=None, windows=None, missions=None)
         from cronos.providers import make_provider, ProviderError
         async def consult(provider_id):
             try:
+                from cronos.usage import request_scope
                 provider = make_provider(replace(settings, provider=provider_id))
-                response = await provider.reply("Faça uma análise independente e crítica. Identifique incertezas e não execute ferramentas.",
-                                                [{"role": "user", "content": args.question}])
+                with request_scope('multi_model'):
+                    response = await provider.reply("Faça uma análise independente e crítica. Identifique incertezas e não execute ferramentas.",
+                                                    [{"role": "user", "content": args.question}])
                 return {"provider": provider_id, "status": "completed", "answer": response["reply"]}
             except ProviderError as exc:
                 return {"provider": provider_id, "status": "failed", "error": str(exc)}

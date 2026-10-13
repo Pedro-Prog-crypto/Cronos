@@ -51,6 +51,11 @@ personalidade, memória, histórico e ferramentas, e pode precisar de mais gera�
 
 ## Abrir e atualizar
 
+Controle de consumo atualizado: [requisições e diagnóstico local](CONSUMO_GEMINI.md).
+O diagnóstico padrão deixou de gerar texto; a pausa 429 agora é preservada entre
+processos e reinícios. As mensagens antigas de “chamada mínima” se aplicam à opção
+explícita `--generate`.
+
 Preserve `.env` e o vault. Atualize a mesma pasta usada para iniciar o Kronos,
 incluindo `cronos/ui` completo. Abra `Iniciar-Cronos.vbs` para iniciar sem prompt.
 Não precisa reimportar a voz que já funciona. A instância Kronos é única;

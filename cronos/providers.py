@@ -9,6 +9,7 @@ from typing import Protocol
 import httpx
 
 from cronos.config import Settings
+from cronos import usage
 
 
 def record_gemini_error(status,message):
@@ -106,8 +107,9 @@ class Gemini:
         if not model or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._" for c in model):
             raise ProviderError("GEMINI_MODEL inválido.")
         identity=hashlib.sha256((key+'|'+model).encode()).hexdigest()
-        remaining=self.cooldowns.get(identity,0)-time.monotonic()
+        remaining=max(self.cooldowns.get(identity,0)-time.monotonic(),usage.remaining(identity))
         if remaining>0:raise ProviderError(f'Gemini: limite recente (HTTP 429). Aguarde {int(remaining)+1} segundos antes de tentar novamente. Nenhuma nova chamada foi enviada.')
+        characters=len(system)+len(OUTPUT_RULES)+sum(len(m['content']) for m in messages)
         try:
             async with httpx.AsyncClient(timeout=self.settings.provider_timeout) as client:
                 for attempt in range(2):
@@ -122,11 +124,15 @@ class Gemini:
                                                  **({"maxOutputTokens": self.settings.output_tokens} if self.settings.output_tokens else {})},
                         },
                     )
+                    try:metadata=response.json().get('usageMetadata',{})
+                    except (ValueError,AttributeError):metadata={}
+                    usage.audit(model,response.status_code,characters,metadata if isinstance(metadata,dict) else {})
                     if response.status_code != 503 or attempt:
                         break
                     await response.aclose()
                     await asyncio.sleep(.75)
                 response.raise_for_status()
+                usage.clear_pause(identity)
                 data = response.json()
                 if data.get("promptFeedback", {}).get("blockReason"):
                     raise ProviderError("Gemini bloqueou esta solicitação. Tente reformular a mensagem.")
@@ -171,12 +177,15 @@ class Gemini:
                 try:delay=max(1,min(3600,float(exc.response.headers.get('Retry-After',delay))))
                 except ValueError:pass
                 self.cooldowns[identity]=time.monotonic()+delay
+                usage.pause(identity,delay)
                 message+=f" Nova tentativa bloqueada localmente por {int(delay)} segundos."
             record_gemini_error(status,message)
             raise ProviderError(message) from exc
         except httpx.TimeoutException as exc:
+            usage.audit(model,0,characters)
             raise ProviderError("Gemini: tempo de resposta esgotado. Confira a conexão e tente novamente.") from exc
         except httpx.RequestError as exc:
+            usage.audit(model,0,characters)
             raise ProviderError("Gemini: não foi possível conectar à API Google. Confira internet, DNS, proxy e certificados do Windows.") from exc
         except (KeyError, IndexError, ValueError, TypeError, AttributeError) as exc:
             raise ProviderError("Gemini respondeu, mas o conteúdo veio incompleto ou em formato inesperado. Tente uma mensagem curta ou outra conversa.") from exc

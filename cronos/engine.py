@@ -2,6 +2,8 @@
 import asyncio
 import json
 from datetime import datetime
+from uuid import uuid4
+from cronos.usage import request_scope
 
 from cronos.providers import ProviderError, make_provider
 
@@ -52,9 +54,11 @@ class Engine:
         results, used = [], set()
         provider = self.provider or make_provider(self.settings)
         final = None
+        turn=str(uuid4())
         for _ in range(self.settings.tool_rounds):
             try:
-                result = await provider.reply(system, messages)
+                with request_scope('conversation',turn):
+                    result = await provider.reply(system, messages)
             except ProviderError as exc:
                 if results:
                     raise TurnError(str(exc), session, results) from exc
@@ -79,7 +83,8 @@ class Engine:
         if final is None:
             # Após atingir o orçamento de ferramentas, pedir síntese sem novas ações.
             try:
-                final = await provider.reply(system + "\nNão solicite mais ferramentas; relate os resultados existentes e limitações.", messages)
+                with request_scope('conversation',turn):
+                    final = await provider.reply(system + "\nNão solicite mais ferramentas; relate os resultados existentes e limitações.", messages)
             except ProviderError as exc:
                 raise TurnError(str(exc), session, results) from exc
             if final.get("tool_calls"):

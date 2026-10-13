@@ -104,8 +104,9 @@ Os resultados permanecem identificados por provedor e incluem falhas; o modelo
 principal analisa diferenças sem votação por semelhança de palavras. Não há troca
 silenciosa de provedor ou de modelo pago. Nenhuma API paga é tratada como gratuita.
 
-Se a IA falhar, execute `Diagnosticar-Cronos.bat`. Ele faz uma chamada mínima,
-pode consumir cota e não salva a conversa nem imprime chaves.
+Se a IA falhar, execute `Diagnosticar-Cronos.bat`. Ele consulta configuração,
+último erro e contagens locais sem gerar texto nem consumir uma requisição Gemini.
+Para entender o registro e solicitar um teste real, veja [controle de consumo](docs/CONSUMO_GEMINI.md).
 
 ## Voz
 

@@ -71,9 +71,11 @@ class Features:
                 evidence = {"configured": bool(configured)}
                 scope = "Nenhuma chamada paga foi feita. Use Gerar voz ou Analisar imagem para testar o serviço real."
             elif identifier == "language":
+                from cronos.usage import request_scope
                 provider = state.engine.provider or make_provider(settings)
-                response = await provider.reply("Teste de comunicação. Responda brevemente, sem ferramentas e sem temas.",
-                                                [{"role": "user", "content": "Diga olá em português."}])
+                with request_scope('module_check'):
+                    response = await provider.reply("Teste de comunicação. Responda brevemente, sem ferramentas e sem temas.",
+                                                    [{"role": "user", "content": "Diga olá em português."}])
                 evidence = {"reply": response["reply"], "provider": settings.provider}
                 scope = "Uma geração real; pode consumir cota. Não avalia todas as capacidades de linguagem."
             elif identifier in {"planning", "database"}:

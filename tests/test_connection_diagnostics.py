@@ -29,5 +29,5 @@ def test_gemini_404_lists_models_without_a_second_generation(settings,monkeypatc
     monkeypatch.setattr(diagnostics,'make_provider',lambda settings:Provider())
     monkeypatch.setattr(diagnostics,'available_models',models)
     import pytest
-    with pytest.raises(SystemExit):diagnostics.main()
+    with pytest.raises(SystemExit):diagnostics.main(['--generate'])
     assert 'Modelo disponível: modelo-real-flash' in capsys.readouterr().out
