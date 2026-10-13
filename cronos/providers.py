@@ -3,6 +3,7 @@ import hashlib
 import time
 from pathlib import Path
 import json
+import re
 from typing import Protocol
 
 import httpx
@@ -19,6 +20,26 @@ def record_gemini_error(status,message):
 
 class ProviderError(Exception):
     pass
+
+
+def quota_details(response):
+    """Read only recognized quota categories and a bounded retry interval."""
+    categories=set();retry=None
+    try:
+        details=response.json().get('error',{}).get('details',[])
+        for detail in details:
+            if not isinstance(detail,dict):continue
+            if str(detail.get('@type','')).endswith('QuotaFailure'):
+                for violation in detail.get('violations',[]):
+                    if not isinstance(violation,dict):continue
+                    identifier=str(violation.get('quotaId','')).lower()
+                    if 'perday' in identifier:categories.add('requisições por dia' if 'request' in identifier else 'cota diária')
+                    elif 'perminute' in identifier:categories.add('tokens por minuto' if 'token' in identifier else 'requisições por minuto')
+            if str(detail.get('@type','')).endswith('RetryInfo'):
+                value=detail.get('retryDelay','')
+                if isinstance(value,str) and re.fullmatch(r'\d+(?:\.\d+)?s',value):retry=max(1,min(3600,float(value[:-1])))
+    except (ValueError,AttributeError,TypeError):pass
+    return sorted(categories),retry
 
 
 class Provider(Protocol):
@@ -144,8 +165,10 @@ class Gemini:
             else:
                 message = f"Gemini: chamada rejeitada (HTTP {status}). Verifique o acesso à API no projeto Google."
             if status==429:
-                delay=60
-                try:delay=max(1,min(3600,float(exc.response.headers.get('Retry-After',60))))
+                categories,retry=quota_details(exc.response)
+                if categories:message+=' Limite informado pelo Google: '+', '.join(categories)+'.'
+                delay=retry or 60
+                try:delay=max(1,min(3600,float(exc.response.headers.get('Retry-After',delay))))
                 except ValueError:pass
                 self.cooldowns[identity]=time.monotonic()+delay
                 message+=f" Nova tentativa bloqueada localmente por {int(delay)} segundos."

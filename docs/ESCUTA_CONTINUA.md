@@ -43,6 +43,11 @@ Erros HTTP futuros do Gemini deixam mensagem sanitizada em
 Após HTTP 429 há uma pausa local antes de tentar novamente, respeitando
 Retry-After quando numérico. Essa pausa não renova cota nem muda plano/modelo.
 O erro anterior que desapareceu não pode ser recuperado retroativamente.
+Quando o Google envia detalhes estruturados, o erro identifica limite de
+requisições por minuto, por dia ou tokens por minuto e respeita o intervalo
+RetryInfo. Nenhum corpo bruto, chave ou conteúdo pessoal é exibido. Um diagnóstico
+mínimo bem-sucedido não garante cota para a conversa completa: ela inclui
+personalidade, memória, histórico e ferramentas, e pode precisar de mais gerações.
 
 ## Abrir e atualizar
 

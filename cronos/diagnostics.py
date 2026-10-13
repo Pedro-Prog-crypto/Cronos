@@ -37,7 +37,7 @@ def main():
             except ProviderError as lookup_error:
                 print("Consulta de modelos falhou:",str(lookup_error))
         raise SystemExit(1)
-    print("OK: o provedor respondeu no formato esperado. Nenhuma conversa foi salva.")
+    print("OK: a chamada mínima respondeu. Isso não confirma cota para uma conversa completa, que envia mais contexto e pode usar ferramentas. Nenhuma conversa foi salva.")
 
 
 if __name__ == "__main__":
