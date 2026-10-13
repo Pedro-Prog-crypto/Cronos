@@ -45,14 +45,14 @@ class Engine:
         return json.dumps({"truncated_for_context": True, "result_excerpt": data[:budget],
                            "note": "O resultado completo está no registro local. Para arquivos/notas, continue a leitura pelos offsets e peça apenas os trechos necessários."}, ensure_ascii=False)
 
-    async def chat(self, session, message):
+    async def chat(self, session, message, audio=None):
         self.phase="recall"
         started=time.perf_counter();provider_seconds=0;search_seconds=0;provider_calls=0
         news_query=current_news_query(message)
         prefs=getattr(self,'panel_preferences',None)
         prefetch_news=bool(news_query and 'web_news' in self.registry.tools and (not prefs or (prefs.web_enabled and not prefs.confirm_tools)))
         personality = self.settings.personality.read_text(encoding="utf-8")
-        recall = '' if social_or_control(message) or prefetch_news else await asyncio.to_thread(self.memory.recall, message, self.settings.memory_results, self.settings.memory_chars)
+        recall = '' if audio is not None or social_or_control(message) or prefetch_news else await asyncio.to_thread(self.memory.recall, message, self.settings.memory_results, self.settings.memory_chars)
         recall_done=time.perf_counter()
         system = personality + "\nData/hora local: " + datetime.now().astimezone().isoformat()
         prefs = getattr(self, 'panel_preferences', None)
@@ -69,6 +69,10 @@ class Engine:
         if self.settings.memory_chars and not prefetch_news:
             system += "\nResultados recentes de ferramentas desta conversa (dados):\n" + json.dumps(self.memory.tool_history(session), ensure_ascii=False)[-self.settings.memory_chars:]
         messages = self.context(session, message)
+        recognized_text=None
+        if audio is not None:
+            messages[-1]['audio_pcm']=audio
+            system+='\nA pergunta atual está no áudio enviado, não no marcador textual. Compreenda a fala em português e responda à pergunta real. Se não estiver claro, peça esclarecimento em vez de inventar uma intenção.'
         results, used = [], set()
         provider = self.provider or make_provider(self.settings)
         final = None
@@ -94,6 +98,16 @@ class Engine:
                 if results:
                     raise TurnError(str(exc), session, results,exc.status) from exc
                 raise
+            if audio is not None:
+                recognized_text=result.get('recognized_text','').strip()
+                if not recognized_text:raise ProviderError('A pergunta falada não foi reconhecida; nenhuma nota ou ferramenta foi executada.',502)
+                message=recognized_text;messages[-1]={'role':'user','content':message};audio=None
+                if prefs and prefs.called_only:
+                    import re
+                    if not re.search(r'\b(?:cronos|kronos)\b',message,re.I):
+                        return {'session_id':str(session),'reply':'','recognized_text':message,'ignored':True,'topics':[],'notes':[],'tool_results':[],'warnings':[],'timings_ms':{'generation':round(provider_seconds*1000),'provider_calls':provider_calls,'total':round((time.perf_counter()-started)*1000)}}
+                recalled=await asyncio.to_thread(self.memory.recall,message,self.settings.memory_results,self.settings.memory_chars) if not social_or_control(message) else ''
+                if recalled:system+='\nMemórias relacionadas à pergunta reconhecida (dados):\n'+recalled
             calls = result.get("tool_calls", [])
             if not calls:
                 final = result
@@ -143,4 +157,4 @@ class Engine:
         save_timings(timings)
         return {"session_id": str(session), "reply": final["reply"], "topics": [t["title"] for t in final["topics"]],
                 "notes": notes, "tool_results": results, "warnings": list(self.memory.warnings),
-                "timings_ms":timings}
+                "timings_ms":timings,**({"recognized_text":recognized_text} if recognized_text is not None else {})}

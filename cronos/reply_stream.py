@@ -76,7 +76,7 @@ def ready_intro(raw):
         segment=re.sub(r'\\u[0-9a-fA-F]{0,3}$','',segment)
         text=json.loads('"'+segment+'"')
         match=re.search(r'[.!?](?:\s|$)',text[:140])
-        if match and match.end()>=24:return text[:match.end()]
+        if match and 24<=match.end()<=120:return text[:match.end()]
         if len(text)>=140:
             end=text.rfind(' ',0,120)
             if end>=24:return text[:end+1]
@@ -87,4 +87,9 @@ def ready_intro(raw):
 intro_sink=ContextVar('intro_sink',default=None)
 async def deliver_intro(text):
     sink=intro_sink.get()
+    if sink is not None:await sink(text)
+
+transcript_sink=ContextVar('transcript_sink',default=None)
+async def deliver_transcript(text):
+    sink=transcript_sink.get()
     if sink is not None:await sink(text)

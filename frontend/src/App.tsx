@@ -30,7 +30,7 @@ export default function App(){
   const [eyeOpen,setEyeOpen]=useState(false),[placeQuery,setPlaceQuery]=useState(''),[graph,setGraph]=useState<MemoryGraph>({nodes:[],edges:[],total:0}),[graphRevision,setGraphRevision]=useState(0),[note,setNote]=useState<{path:string;content:string}|null>(null);
   const [showSpokenCards,setShowSpokenCards]=useState(false);
   const [displayTurn,setDisplayTurn]=useState<{question:string;source:'text'|'transcription';reply:string}|null>(null);
-  const sendRef=useRef<(text:string)=>Promise<void>>(async()=>{});
+  const sendRef=useRef<(text:string,audio?:Blob)=>Promise<void>>(async()=>{});
   const commandRef=useRef<(text:string)=>boolean>(()=>false),eyeAnnouncement=useRef(false);
   const pendingAlerts=useRef(new Map<number,any>());
   const chatAbort=useRef<AbortController|null>(null),turnVersion=useRef(0),interrupt=useRef(()=>{});
@@ -40,7 +40,7 @@ export default function App(){
   const saveLatency=useCallback((value:any)=>{const {started,armed,...metrics}=value;void jsonApi('/panels/latency',metrics).catch(()=>{});},[]);
   const tell=useCallback((message:string,isError=false)=>{setNotice(message);setError(isError);},[]);
   const voice=useCronosVoice({preferences:panelPrefs,onSpeechStart:metrics=>{const current=latency.current;if(current?.armed&&metrics?.turn_id===current.turn_id){current.armed=false;saveLatency({...current,...metrics,first_audio_ms:Math.round(performance.now()-current.started)});}},onError:message=>{if(latency.current)latency.current.armed=false;tell(message,true);}});
-  const microphone=useMicrophone(useCallback((text,metrics)=>{recognition.current=metrics;if(!text.trim()){tell('Não consegui entender a fala. Tente novamente.',true);return;}if(commandRef.current(text))return;if(prefsRef.current?.called_only&&!/\b(?:cronos|kronos)\b/i.test(text))return;setChatOpen(false);void sendRef.current(text);},[tell]),useCallback(message=>tell(message,true),[tell]),config?.transcription_provider==='vosk',busy||voice.isSpeaking||voice.isGenerating||(pageHidden&&panelPrefs?.background_processing===false),panelPrefs);
+  const microphone=useMicrophone(useCallback((text,metrics)=>{recognition.current=metrics;if(!text.trim()){tell('Não consegui entender a fala. Tente novamente.',true);return;}if(commandRef.current(text))return;if(prefsRef.current?.called_only&&!/\b(?:cronos|kronos)\b/i.test(text))return;setChatOpen(false);void sendRef.current(text);},[tell]),useCallback(message=>tell(message,true),[tell]),Boolean(config?.direct_audio_chat)||config?.transcription_provider==='vosk',busy||voice.isSpeaking||voice.isGenerating||(pageHidden&&panelPrefs?.background_processing===false),panelPrefs,config?.direct_audio_chat?async(audio,metrics)=>{recognition.current=metrics;await sendRef.current('Pergunta por voz',audio);}:undefined);
   const state=voice.isSpeaking?'SPEAKING':microphone.capturing?'LISTENING':moduleActivity;
   const audioLevelSource=voice.isSpeaking?voice.audioLevelSource:microphone.audioLevelSource;
   const live=useRef({busy:false,recording:false,transcribing:false,speaking:false,generating:false,module:null as string|null,announce:false,fish:false});
@@ -130,28 +130,28 @@ export default function App(){
     if(!connected){tell('A conexão automática ainda não está disponível.',true);return;}
     setChatOpen(false);setShowSpokenCards(false);void microphone.toggle();
   };
-  const sendText=async(value:string,source:'text'|'transcription'='text')=>{
-    const text=value.trim();if(!text||inFlight.current)return;if(runCommand(text)){setDraft('');return;}
+  const sendText=async(value:string,source:'text'|'transcription'='text',audio?:Blob)=>{
+    const text=value.trim();if(!text||inFlight.current)return;if(!audio&&runCommand(text)){setDraft('');return;}
     if(!connected){tell('A conexão automática ainda não está disponível. Feche e abra o Kronos novamente.',true);return;}
-    setShowSpokenCards(source==='text');setDisplayTurn({question:text,source,reply:''});setChatOpen(false);
+    setShowSpokenCards(source==='text');if(!audio)setDisplayTurn({question:text,source,reply:''});setChatOpen(false);
     inFlight.current=true;setBusy(true);voice.stop();if(autoVoice)voice.prepare();setDraft('');tell('Cronos está processando sua mensagem…');
     latency.current={turn_id:crypto.randomUUID(),source:source==='transcription'?'voice':'text',started:performance.now(),armed:false,chat_ms:0,...(source==='transcription'?recognition.current:{})};
     const turnLatency=latency.current;
     const version=++turnVersion.current,controller=new AbortController();chatAbort.current=controller;
     try{
-      let voiced=false,introText='',replyDelivered=false;let introSpeech:Promise<void>|null=null;
+      let question=text;let voiced=false,introText='',replyDelivered=false,voiceAllowed=!audio||!prefsRef.current?.called_only;let finishSpeech:((text:string)=>void)|null=null;
       const intro=(reply:string)=>{
-        if(version!==turnVersion.current||controller.signal.aborted||voiced||!autoVoice||!config?.fish_speech_configured)return;
-        introText=reply;voiced=true;turnLatency.chat_ms=Math.round(performance.now()-turnLatency.started);latency.current=turnLatency;turnLatency.armed=true;saveLatency(turnLatency);introSpeech=voice.speak(reply,turnLatency.turn_id);
+        if(version!==turnVersion.current||controller.signal.aborted||!voiceAllowed||voiced||!autoVoice||!config?.fish_speech_configured)return;
+        introText=reply;voiced=true;turnLatency.chat_ms=Math.round(performance.now()-turnLatency.started);latency.current=turnLatency;turnLatency.armed=true;saveLatency(turnLatency);const continuation=new Promise<string>(resolve=>{finishSpeech=resolve;});void voice.speak(reply,turnLatency.turn_id,continuation);
       };
       const ready=(reply:string)=>{
         if(version!==turnVersion.current||controller.signal.aborted)return;
-        if(replyDelivered)return;replyDelivered=true;
-        setDisplayTurn({question:text,source,reply});setNotice('');
+        if(!voiceAllowed||replyDelivered)return;replyDelivered=true;
+        setDisplayTurn({question,source,reply});setNotice('');
         if(introText){
           if(!reply.startsWith(introText))throw new ApiError('A resposta inicial divergiu da resposta completa.',502);
           const rest=reply.slice(introText.length);
-          if(rest.trim())void introSpeech!.then(()=>{if(version===turnVersion.current&&!controller.signal.aborted)void voice.speak(rest,turnLatency.turn_id);});
+          finishSpeech?.(rest);
         }
         if(autoVoice&&config?.fish_speech_configured&&!voiced){
           voiced=true;turnLatency.chat_ms=Math.round(performance.now()-turnLatency.started);
@@ -159,7 +159,13 @@ export default function App(){
           void voice.speak(reply,turnLatency.turn_id);
         }
       };
-      const result=await streamChat({message:text,session_id:session.current},controller.signal,ready,intro);if(version!==turnVersion.current||controller.signal.aborted)return;if(!voiced)turnLatency.chat_ms=Math.round(performance.now()-turnLatency.started);saveLatency(turnLatency);session.current=result.session_id;setDisplayTurn({question:text,source,reply:result.reply});setGraphRevision(value=>value+1);
+      const result=await streamChat({message:text,session_id:session.current},controller.signal,ready,intro,recognized=>{
+        if(version!==turnVersion.current||controller.signal.aborted)return;
+        if(prefsRef.current?.called_only&&!/\b(?:cronos|kronos)\b/i.test(recognized)){controller.abort();voice.stop();setDisplayTurn(null);setNotice('');return;}
+        voiceAllowed=true;if(audio)turnLatency.recognition_ms=Math.round(performance.now()-turnLatency.started);
+        if(runCommand(recognized)){controller.abort();return;}
+        question=recognized;setDisplayTurn({question,source,reply:''});
+      },audio);if(version!==turnVersion.current||controller.signal.aborted)return;if(result.ignored){setDisplayTurn(null);setNotice('');return;}if(!voiced)turnLatency.chat_ms=Math.round(performance.now()-turnLatency.started);saveLatency(turnLatency);session.current=result.session_id;setDisplayTurn({question:result.recognized_text||text,source,reply:result.reply});setGraphRevision(value=>value+1);
       setTools(old=>[...old,...(result.tool_results||[])]);
       if(result.warnings?.length)tell(result.warnings.join('\n'),true);else setNotice('');
       if(autoVoice&&config?.fish_speech_configured){ready(result.reply);}
@@ -172,7 +178,7 @@ export default function App(){
       setDraft(text); // Falha não elimina a pergunta; não repetir ações automaticamente.
     }finally{if(version===turnVersion.current){setBusy(false);inFlight.current=false;chatAbort.current=null;}}
   };
-  sendRef.current=text=>sendText(text,'transcription');
+  sendRef.current=(text,audio)=>sendText(text,'transcription',audio);
   const send=(event:React.FormEvent)=>{event.preventDefault();void sendText(draft);};
   const approve=async(result:ToolResult,accepted:boolean)=>{
     if(inFlight.current)return;inFlight.current=true;setBusy(true);

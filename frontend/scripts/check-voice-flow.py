@@ -11,6 +11,7 @@ def test_audio():
   writer.writeframes(b''.join(struct.pack('<h',int(4000*math.sin(2*math.pi*220*i/24000))) for i in range(23280)))
  return buffer.getvalue()
 AUDIO=test_audio()
+DIRECT=os.getenv('CRONOS_TEST_DIRECT_AUDIO')=='1'
 class Handler(http.server.SimpleHTTPRequestHandler):
  def log_message(self,*args):pass
  def end_headers(self):
@@ -26,7 +27,7 @@ async def main():
   async def latency(route):
    latencies.append(json.loads(route.request.post_data));await route.fulfill(json={'recorded':True})
   await page.route('**/panels/latency',latency)
-  await page.route('**/status',lambda r:r.fulfill(json={'fish_configured':True,'fish_speech_configured':True,'transcription_provider':'vosk'}))
+  await page.route('**/status',lambda r:r.fulfill(json={'fish_configured':True,'fish_speech_configured':True,'transcription_provider':'vosk','direct_audio_chat':DIRECT}))
   await page.route('**/monitor?*',lambda r:r.fulfill(json={'cursor':0,'alerts':[],'events':[]}))
   await page.route('**/memory/sync',lambda r:r.fulfill(json={}))
   await page.route('**/memory/graph?*',lambda r:r.fulfill(json={'nodes':[],'edges':[],'total':0,'next_offset':None}))
@@ -40,11 +41,19 @@ async def main():
   async def chat(route):
    chats.append(route.request.post_data);await route.fulfill(body='\n'.join(json.dumps(event) for event in [{'type':'intro','reply':reply[:reply.index('. ')+2]},{'type':'reply','reply':reply},{'type':'result','result':{'reply':reply,'session_id':'latency-session','tool_results':[]}}])+'\n',content_type='application/x-ndjson')
   await page.route('**/chat/stream',chat)
-  parts=[];completed=[]
+  async def direct_chat(route):
+   body=route.request.post_data_buffer
+   with wave.open(io.BytesIO(body),'rb') as reader:assert (reader.getframerate(),reader.getnchannels(),reader.getsampwidth())==(16000,1,2)
+   asr.append(body);chats.append('native-audio')
+   events=[{'type':'transcript','text':transcript[0]},{'type':'intro','reply':reply[:reply.index('. ')+2]},{'type':'reply','reply':reply},{'type':'result','result':{'reply':reply,'recognized_text':transcript[0],'session_id':'latency-session','tool_results':[]}}]
+   await route.fulfill(body='\n'.join(json.dumps(event) for event in events)+'\n',content_type='application/x-ndjson')
+  await page.route('**/chat/audio/stream*',direct_chat)
+
+  parts=[];completed=[];speech_events=[]
   async def speech(route):
-   text=json.loads(route.request.post_data)['text'];parts.append(text);index=len(parts)
+   text=json.loads(route.request.post_data)['text'];parts.append(text);index=len(parts);speech_events.append(('requested',index))
    await asyncio.sleep(.05 if index!=2 else 1.8)
-   completed.append(index);await route.fulfill(body=AUDIO,content_type='audio/wav')
+   completed.append(index);speech_events.append(('completed',index));await route.fulfill(body=AUDIO,content_type='audio/wav')
   await page.route('**/voice/speech',speech)
   await page.add_init_script("""window.micOpens=0;navigator.mediaDevices.getUserMedia=async()=>{window.micOpens++;await new Promise(r=>setTimeout(r,300));const ctx=new AudioContext(),osc=ctx.createOscillator(),gain=ctx.createGain(),dest=ctx.createMediaStreamDestination();osc.connect(gain);gain.connect(dest);gain.gain.value=0;osc.start();window.micGain=gain;window.micStream=dest.stream;return dest.stream;};""")
   await page.goto(f'http://127.0.0.1:{server.server_port}/ui/index.html')
@@ -61,6 +70,7 @@ async def main():
   assert latencies[-1]['recognition_ms']>=0 and latencies[-1]['speech_request_ms']>0
   assert 'question' not in latencies[-1] and 'text' not in latencies[-1]
   assert 2 not in completed
+  assert speech_events.index(('requested',2))<speech_events.index(('completed',1)), 'continuation synthesis must start before the introduction finishes'
   # Simulate the assistant's sound reaching the input while it is speaking.
   await page.evaluate('()=>{micGain.gain.value=.15;setTimeout(()=>micGain.gain.value=0,700)}')
   assert await page.locator('.spoken-question,.answer-card-deck,.conversation-drawer,.card-composer').count()==0
@@ -87,12 +97,12 @@ async def main():
   await page.wait_for_function('(n)=>window.playTimes.length>n',arg=playing_before_eye,timeout=20000)
   assert len(parts)>speech_before_eye and 'Olho de Deus aberto' in parts[-1]
   await page.wait_for_function('()=>document.querySelector(".reference-mic").title==="Microfone ligado"',timeout=20000)
-  assert len(chats)==2 and len(asr)==3
+  assert len(chats)==(len(asr) if DIRECT else 2) and len(asr)==3
   transcript[0]='Kronos, feche o olho de Deus'
   await page.wait_for_timeout(900)  # allow the deliberately short post-speech echo guard
   await say();await expect(page.locator('.world-map-frame')).to_have_count(0,timeout=20000)
-  assert len(chats)==2
-  print('PASS: spoken natural eye command opens real Cesium canvas without Gemini; closing unmounts it. External imagery not validated.',flush=True)
+  assert len(chats)==(len(asr) if DIRECT else 2)
+  print('PASS: spoken natural eye command opens real Cesium canvas and closing unmounts it; text commands stay local, native-audio commands use one recognition turn. External imagery not validated.',flush=True)
   before_map_escape=len(await page.evaluate('window.playTimes'))
   await page.get_by_role('button',name='ENTENDIMENTO DE LINGUAGEM',exact=True).click();await page.locator('.phrase-card').click()
   await page.locator('#chat-input').fill('abrir olho de Deus');await page.get_by_role('button',name='Enviar mensagem').click()
@@ -100,13 +110,13 @@ async def main():
   await page.wait_for_function('(n)=>window.playTimes.length>n',arg=before_map_escape,timeout=20000)
   await page.frame_locator('.world-map-frame').locator('.cesium-widget canvas').click()
   await page.keyboard.press('Escape');await expect(page.locator('.world-map-frame')).to_have_count(0)
-  assert len(chats)==2
+  assert len(chats)==(len(asr) if DIRECT else 2)
   print('PASS: ESC with focus inside map reaches parent and stops/closes it.',flush=True)
   await page.wait_for_function('()=>document.querySelector(".reference-mic").title==="Microfone ligado"',timeout=20000)
   await page.wait_for_timeout(900)
   transcript[0]='Cronos, na escuta?';before_presence=len(await page.evaluate('window.playTimes'))
   await say();await page.wait_for_function('(n)=>window.playTimes.length>n',arg=before_presence,timeout=20000)
-  assert parts[-1]=='Estou na escuta.' and len(chats)==2
+  assert parts[-1]=='Estou na escuta.' and len(chats)==(len(asr) if DIRECT else 2)
   await page.wait_for_function('()=>document.querySelector(".reference-mic").title==="Microfone ligado"',timeout=20000)
   print('PASS: presence check speaks through configured voice without chat generation or knowledge turn.',flush=True)
   await page.get_by_role('button',name='Desligar microfone').click()

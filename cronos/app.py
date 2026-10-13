@@ -92,7 +92,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         task = asyncio.create_task(app.state.monitor.run())
         windows_task = asyncio.create_task(app.state.windows.watch())
         async def warm_recognition():
-            if settings.transcription_provider!='vosk':return
+            if settings.transcription_provider!='vosk' or (settings.privacy_mode=='online' and settings.provider=='gemini' and settings.gemini_transport=='live'):return
             try:await asyncio.to_thread(local_recognizer.prepare)
             except ValueError:pass # The transcription endpoint reports configuration errors on use.
         recognition_task=asyncio.create_task(warm_recognition())
@@ -182,6 +182,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 "privacy_mode": settings.privacy_mode,
                 "fish_configured": bool(settings.fish_key) and settings.privacy_mode == 'online',
                 "transcription_provider": settings.transcription_provider,
+                "direct_audio_chat":current.privacy_mode=="online" and current.provider=="gemini" and current.gemini_transport=="live",
                 "fish_model_in_use": active_fish_model,
                 "fish_speech_configured": bool(settings.fish_key and settings.fish_model) and settings.privacy_mode == "online",
                 "custom_voice_configured": bool(settings.fish_reference),
@@ -205,31 +206,35 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         request.app.state.features.record("language", "passed", "Uma conversa foi processada e salva. Não certifica precisão de todas as respostas.")
         return result
 
-    @app.post("/chat/stream", dependencies=[Depends(authenticate)])
-    async def stream_chat(body: ChatInput, request: Request):
-        from cronos.reply_stream import reply_sink,intro_sink
-        if not body.message.strip():raise HTTPException(422,"A mensagem não pode ser vazia.")
-        session=body.session_id or uuid4()
+    async def conversation_stream(session,message,request,audio=None):
+        from cronos.reply_stream import reply_sink,intro_sink,transcript_sink
         async def events():
             panels=request.app.state.panels;panels.active+=1
-            queue=asyncio.Queue(maxsize=4);spoken=None;intro_text=None
+            queue=asyncio.Queue(maxsize=4);spoken=None;intro_text=None;recognized_question=None
+            def may_speak():
+                import re
+                return audio is None or not panels.preferences.called_only or bool(recognized_question and re.search(r'\b(?:cronos|kronos)\b',recognized_question,re.I))
             async def ready(reply):
                 nonlocal spoken
-                if spoken is None:
+                if spoken is None and may_speak():
                     spoken=reply
                     await queue.put({'type':'reply','reply':reply,'session_id':str(session)})
             async def intro(text):
                 nonlocal intro_text
-                if intro_text is not None:return
+                if intro_text is not None or not may_speak():return
                 intro_text=text
                 await queue.put({'type':'intro','reply':text,'session_id':str(session)})
+            async def transcript(text):
+                nonlocal recognized_question
+                recognized_question=text
+                await queue.put({'type':'transcript','text':text})
             async def run():
-                token=reply_sink.set(ready);intro_token=intro_sink.set(intro)
+                token=reply_sink.set(ready);intro_token=intro_sink.set(intro);transcript_token=transcript_sink.set(transcript)
                 try:
                     async with request.app.state.lock:
-                        try:result=await request.app.state.engine.chat(session,body.message)
+                        try:result=await request.app.state.engine.chat(session,message,**({'audio':audio} if audio is not None else {}))
                         finally:request.app.state.engine.phase='idle'
-                    if (spoken is not None and spoken!=result['reply']) or (intro_text is not None and not result['reply'].startswith(intro_text)):
+                    if not result.get('ignored') and ((spoken is not None and spoken!=result['reply']) or (intro_text is not None and not result['reply'].startswith(intro_text))):
                         raise ProviderError('A resposta transmitida não corresponde ao resultado final.',502)
                     request.app.state.features.record('language','passed','Conversa processada e salva.')
                     await queue.put({'type':'result','result':result})
@@ -242,7 +247,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 except Exception:
                     await queue.put({'type':'error','status':500,'detail':{'message':'Falha ao concluir a conversa.'}})
                 finally:
-                    reply_sink.reset(token);intro_sink.reset(intro_token)
+                    reply_sink.reset(token);intro_sink.reset(intro_token);transcript_sink.reset(transcript_token)
             task=asyncio.create_task(run())
             try:
                 while True:
@@ -254,6 +259,27 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 with suppress(asyncio.CancelledError):await task
                 panels.active-=1;panels.requests+=1
         return StreamingResponse(events(),media_type='application/x-ndjson',headers={'Cache-Control':'no-store','X-Accel-Buffering':'no'})
+
+    @app.post("/chat/stream", dependencies=[Depends(authenticate)])
+    async def stream_chat(body: ChatInput, request: Request):
+        if not body.message.strip():raise HTTPException(422,"A mensagem não pode ser vazia.")
+        return await conversation_stream(body.session_id or uuid4(),body.message,request)
+
+    @app.post('/chat/audio/stream',dependencies=[Depends(authenticate)])
+    async def stream_audio(request: Request,session_id: UUID | None = None):
+        current=request.app.state.engine.settings
+        if current.privacy_mode!='online' or current.provider!='gemini' or current.gemini_transport!='live':
+            raise HTTPException(503,'Conversa por áudio direto requer o Gemini Live já configurado e modo online.')
+        if request.headers.get('content-type','').split(';')[0]!='audio/wav':raise HTTPException(415,'Envie áudio WAV PCM mono de 16 kHz.')
+        chunks=[];size=0
+        async for chunk in request.stream():
+            size+=len(chunk)
+            if size>2*1024*1024:raise HTTPException(413,'Áudio ultrapassa o limite de 2 MiB.')
+            chunks.append(chunk)
+        from cronos.recognition import read_pcm
+        try:pcm=read_pcm(b''.join(chunks))
+        except ValueError as exc:raise HTTPException(422,str(exc)) from None
+        return await conversation_stream(session_id or uuid4(),'Pergunta falada',request,pcm)
 
     @app.get("/conversations/{session_id}", dependencies=[Depends(authenticate)])
     async def conversation(session_id: UUID, request: Request):

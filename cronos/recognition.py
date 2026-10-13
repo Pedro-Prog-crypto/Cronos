@@ -7,6 +7,18 @@ import wave
 from cronos import wake
 
 
+def read_pcm(audio):
+    try:
+        with wave.open(io.BytesIO(audio),'rb') as reader:
+            if (reader.getnchannels(),reader.getsampwidth(),reader.getframerate())!=(1,2,16000):
+                raise ValueError('Áudio requer WAV mono, PCM 16 bits, 16 kHz.')
+            if not 1<=reader.getnframes()<=61*16000:raise ValueError('Gravação deve conter áudio e durar no máximo 61 segundos.')
+            frames=reader.readframes(reader.getnframes())
+            if len(frames)!=reader.getnframes()*2:raise ValueError('Áudio WAV incompleto.')
+            return frames
+    except (wave.Error,EOFError):raise ValueError('Áudio WAV inválido.') from None
+
+
 class LocalRecognizer:
     def __init__(self):
         self.model=None
@@ -30,14 +42,7 @@ class LocalRecognizer:
         with self.lock:self._load()
 
     def transcribe(self,audio):
-        try:
-            with wave.open(io.BytesIO(audio),'rb') as reader:
-                if (reader.getnchannels(),reader.getsampwidth(),reader.getframerate())!=(1,2,16000):
-                    raise ValueError('Reconhecimento local requer WAV mono, PCM 16 bits, 16 kHz.')
-                if reader.getnframes()>61*16000:raise ValueError('Gravação local ultrapassou 60 segundos.')
-                frames=reader.readframes(reader.getnframes())
-        except (wave.Error,EOFError):
-            raise ValueError('Áudio WAV inválido para reconhecimento local.') from None
+        frames=read_pcm(audio)
         with self.lock:
             KaldiRecognizer=self._load()
             recognizer=KaldiRecognizer(self.model,16000);parts=[];confidences=[]

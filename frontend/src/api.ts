@@ -33,13 +33,16 @@ void nativeConnection();
 
 // Deliver the finished answer while its memory metadata is still arriving.
 // No automatic retry: a repeated request could repeat tools or consume quota.
-export async function streamChat(body:unknown,signal:AbortSignal,onReply:(reply:string)=>void,onIntro?:(reply:string)=>void){
-  const response=await api('/chat/stream',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal});
+export async function streamChat(body:unknown,signal:AbortSignal,onReply:(reply:string)=>void,onIntro?:(reply:string)=>void,onTranscript?:(text:string)=>void,audio?:Blob){
+  const session=(body as any)?.session_id;
+  const path=audio?'/chat/audio/stream'+(session?'?session_id='+encodeURIComponent(session):''):'/chat/stream';
+  const response=await api(path,{method:'POST',headers:{'Content-Type':audio?'audio/wav':'application/json'},body:audio||JSON.stringify(body),signal});
   const reader=response.body?.getReader();
   let buffer='',result:any=null;
   const event=(line:string)=>{
     if(!line.trim())return;
     const data=JSON.parse(line);
+    if(data.type==='transcript')onTranscript?.(data.text);
     if(data.type==='intro')onIntro?.(data.reply);
     if(data.type==='reply')onReply(data.reply);
     if(data.type==='result')result=data.result;

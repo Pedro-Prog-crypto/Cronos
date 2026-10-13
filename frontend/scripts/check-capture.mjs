@@ -17,3 +17,9 @@ const distantClip=distant.events.find(e=>e.samples);assert.ok(distantClip,'faint
 assert.ok(Math.max(...distantClip.samples)>140,'capture gain must amplify the faint PCM signal');
 const insensitive=new Capture();insensitive.port.onmessage({data:{blocked:false,sensitivity:0,gain:1}});feed(insensitive,.2,0);feed(insensitive,.8,.003);feed(insensitive,.76,0);assert.equal(insensitive.events.filter(e=>e.samples).length,0,'sensitivity control must change detection');
 console.log('PASS: quieter speech, PCM gain and adjustable sensitivity.');
+const loud=new Capture();feed(loud,.2,0);feed(loud,.8,.8);feed(loud,.76,0);
+const loudClip=loud.events.find(e=>e.samples);assert.ok(loudClip);
+let max=0,saturated=0;for(const sample of loudClip.samples){max=Math.max(max,Math.abs(sample));if(Math.abs(sample)>=32760)saturated++;}
+assert.ok(max<=31130&&max>=30000,'loud input must remain audible without hard clipping from capture gain');assert.equal(saturated,0);
+assert.ok(loudClip.samples.length<16000*1.35,'trailing silence is trimmed before ASR, without changing the phrase endpoint');
+console.log('PASS: loud microphone input avoids clipping and ASR receives only a short trailing silence.');

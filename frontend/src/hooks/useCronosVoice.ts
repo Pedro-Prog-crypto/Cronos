@@ -1,10 +1,17 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {api} from '../api';
 
-export function speechChunks(text:string):string[]{
+function pcmWav(samples:Int16Array,rate=16000){
+  const bytes=new ArrayBuffer(44),view=new DataView(bytes);
+  const write=(offset:number,value:string)=>{for(let i=0;i<value.length;i++)view.setUint8(offset+i,value.charCodeAt(i));};
+  write(0,'RIFF');view.setUint32(4,36+samples.length*2,true);write(8,'WAVE');write(12,'fmt ');view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);view.setUint32(24,rate,true);view.setUint32(28,rate*2,true);view.setUint16(32,2,true);view.setUint16(34,16,true);write(36,'data');view.setUint32(40,samples.length*2,true);
+  return new Blob([bytes,samples.buffer as ArrayBuffer],{type:'audio/wav'});
+}
+
+export function speechChunks(text:string,firstLimit=120):string[]{
   const chunks:string[]=[];let remaining=text;
   while(remaining.length){
-    const limit=chunks.length?360:120;
+    const limit=chunks.length?360:firstLimit;
     if(remaining.length<=limit){chunks.push(remaining);break;}
     const prefix=remaining.slice(0,limit),sentences=[...prefix.matchAll(/[.!?](?:[\s]|$)/g)];
     let cut=sentences.length?sentences[chunks.length?sentences.length-1:0].index!+1:prefix.lastIndexOf(' ');
@@ -40,7 +47,7 @@ export function useCronosVoice({preferences,onSpeechStart,onSpeechEnd,onError}: 
     cancelAnimationFrame(frame.current);if(url.current)URL.revokeObjectURL(url.current);url.current='';
     audioLevelSource.current=0;setIsSpeaking(false);setIsGenerating(false);callbacks.current.onSpeechEnd?.();
   },[]);
-  const speak=useCallback(async(text:string,turn_id?:string)=>{
+  const speak=useCallback(async(text:string,turn_id?:string,continuation?:Promise<string>)=>{
     stop();const current=generation.current;setIsGenerating(true);
     try {
       // Web Audio ativado no gesto do usuário; nunca simular fala se houver falha.
@@ -51,6 +58,19 @@ export function useCronosVoice({preferences,onSpeechStart,onSpeechEnd,onError}: 
         const speed=prefs.current?.voice_speed,started=performance.now();
         try{const response=await api('/voice/speech',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:part,...(speed!==undefined?{speed}:{})}),signal:controller.signal});return {blob:await response.blob(),error:null,speed,elapsed:performance.now()-started};}
         catch(error){return {blob:null,error,speed,elapsed:performance.now()-started};}
+      };
+      // Start the next synthesis as soon as the final reply arrives, while
+      // the introduction is still playing. Keep one playback/cancellation session.
+      let tail=continuation?.then(rest=>{
+        const parts=speechChunks(rest,360);
+        return {parts,first:parts.length?fetchChunk(parts[0]):null};
+      });
+      const waitTail=async()=>{
+        if(!tail||controller.signal.aborted)return null;
+        let cancelled=()=>{};
+        const aborted=new Promise<null>(resolve=>{cancelled=()=>resolve(null);controller.signal.addEventListener('abort',cancelled,{once:true});});
+        try{return await Promise.race([tail,aborted]);}
+        finally{controller.signal.removeEventListener('abort',cancelled);}
       };
       // Only the current chunk and one look-ahead are retained. No voice/model changes.
       let next=fetchChunk(chunks[0]||text);
@@ -76,6 +96,11 @@ export function useCronosVoice({preferences,onSpeechStart,onSpeechEnd,onError}: 
           player.play().catch(error=>{cleanup();reject(error);});
         });
         if(current!==generation.current)return;
+        if(index===chunks.length-1&&tail){
+          const remaining=await waitTail();tail=undefined;
+          if(current!==generation.current)return;
+          if(remaining?.parts.length){chunks.push(...remaining.parts);next=remaining.first!;}
+        }
         if(index+1<chunks.length){setIsSpeaking(false);setIsGenerating(true);}
       }
       if(current===generation.current)stop();
@@ -102,10 +127,10 @@ async function localWave(blob:Blob){
   return new Blob([bytes],{type:'audio/wav'});
 }
 
-export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms:number;endpoint_ms:number})=>void,onError:(message:string)=>void,local=false,blocked=false,preferences?:any) {
+export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms:number;endpoint_ms:number})=>void,onError:(message:string)=>void,local=false,blocked=false,preferences?:any,onAudio?:(audio:Blob,metrics:{recognition_ms:number;endpoint_ms:number})=>Promise<void>) {
   const [recording,setRecording]=useState(false),[capturing,setCapturing]=useState(false),[starting,setStarting]=useState(false),[transcribing,setTranscribing]=useState(false);
   const audioLevelSource=useRef(0),enabled=useRef(false),opening=useRef(false),processing=useRef(false),mounted=useRef(true);
-  const latest=useRef({onTranscript,onError,local,blocked,preferences});latest.current={onTranscript,onError,local,blocked,preferences};
+  const latest=useRef({onTranscript,onError,local,blocked,preferences,onAudio});latest.current={onTranscript,onError,local,blocked,preferences,onAudio};
   const captureVersion=useRef(0),resumeAfter=useRef(0);
   const resources=useRef<{stream?:MediaStream;recorded?:MediaStream;context?:AudioContext;recorder?:MediaRecorder;node?:AudioWorkletNode;timer?:ReturnType<typeof setInterval>;abort?:AbortController}>({});
   const cancelCapture=useCallback(()=>{captureVersion.current++;processing.current=false;resumeAfter.current=performance.now()+250;resources.current.abort?.abort();resources.current.node?.port.postMessage({blocked:true});if(resources.current.recorder?.state==='recording')resources.current.recorder.stop();audioLevelSource.current=0;if(mounted.current){setCapturing(false);setTranscribing(false);}},[]);
@@ -143,10 +168,9 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
           const version=captureVersion.current;
           const abort=new AbortController();resources.current.abort=abort;const recognitionStarted=performance.now();
           try{
-            const bytes=new ArrayBuffer(44),view=new DataView(bytes);
-            const write=(offset:number,value:string)=>{for(let i=0;i<value.length;i++)view.setUint8(offset+i,value.charCodeAt(i));};
-            write(0,'RIFF');view.setUint32(4,36+samples.length*2,true);write(8,'WAVE');write(12,'fmt ');view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);view.setUint32(24,rate,true);view.setUint32(28,rate*2,true);view.setUint16(32,2,true);view.setUint16(34,16,true);write(36,'data');view.setUint32(40,samples.length*2,true);
-            const response=await api('/voice/transcribe',{method:'POST',headers:{'Content-Type':'audio/wav'},body:new Blob([bytes,samples.buffer as ArrayBuffer],{type:'audio/wav'}),signal:abort.signal});
+            const audio=pcmWav(samples,rate);
+            if(latest.current.onAudio){await latest.current.onAudio(audio,{recognition_ms:0,endpoint_ms:750});return;}
+            const response=await api('/voice/transcribe',{method:'POST',headers:{'Content-Type':'audio/wav'},body:audio,signal:abort.signal});
             const result=await response.json();if(version===captureVersion.current&&!abort.signal.aborted&&enabled.current&&mounted.current&&result.text?.trim())latest.current.onTranscript(result.text,{recognition_ms:Math.round(performance.now()-recognitionStarted),endpoint_ms:750});
           }catch(error){if(enabled.current&&!abort.signal.aborted)latest.current.onError(error instanceof Error?error.message:'Transcrição indisponível.');}
           finally{if(version===captureVersion.current){processing.current=false;resumeAfter.current=performance.now()+250;if(mounted.current)setTranscribing(false);}}
@@ -175,6 +199,7 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
           try{
             const blob=new Blob(parts,{type:recorder.mimeType}),audio=latest.current.local?await localWave(blob):blob;
             if(!enabled.current||abort.signal.aborted)return;
+            if(latest.current.onAudio){await latest.current.onAudio(audio,{recognition_ms:0,endpoint_ms:750});return;}
             const response=await api('/voice/transcribe',{method:'POST',headers:{'Content-Type':audio.type},body:audio,signal:abort.signal});
             const result=await response.json();if(version===captureVersion.current&&!abort.signal.aborted&&enabled.current&&mounted.current&&result.text?.trim())latest.current.onTranscript(result.text,{recognition_ms:Math.round(performance.now()-recognitionStarted),endpoint_ms:750});
           }catch(error){if(enabled.current&&!abort.signal.aborted)latest.current.onError(error instanceof Error?error.message:'Transcrição indisponível.');}
