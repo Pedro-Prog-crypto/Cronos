@@ -83,6 +83,13 @@ async def main():
   await say();await expect(page.locator('.world-map-frame')).to_have_count(0,timeout=20000)
   assert len(chats)==2
   print('PASS: spoken natural eye command opens real Cesium canvas without Gemini; closing unmounts it. External imagery not validated.',flush=True)
+  await page.wait_for_function('()=>document.querySelector(".reference-mic").title==="Microfone ligado"',timeout=20000)
+  await page.wait_for_timeout(900)
+  transcript[0]='Cronos, na escuta?';before_presence=len(await page.evaluate('window.playTimes'))
+  await say();await page.wait_for_function('(n)=>window.playTimes.length>n',arg=before_presence,timeout=20000)
+  assert parts[-1]=='Estou na escuta.' and len(chats)==2
+  await page.wait_for_function('()=>document.querySelector(".reference-mic").title==="Microfone ligado"',timeout=20000)
+  print('PASS: presence check speaks through configured voice without chat generation or knowledge turn.',flush=True)
   await page.get_by_role('button',name='Desligar microfone').click()
   await expect(page.get_by_role('button',name='Ligar microfone')).to_have_attribute('aria-pressed','false')
   assert await page.evaluate('micStream.getAudioTracks()[0].readyState')=='ended'

@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID, uuid4
 from cronos.security import safe_path
+from cronos.memory_policy import knowledge_topics,graph_note
 
 
 def fold(text):
@@ -108,7 +109,7 @@ class Memory:
 
     def _markdown_files(self):
         for directory, folders, filenames in os.walk(self.vault, followlinks=False):
-            folders[:] = [f for f in folders if not f.startswith(".")]
+            folders[:] = [f for f in folders if not f.startswith(".") and not (Path(directory)==self.vault and f=='Conversas')]
             for folder in folders:
                 candidate = Path(directory) / folder
                 if candidate.is_symlink():
@@ -159,8 +160,9 @@ class Memory:
 
     def graph(self, offset=0, limit=600):
         with self.connect() as db:
-            rows = db.execute("SELECT path,title FROM notes ORDER BY path LIMIT ? OFFSET ?", (limit, offset)).fetchall()
             all_notes = db.execute("SELECT path,title FROM notes ORDER BY path").fetchall()
+            all_notes = [row for row in all_notes if graph_note(row['path'],row['title'])]
+            rows = all_notes[offset:offset+limit]
             lookup = {}
             for note in all_notes:
                 for alias in (note['path'], note['path'][:-3], Path(note['path']).stem, note['title']):
@@ -236,6 +238,7 @@ class Memory:
         return db.execute("SELECT title,path FROM topics WHERE id=?", (topic,)).fetchone()
 
     def record(self, session, message, reply, topics):
+        topics=knowledge_topics(message,topics)
         stamp = datetime.now(timezone.utc).isoformat()
         event = str(uuid4())
         conversation = f"Conversas/{session}.md"
@@ -264,11 +267,12 @@ class Memory:
                 index_body = f"- [[{target['path'][:-3]}|{target['title'].replace(']', '').replace('|', '-')}]]\n"
                 db.execute("INSERT OR IGNORE INTO exports(path,marker,header,body) VALUES(?,?,?,?)",
                            ("Mapa de Conhecimento.md", "index:" + target["path"], "# Mapa de Conhecimento\n\n", index_body))
-            knowledge = f"Memorias/{event}.md"
-            links = " · ".join(f"[[{path[:-3]}]]" for path in files)
-            db.execute("INSERT INTO exports(path,marker,header,body) VALUES(?,?,?,?)",
-                       (knowledge, event + ':memory', f"# {message[:100].replace(chr(10), ' ')}\n",
-                        f"\nCriada: {stamp}\n\nOrigem: [[Conversas/{session}]]\n\nTemas: {links}\n\n### Você\n{quoted(message)}\n\n### Resposta de IA, não verificada\n{quoted(reply)}\n"))
+            if topics:
+                knowledge = f"Memorias/{event}.md"
+                links = " · ".join(f"[[{path[:-3]}]]" for path in files)
+                db.execute("INSERT INTO exports(path,marker,header,body) VALUES(?,?,?,?)",
+                           (knowledge, event + ':memory', f"# {message[:100].replace(chr(10), ' ')}\n",
+                            f"\nCriada: {stamp}\n\nOrigem: [[Conversas/{session}]]\n\nTemas: {links}\n\n### Você\n{quoted(message)}\n\n### Resposta de IA, não verificada\n{quoted(reply)}\n"))
         self.flush_exports()
         try:
             self.sync_notes()

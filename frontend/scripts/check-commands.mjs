@@ -7,5 +7,7 @@ for (const phrase of ['não abra o olho de Deus', 'o que é o olho de Deus?', 'p
   assert.equal(localCommand(phrase, false), null, phrase);
 }
 assert.deepEqual(localCommand('Kronos, feche o olho de Deus', true), {type:'memory'});
+assert.deepEqual(localCommand('Cronos, na escuta?', false), {type:'presence'});
+assert.equal(localCommand('Cronos, na escuta? Explique Sócrates.', false), null);
 assert.deepEqual(localCommand('abrir aeroporto Charles de Gaulle', true), {type:'place',query:'aeroporto Charles de Gaulle'});
 console.log('PASS: direct and natural eye commands, closing, worldwide place commands, no informational or negative triggers.');

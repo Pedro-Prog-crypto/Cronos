@@ -108,6 +108,7 @@ Se a IA falhar, execute `Diagnosticar-Cronos.bat`. Ele consulta configuração,
 último erro e contagens locais sem gerar texto nem consumir uma requisição Gemini.
 Para entender o registro e solicitar um teste real, veja [controle de consumo](docs/CONSUMO_GEMINI.md).
 Gemini agora usa a rota Live encontrada no original: [instalação e configuração](docs/GEMINI_ORIGINAL.md).
+Localização das notas e filtros da espiral: [memória seletiva](docs/MEMORIA_SELETIVA.md).
 
 ## Voz
 

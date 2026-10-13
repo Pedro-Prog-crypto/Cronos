@@ -96,6 +96,11 @@ export default function App(){
   const runCommand=(text:string)=>{
     if(/^(?:kronos[, ]+|cronos[, ]+)?(?:mostrar|mostre|exibir) (?:o )?(?:texto|resposta)[.!?]*$/i.test(text.trim())){setShowSpokenCards(true);setChatOpen(false);return true;}
     const command=localCommand(text,eyeOpen);if(!command)return false;
+    if(command.type==='presence'){
+      if(connected&&config?.fish_speech_configured){voice.prepare();void voice.speak('Estou na escuta.');}
+      else tell('A conversa ainda não está conectada ou a voz não está configurada.',true);
+      return true;
+    }
     if((command.type==='eye'||command.type==='place')&&config?.privacy_mode==='local'){tell('O mapa mundial está desativado em modo local.',true);return true;}
     if(command.type==='eye'){voice.prepare();eyeAnnouncement.current=true;setEyeOpen(true);setChatOpen(false);setModule(null);setNote(null);}
     else if(command.type==='memory'){setEyeOpen(false);setShowSpokenCards(false);setChatOpen(false);setGraphRevision(value=>value+1);}
