@@ -5,6 +5,10 @@ voz. Nenhuma chave, ID de voz ou modelo Fish/Gemini foi alterado.
 
 ## Comportamento atual
 
+Atualização posterior: [escuta contínua e mapa](ESCUTA_CONTINUA.md). O microfone
+agora abre automaticamente e permanece habilitado entre frases até desligamento
+manual; `aria-pressed` indica essa habilitação, mesmo durante a resposta.
+
 - O botão existente indica a abertura antes da resolução de getUserMedia. Borda
   ciano intensa significa gravando; borda âmbar pulsante indica trabalho em
   andamento. O título do botão diferencia abertura, transcrição, espera pelo

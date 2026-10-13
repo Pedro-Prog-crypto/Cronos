@@ -216,7 +216,7 @@ export function renderOrb(canvas:SceneCanvas,size:number,weaveDensity:number,pix
 
     function render() {
       if (!ctx || !active) return;
-      if (input().hidden) {
+      if (input().hidden || (typeof HTMLCanvasElement!=='undefined'&&canvas instanceof HTMLCanvasElement&&canvas.getClientRects().length===0)) {
         previousFrame = performance.now(); schedule(150); return;
       }
       const now = performance.now();
@@ -588,7 +588,7 @@ export function renderStar(canvas:SceneCanvas,size:number,weaveDensity:number,pi
 
     function render() {
       if (!ctx || !active) return;
-      if (input().hidden) {
+      if (input().hidden || (typeof HTMLCanvasElement!=='undefined'&&canvas instanceof HTMLCanvasElement&&canvas.getClientRects().length===0)) {
         previousFrame = performance.now(); schedule(150); return;
       }
       const now = performance.now();

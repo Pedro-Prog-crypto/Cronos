@@ -41,7 +41,7 @@ interface FloatingFunctionNode {
   hasJunction?: boolean;
 }
 
-export const IntegratedNeuralStage: React.FC<IntegratedNeuralStageProps> = ({
+const Stage: React.FC<IntegratedNeuralStageProps> = ({
   state,
   audioLevel = 0,
   audioLevelSource,
@@ -628,3 +628,5 @@ export const IntegratedNeuralStage: React.FC<IntegratedNeuralStageProps> = ({
     </div>
   );
 };
+
+export const IntegratedNeuralStage=React.memo(Stage);

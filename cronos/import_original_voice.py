@@ -60,7 +60,10 @@ def read_original_gemini(source):
 
 
 def import_voice(source,destination):
-    values=read_voice(source);values.update(read_original_gemini(source));destination=Path(destination)
+    values=read_voice(source);destination=Path(destination)
+    from dotenv import dotenv_values
+    current=dotenv_values(destination) if destination.exists() else {}
+    if not (current.get('GEMINI_API_KEY') or '').strip():values.update(read_original_gemini(source))
     if destination.exists():
         folder=destination.parent/'.cronos-local';folder.mkdir(exist_ok=True)
         backup=folder/('env-before-voice-'+datetime.now().strftime('%Y%m%d-%H%M%S-%f')+'.bak')
@@ -80,7 +83,7 @@ def main():
     if source:
         try:
             import_voice(source,Path.cwd()/'.env')
-            messagebox.showinfo('Kronos','Configuração original importada: voz e chave Gemini, quando presente. Chaves e IDs não foram exibidos. Modelo Gemini, memória e personalidade foram preservados. Feche e reabra o Kronos.')
+            messagebox.showinfo('Kronos','Voz original importada. A chave Gemini já configurada foi preservada; só é recuperada do original quando ausente. Chaves e IDs não foram exibidos. Modelo Gemini, memória e personalidade foram preservados. Feche e reabra o Kronos.')
         except Exception:
             messagebox.showerror('Kronos','Não foi possível importar. Verifique se o arquivo contém config/fish_audio.json válido. Credenciais não serão exibidas.')
     root.destroy()

@@ -13,7 +13,7 @@ velocidade 1, latência balanced, endpoint HTTPS oficial /v1/tts, corpo JSON.
    execute novamente com internet. Não desliga verificações TLS.
 3. Execute Importar-Voz-Original.bat e selecione o ZIP original que contém a
    configuração real, ou seu fish_audio.json. Ele lê apenas JSON, não extrai ou
-   executa programas do arquivo. Substitui os campos Fish, restaura a chave Gemini quando presente no original
+   executa programas do arquivo. Substitui os campos Fish, recupera a chave Gemini do original apenas se ainda estiver ausente no .env
    e seleciona Vosk para transcrição. Preserva o modelo Gemini escolhido, vault
    e personalidade.
 4. Execute Iniciar-Cronos.bat. A conexão interna continua automática. O .env

@@ -80,13 +80,13 @@ def test_official_portuguese_flat_layout_is_supported(tmp_path,monkeypatch):
     assert wake.status()['model_installed']
 
 
-def test_original_gemini_key_is_restored_without_changing_selected_model(tmp_path):
+def test_voice_import_preserves_configured_gemini_key_and_model(tmp_path):
     path=archive(tmp_path)
     with ZipFile(path,'a') as z:z.writestr('config/api_keys.json',json.dumps({'gemini_api_key':'dummy-original-key'}))
     env=tmp_path/'.env';env.write_text('GEMINI_API_KEY=old\nGEMINI_MODEL=selected-model\n')
     import_voice(path,env)
     values=dotenv_values(env)
-    assert values['GEMINI_API_KEY']=='dummy-original-key'
+    assert values['GEMINI_API_KEY']=='old'
     assert values['GEMINI_MODEL']=='selected-model'
 
 

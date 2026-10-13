@@ -11,6 +11,12 @@ from cronos.integrations import available_models
 def main():
     load_dotenv(".env", override=True)
     settings = Settings.from_env()
+    from pathlib import Path
+    import json
+    saved=Path('.cronos-local/last-gemini-error.json')
+    if saved.exists():
+        try:print('Último erro registrado:',json.loads(saved.read_text(encoding='utf-8'))['message'])
+        except (OSError,ValueError,KeyError):pass
     print("Diagnóstico de conexão do Cronos")
     print("Provedor:", settings.provider)
     if settings.provider == "gemini":

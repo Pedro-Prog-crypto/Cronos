@@ -1,10 +1,20 @@
 import asyncio
+import hashlib
+import time
+from pathlib import Path
 import json
 from typing import Protocol
 
 import httpx
 
 from cronos.config import Settings
+
+
+def record_gemini_error(status,message):
+    try:
+        folder=Path('.cronos-local');folder.mkdir(exist_ok=True)
+        (folder/'last-gemini-error.json').write_text(json.dumps({'http':status,'message':message,'time':time.time()}),encoding='utf-8')
+    except OSError:pass
 
 
 class ProviderError(Exception):
@@ -61,6 +71,7 @@ def parse_reply(raw: str) -> dict:
 
 
 class Gemini:
+    cooldowns = {}
     def __init__(self, settings: Settings):
         self.settings = settings
 
@@ -73,6 +84,9 @@ class Gemini:
         model = self.settings.gemini_model
         if not model or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._" for c in model):
             raise ProviderError("GEMINI_MODEL inválido.")
+        identity=hashlib.sha256((key+'|'+model).encode()).hexdigest()
+        remaining=self.cooldowns.get(identity,0)-time.monotonic()
+        if remaining>0:raise ProviderError(f'Gemini: limite recente (HTTP 429). Aguarde {int(remaining)+1} segundos antes de tentar novamente. Nenhuma nova chamada foi enviada.')
         try:
             async with httpx.AsyncClient(timeout=self.settings.provider_timeout) as client:
                 for attempt in range(2):
@@ -129,6 +143,13 @@ class Gemini:
                 message = f"Gemini: falha no serviço Google (HTTP {status}). Tente novamente mais tarde."
             else:
                 message = f"Gemini: chamada rejeitada (HTTP {status}). Verifique o acesso à API no projeto Google."
+            if status==429:
+                delay=60
+                try:delay=max(1,min(3600,float(exc.response.headers.get('Retry-After',60))))
+                except ValueError:pass
+                self.cooldowns[identity]=time.monotonic()+delay
+                message+=f" Nova tentativa bloqueada localmente por {int(delay)} segundos."
+            record_gemini_error(status,message)
             raise ProviderError(message) from exc
         except httpx.TimeoutException as exc:
             raise ProviderError("Gemini: tempo de resposta esgotado. Confira a conexão e tente novamente.") from exc

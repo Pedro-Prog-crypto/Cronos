@@ -13,6 +13,9 @@ from dotenv import load_dotenv
 def _run():
     if sys.platform != "win32":
         raise SystemExit("A janela desktop do Cronos deve ser iniciada no Windows.")
+    flag='--autoplay-policy=no-user-gesture-required'
+    arguments=os.getenv('WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS','')
+    if flag not in arguments:os.environ['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS']=(arguments+' '+flag).strip()
     try:
         import webview
     except ImportError:

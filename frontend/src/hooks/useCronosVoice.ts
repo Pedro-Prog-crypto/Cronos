@@ -93,45 +93,94 @@ async function localWave(blob:Blob){
   return new Blob([bytes],{type:'audio/wav'});
 }
 
-export function useMicrophone(onTranscript:(text:string)=>void,onError:(message:string)=>void,local=false) {
-  const [recording,setRecording]=useState(false),[starting,setStarting]=useState(false),[transcribing,setTranscribing]=useState(false);
-  const audioLevelSource=useRef(0);
-  const refs=useRef<{recorder?:MediaRecorder;stream?:MediaStream;context?:AudioContext;timer?:ReturnType<typeof setTimeout>;frame?:number;abort?:AbortController}>({});
-  const mounted=useRef(true), requesting=useRef(false);
-  const release=useCallback(()=>{const r=refs.current;r.stream?.getTracks().forEach(track=>track.stop());r.context?.close();if(r.frame)cancelAnimationFrame(r.frame);if(r.timer)clearTimeout(r.timer);r.stream=undefined;r.context=undefined;audioLevelSource.current=0;},[]);
-  const toggle=useCallback(async()=>{
-    const r=refs.current;
-    if(r.recorder?.state==='recording'){r.recorder.stop();return;}
-    if(requesting.current||transcribing)return;
-    if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder){onError('Microfone não disponível nesta janela. Use texto ou arquivo de áudio no módulo Voz.');return;}
-    requesting.current=true;setStarting(true);
-    try {
-      r.stream=await navigator.mediaDevices.getUserMedia({audio:true});
-      if(!mounted.current){r.stream.getTracks().forEach(track=>track.stop());return;}
-      const type=['audio/webm;codecs=opus','audio/mp4','audio/ogg;codecs=opus'].find(type=>MediaRecorder.isTypeSupported(type));
-      const recorder=new MediaRecorder(r.stream,type?{mimeType:type}:undefined);r.recorder=recorder;
-      const parts:BlobPart[]=[];let size=0,failed=false;
-      r.context=new AudioContext();const meter=r.context.createAnalyser();meter.fftSize=256;r.context.createMediaStreamSource(r.stream).connect(meter);
-      const values=new Uint8Array(256);let last=0,lastSpeech=performance.now(),heardSpeech=false;const started=lastSpeech;
-      const measure=(time:number)=>{if(recorder.state!=='recording')return;if(time-last>50){meter.getByteTimeDomainData(values);let sum=0;for(const value of values)sum+=((value-128)/128)**2;const rms=Math.sqrt(sum/values.length);audioLevelSource.current=Math.min(1,rms*4);last=time;
-        if(rms>.012){heardSpeech=true;lastSpeech=time;}
-        if(!heardSpeech&&time-started>8000){failed=true;onError('Não detectei fala no microfone. Tente novamente ou confira o dispositivo de entrada.');recorder.stop();return;}
-        if(heardSpeech&&time-lastSpeech>1400&&time-started>1000){recorder.stop();return;}}r.frame=requestAnimationFrame(measure);};
-      recorder.ondataavailable=event=>{parts.push(event.data);size+=event.data.size;if(size>10*1024*1024&&recorder.state==='recording')recorder.stop();};
-      recorder.onerror=()=>{failed=true;release();setRecording(false);onError('Falha na gravação do microfone.');};
-      recorder.onstop=async()=>{
-        release();r.recorder=undefined;if(!mounted.current)return;setRecording(false);if(failed)return;
-        if(size>10*1024*1024){onError('A gravação ultrapassou 10 MiB. Grave um trecho menor.');return;}
-        if(!size){onError('A gravação não contém áudio.');return;}
-        setTranscribing(true);const abort=new AbortController();r.abort=abort;
-        try {const original=new Blob(parts,{type:recorder.mimeType});const audio=local?await localWave(original):original;if(!mounted.current||abort.signal.aborted)return;const response=await api('/voice/transcribe',{method:'POST',headers:{'Content-Type':audio.type},body:audio,signal:abort.signal});const result=await response.json();if(mounted.current)onTranscript(result.text);}
-        catch(error){if(mounted.current&&!abort.signal.aborted)onError(error instanceof Error?error.message:'Transcrição indisponível.');}
-        finally{if(mounted.current)setTranscribing(false);}
+export function useMicrophone(onTranscript:(text:string)=>void,onError:(message:string)=>void,local=false,blocked=false) {
+  const [recording,setRecording]=useState(false),[capturing,setCapturing]=useState(false),[starting,setStarting]=useState(false),[transcribing,setTranscribing]=useState(false);
+  const audioLevelSource=useRef(0),enabled=useRef(false),opening=useRef(false),processing=useRef(false),mounted=useRef(true);
+  const latest=useRef({onTranscript,onError,local,blocked});latest.current={onTranscript,onError,local,blocked};
+  const resources=useRef<{stream?:MediaStream;context?:AudioContext;recorder?:MediaRecorder;node?:AudioWorkletNode;timer?:ReturnType<typeof setInterval>;abort?:AbortController}>({});
+  const stop=useCallback(()=>{
+    enabled.current=false;resources.current.abort?.abort();
+    if(resources.current.timer)clearInterval(resources.current.timer);
+    const recorder=resources.current.recorder;if(recorder?.state==='recording')recorder.stop();
+    if(resources.current.node){resources.current.node.port.onmessage=null;resources.current.node.disconnect();}
+    resources.current.stream?.getTracks().forEach(track=>track.stop());resources.current.context?.close();
+    resources.current.stream=undefined;resources.current.context=undefined;audioLevelSource.current=0;
+    if(mounted.current){setRecording(false);setCapturing(false);setStarting(false);setTranscribing(false);}
+  },[]);
+  const start=useCallback(async()=>{
+    if(enabled.current||opening.current)return;
+    enabled.current=true;opening.current=true;setStarting(true);
+    try{
+      const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+      if(!enabled.current||!mounted.current){stream.getTracks().forEach(track=>track.stop());return;}
+      resources.current.stream=stream;const context=new AudioContext(latest.current.local?{sampleRate:16000}:undefined);resources.current.context=context;await context.resume();if(!enabled.current||!mounted.current)return;
+      const meter=context.createAnalyser();meter.fftSize=256;context.createMediaStreamSource(stream).connect(meter);
+      if(context.audioWorklet&&latest.current.local){
+        await context.audioWorklet.addModule(new URL('../audio/capture.worklet.js',import.meta.url).href);if(!enabled.current||!mounted.current)return;
+        const node=new AudioWorkletNode(context,'cronos-capture');resources.current.node=node;
+        context.createMediaStreamSource(stream).connect(node);node.connect(context.destination);
+        const values=new Uint8Array(256);let resumeAfter=0;
+        node.port.onmessage=async event=>{
+          if(typeof event.data.active==='boolean'){if(mounted.current)setCapturing(event.data.active);return;}
+          if(!enabled.current||latest.current.blocked||processing.current)return;
+          const samples=event.data.samples as Int16Array,rate=event.data.rate as number;
+          if(rate!==16000||samples.length>61*rate)return;
+          processing.current=true;setTranscribing(true);node.port.postMessage({blocked:true});
+          const abort=new AbortController();resources.current.abort=abort;
+          try{
+            const bytes=new ArrayBuffer(44),view=new DataView(bytes);
+            const write=(offset:number,value:string)=>{for(let i=0;i<value.length;i++)view.setUint8(offset+i,value.charCodeAt(i));};
+            write(0,'RIFF');view.setUint32(4,36+samples.length*2,true);write(8,'WAVE');write(12,'fmt ');view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);view.setUint32(24,rate,true);view.setUint32(28,rate*2,true);view.setUint16(32,2,true);view.setUint16(34,16,true);write(36,'data');view.setUint32(40,samples.length*2,true);
+            const response=await api('/voice/transcribe',{method:'POST',headers:{'Content-Type':'audio/wav'},body:new Blob([bytes,samples.buffer as ArrayBuffer],{type:'audio/wav'}),signal:abort.signal});
+            const result=await response.json();if(enabled.current&&mounted.current&&result.text?.trim())latest.current.onTranscript(result.text);
+          }catch(error){if(enabled.current&&!abort.signal.aborted)latest.current.onError(error instanceof Error?error.message:'Transcrição indisponível.');}
+          finally{processing.current=false;resumeAfter=performance.now()+650;if(mounted.current)setTranscribing(false);}
+        };
+        setRecording(true);setStarting(false);
+        resources.current.timer=setInterval(()=>{
+          if(latest.current.blocked||processing.current)resumeAfter=performance.now()+650;
+          const blocked=latest.current.blocked||processing.current||performance.now()<resumeAfter;
+          node.port.postMessage({blocked});meter.getByteTimeDomainData(values);let sum=0;for(const value of values)sum+=((value-128)/128)**2;audioLevelSource.current=blocked?0:Math.min(1,Math.sqrt(sum/values.length)*4);
+        },80);
+        return;
+      }
+      const values=new Uint8Array(256);let heard=false,lastSpeech=0,started=0,discard=false,resumeAfter=0;
+      const begin=()=>{
+        const type=['audio/webm;codecs=opus','audio/mp4','audio/ogg;codecs=opus'].find(type=>MediaRecorder.isTypeSupported(type));
+        const recorder=new MediaRecorder(stream,type?{mimeType:type}:undefined);resources.current.recorder=recorder;
+        const parts:BlobPart[]=[];let bytes=0;heard=false;discard=false;started=performance.now();lastSpeech=started;
+        recorder.ondataavailable=event=>{parts.push(event.data);bytes+=event.data.size;if(bytes>10*1024*1024){discard=true;recorder.stop();}};
+        recorder.onerror=()=>{discard=true;latest.current.onError('Falha na gravação do microfone.');stop();};
+        recorder.onstop=async()=>{
+          if(resources.current.recorder===recorder)resources.current.recorder=undefined;if(mounted.current)setCapturing(false);
+          if(!enabled.current||!mounted.current||discard||!heard||!bytes)return;
+          processing.current=true;setTranscribing(true);const abort=new AbortController();resources.current.abort=abort;
+          try{
+            const blob=new Blob(parts,{type:recorder.mimeType}),audio=latest.current.local?await localWave(blob):blob;
+            if(!enabled.current||abort.signal.aborted)return;
+            const response=await api('/voice/transcribe',{method:'POST',headers:{'Content-Type':audio.type},body:audio,signal:abort.signal});
+            const result=await response.json();if(enabled.current&&mounted.current&&result.text?.trim())latest.current.onTranscript(result.text);
+          }catch(error){if(enabled.current&&!abort.signal.aborted)latest.current.onError(error instanceof Error?error.message:'Transcrição indisponível.');}
+          finally{processing.current=false;if(mounted.current)setTranscribing(false);}
+        };
+        recorder.start(500);
       };
-      recorder.start(1000);setRecording(true);r.frame=requestAnimationFrame(measure);r.timer=setTimeout(()=>{if(recorder.state==='recording')recorder.stop();},60000);
-    } catch(error){release();onError(error instanceof Error?error.message:'Não foi possível acessar o microfone.');}
-    finally{requesting.current=false;setStarting(false);}
-  },[onTranscript,onError,release,transcribing,local]);
-  useEffect(()=>()=>{mounted.current=false;refs.current.abort?.abort();if(refs.current.recorder?.state==='recording')refs.current.recorder.stop();refs.current.stream?.getTracks().forEach(track=>track.stop());refs.current.context?.close();if(refs.current.frame)cancelAnimationFrame(refs.current.frame);if(refs.current.timer)clearTimeout(refs.current.timer);},[]);
-  return {recording,starting,transcribing,audioLevelSource,toggle};
+      setRecording(true);setStarting(false);
+      resources.current.timer=setInterval(()=>{
+        if(!enabled.current)return;
+        const recorder=resources.current.recorder;
+        if(latest.current.blocked||processing.current){resumeAfter=performance.now()+650;audioLevelSource.current=0;if(recorder?.state==='recording'){discard=true;recorder.stop();}return;}
+        if(performance.now()<resumeAfter)return;
+        if(!recorder){begin();return;}if(recorder.state!=='recording')return;
+        meter.getByteTimeDomainData(values);let sum=0;for(const value of values)sum+=((value-128)/128)**2;
+        const rms=Math.sqrt(sum/values.length),now=performance.now();audioLevelSource.current=Math.min(1,rms*4);
+        if(rms>.018){if(!heard)setCapturing(true);heard=true;lastSpeech=now;}
+        if((heard&&now-lastSpeech>1400)||(now-started>(heard?58000:3000)))recorder.stop();
+      },80);
+    }catch(error){stop();latest.current.onError(error instanceof Error?error.message:'Não foi possível abrir o microfone.');}
+    finally{opening.current=false;if(mounted.current)setStarting(false);}
+  },[stop]);
+  const toggle=useCallback(()=>{if(enabled.current){stop();return Promise.resolve();}return start();},[start,stop]);
+  useEffect(()=>()=>{mounted.current=false;stop();},[stop]);
+  return {recording,capturing,starting,transcribing,audioLevelSource,toggle,start,stop};
 }

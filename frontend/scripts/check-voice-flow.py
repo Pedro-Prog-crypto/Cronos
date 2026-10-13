@@ -26,46 +26,73 @@ async def main():
   await page.route('**/monitor?*',lambda r:r.fulfill(json={'cursor':0,'alerts':[],'events':[]}))
   await page.route('**/memory/sync',lambda r:r.fulfill(json={}))
   await page.route('**/memory/graph?*',lambda r:r.fulfill(json={'nodes':[],'edges':[],'total':0,'next_offset':None}))
-  await page.route('**/voice/transcribe',lambda r:r.fulfill(json={'text':'Fale sobre Sócrates.'}))
+  asr=[];transcript=['Fale sobre Sócrates.'];chats=[]
+  async def transcribe(route):
+   body=route.request.post_data_buffer
+   with wave.open(io.BytesIO(body),'rb') as reader:assert (reader.getframerate(),reader.getnchannels(),reader.getsampwidth())==(16000,1,2)
+   asr.append(body);await route.fulfill(json={'text':transcript[0]})
+  await page.route('**/voice/transcribe',transcribe)
   reply='Sócrates foi um filósofo ateniense conhecido por suas perguntas. '+'Seu método questionava definições e procurava contradições. '*14
-  await page.route('**/chat',lambda r:r.fulfill(json={'reply':reply,'session_id':'latency-session','tool_results':[]}))
+  async def chat(route):
+   chats.append(route.request.post_data);await route.fulfill(json={'reply':reply,'session_id':'latency-session','tool_results':[]})
+  await page.route('**/chat',chat)
   parts=[];completed=[]
   async def speech(route):
    text=json.loads(route.request.post_data)['text'];parts.append(text);index=len(parts)
    await asyncio.sleep(.05 if index!=2 else 1.8)
    completed.append(index);await route.fulfill(body=AUDIO,content_type='audio/wav')
   await page.route('**/voice/speech',speech)
-  await page.goto(f'http://127.0.0.1:{server.server_port}/ui/index.html');await page.wait_for_timeout(1800)
+  await page.add_init_script("""window.micOpens=0;navigator.mediaDevices.getUserMedia=async()=>{window.micOpens++;await new Promise(r=>setTimeout(r,300));const ctx=new AudioContext(),osc=ctx.createOscillator(),gain=ctx.createGain(),dest=ctx.createMediaStreamDestination();osc.connect(gain);gain.connect(dest);gain.gain.value=0;osc.start();window.micGain=gain;window.micStream=dest.stream;return dest.stream;};""")
+  await page.goto(f'http://127.0.0.1:{server.server_port}/ui/index.html')
+  await expect(page.get_by_role('button',name='Desligar microfone')).to_have_attribute('aria-pressed','true',timeout=7000)
   assert await page.locator('canvas[data-render-thread=worker]').count()==2
   before=await page.locator('canvas').first.evaluate('c=>c.toDataURL()');await page.wait_for_timeout(150);assert before!=await page.locator('canvas').first.evaluate('c=>c.toDataURL()')
-  start={m['name']:m['value'] for m in (await c.send('Performance.getMetrics'))['metrics']};await page.wait_for_timeout(3000);end={m['name']:m['value'] for m in (await c.send('Performance.getMetrics'))['metrics']}
-  print('Main-thread task seconds / 3 seconds at 4x:',round(end['TaskDuration']-start['TaskDuration'],3),flush=True)
-  await page.evaluate('''()=>{navigator.mediaDevices.getUserMedia=async()=>{await new Promise(r=>setTimeout(r,500));const ctx=new AudioContext(),osc=ctx.createOscillator(),gain=ctx.createGain(),dest=ctx.createMediaStreamDestination();osc.connect(gain);gain.connect(dest);gain.gain.value=.1;osc.start();setTimeout(()=>gain.gain.value=0,700);return dest.stream;};}''')
-  await page.get_by_role('button',name='Gravar pelo microfone').click();await expect(page.locator('.reference-mic')).to_have_attribute('title','Abrindo microfone',timeout=400)
-  await expect(page.locator('.reference-mic')).to_have_attribute('title','Microfone ligado',timeout=3000)
-  await page.wait_for_function('()=>window.playTimes.length===1',timeout=20000)
-  assert 2 not in completed,'first audio waited for second chunk'
-  assert len(parts[0])<len(reply)
+  async def say():
+   await page.evaluate('()=>{micGain.gain.value=.15;setTimeout(()=>micGain.gain.value=0,650)}')
+  await say();await page.wait_for_function('()=>window.playTimes.length===1',timeout=20000)
+  assert 2 not in completed
+  # Simulate the assistant's sound reaching the input while it is speaking.
+  await page.evaluate('()=>{micGain.gain.value=.15;setTimeout(()=>micGain.gain.value=0,700)}')
   assert await page.locator('.spoken-question,.answer-card-deck,.conversation-drawer,.card-composer').count()==0
-  await page.wait_for_function('()=>document.querySelector(".reference-mic").title==="Microfone desligado"',timeout=20000)
+  await page.wait_for_function('()=>document.querySelector(".reference-mic").title==="Microfone ligado"',timeout=20000)
   assert ''.join(parts)==reply
   assert len(await page.evaluate('window.playTimes'))==len(parts)
-  print('PASS: two active workers, visible animation, starting/recording feedback, no automatic boxes during speech, early playback before delayed next chunk, ordered full speech.',flush=True)
-  # Ask explicitly for the written response; the same saved turn is displayed.
+  count=len(parts);played=len(await page.evaluate('window.playTimes'))
+  await page.wait_for_timeout(9000)
+  assert await page.evaluate('micStream.getAudioTracks()[0].readyState')=='live'
+  assert await page.evaluate('micOpens')==1 and len(parts)==count
+  await say();await page.wait_for_function('(n)=>window.playTimes.length>n',arg=played,timeout=20000)
+  await page.wait_for_function('()=>document.querySelector(".reference-mic").title==="Microfone ligado"',timeout=20000)
+  assert await page.evaluate('micOpens')==1 and len(asr)==2
+  # A spoken UI command must bypass Gemini and load the actual map engine on demand.
+  assert await page.locator('.world-map-frame').count()==0
+  world_policy="default-src 'self'; script-src 'self' blob: 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob: https://server.arcgisonline.com; media-src 'none'; connect-src 'self' https://server.arcgisonline.com; worker-src 'self' blob:; object-src 'none'; frame-ancestors 'self'; base-uri 'none'; form-action 'none'"
+  await page.route('**/world/view',lambda r:r.fulfill(body=(ROOT/'cronos/ui/world.html').read_bytes(),content_type='text/html',headers={'Content-Security-Policy':world_policy}))
+  await page.route('https://server.arcgisonline.com/**',lambda r:r.fulfill(status=204,headers={'Access-Control-Allow-Origin':'*'}))
+  transcript[0]='Kronos, você pode abrir o olho de Deus, por favor?'
+  speech_before_eye=len(parts);playing_before_eye=len(await page.evaluate('window.playTimes'))
+  await say()
+  await expect(page.locator('.eye-slot.expanded')).to_be_visible(timeout=20000)
+  await expect(page.frame_locator('.world-map-frame').locator('.cesium-widget canvas')).to_be_visible(timeout=20000)
+  await page.wait_for_function('(n)=>window.playTimes.length>n',arg=playing_before_eye,timeout=20000)
+  assert len(parts)>speech_before_eye and 'Olho de Deus aberto' in parts[-1]
+  await page.wait_for_function('()=>document.querySelector(".reference-mic").title==="Microfone ligado"',timeout=20000)
+  assert len(chats)==2 and len(asr)==3
+  transcript[0]='Kronos, feche o olho de Deus'
+  await page.wait_for_timeout(900)  # allow the deliberately short post-speech echo guard
+  await say();await expect(page.locator('.world-map-frame')).to_have_count(0,timeout=20000)
+  assert len(chats)==2
+  print('PASS: spoken natural eye command opens real Cesium canvas without Gemini; closing unmounts it. External imagery not validated.',flush=True)
+  await page.get_by_role('button',name='Desligar microfone').click()
+  await expect(page.get_by_role('button',name='Ligar microfone')).to_have_attribute('aria-pressed','false')
+  assert await page.evaluate('micStream.getAudioTracks()[0].readyState')=='ended'
+  await page.get_by_role('button',name='Ligar microfone').click()
+  await expect(page.get_by_role('button',name='Desligar microfone')).to_have_attribute('aria-pressed','true')
+  assert await page.evaluate('micOpens')==2
+  print('PASS: automatic persistent microphone, silence does not disable it, two turns reuse one stream, manual off/on, no voice boxes, early full ordered speech, active workers.',flush=True)
+  await page.get_by_role('button',name='Desligar microfone').click()
   await page.get_by_role('button',name='ENTENDIMENTO DE LINGUAGEM',exact=True).click();await page.locator('#chat-input').fill('mostrar resposta');await page.get_by_role('button',name='Enviar mensagem').click()
   await expect(page.locator('.answer-card-deck')).to_contain_text('Sócrates')
-  # A buffered next chunk must not resume after Stop.
-  await page.evaluate('window.playTimes=[]')
-  await page.get_by_role('button',name='ENTENDIMENTO DE LINGUAGEM',exact=True).click();await page.locator('#chat-input').fill('Outra pergunta');await page.get_by_role('button',name='Enviar mensagem').click()
-  await page.wait_for_function('()=>window.playTimes.length===1',timeout=10000)
-  await page.get_by_role('button',name='Gravar pelo microfone').click();await page.wait_for_timeout(1500)
-  assert len(await page.evaluate('window.playTimes'))==1
-  assert await page.locator('.reference-mic').get_attribute('title')=='Microfone desligado'
-  # Starting a fresh recording immediately hides cards from the previous typed turn.
-  await page.get_by_role('button',name='Gravar pelo microfone').click()
-  await expect(page.locator('.reference-mic')).to_have_attribute('title','Abrindo microfone',timeout=400)
-  assert await page.locator('.spoken-question,.answer-card-deck,.card-composer').count()==0
-  print('PASS: stopping cancels the queued continuation; previous cards hide at microphone activation.',flush=True)
   # The same drawing code must remain functional on older WebView2 without workers/offscreen.
   fallback=await b.new_page(viewport={'width':1366,'height':768})
   await fallback.add_init_script('window.Worker=undefined;window.OffscreenCanvas=undefined')

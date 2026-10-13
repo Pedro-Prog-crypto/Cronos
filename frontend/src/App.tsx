@@ -31,11 +31,11 @@ export default function App(){
   const activity=useRef<'IDLE'|'LISTENING'|'SPEAKING'>('IDLE');const [moduleActivity,setModuleActivity]=useState(activity.current);
   const tell=useCallback((message:string,isError=false)=>{setNotice(message);setError(isError);},[]);
   const voice=useCronosVoice({onError:message=>tell(message,true)});
-  const microphone=useMicrophone(useCallback(text=>{if(!text.trim()){tell('Não consegui entender a fala. Tente novamente.',true);return;}if(commandRef.current(text))return;setChatOpen(false);void sendRef.current(text);},[tell]),useCallback(message=>tell(message,true),[tell]),config?.transcription_provider==='vosk');
-  const state=voice.isSpeaking?'SPEAKING':microphone.recording?'LISTENING':moduleActivity;
+  const microphone=useMicrophone(useCallback(text=>{if(!text.trim()){tell('Não consegui entender a fala. Tente novamente.',true);return;}if(commandRef.current(text))return;setChatOpen(false);void sendRef.current(text);},[tell]),useCallback(message=>tell(message,true),[tell]),config?.transcription_provider==='vosk',busy||voice.isSpeaking||voice.isGenerating||Boolean(module));
+  const state=voice.isSpeaking?'SPEAKING':microphone.capturing?'LISTENING':moduleActivity;
   const audioLevelSource=voice.isSpeaking?voice.audioLevelSource:microphone.audioLevelSource;
   const live=useRef({busy:false,recording:false,transcribing:false,speaking:false,generating:false,module:null as string|null,announce:false,fish:false});
-  live.current={busy,recording:microphone.recording,transcribing:microphone.transcribing,speaking:voice.isSpeaking,generating:voice.isGenerating,module,announce:announceAlerts,fish:Boolean(config?.fish_configured)};
+  live.current={busy,recording:microphone.capturing||microphone.starting,transcribing:microphone.transcribing,speaking:voice.isSpeaking,generating:voice.isGenerating,module,announce:announceAlerts,fish:Boolean(config?.fish_configured)};
   const voiceRef=useRef(voice);voiceRef.current=voice;
   useEffect(()=>{if(!announceAlerts)pendingAlerts.current.clear();},[announceAlerts]);
 
@@ -98,29 +98,21 @@ export default function App(){
     const command=localCommand(text,eyeOpen);if(!command)return false;
     if((command.type==='eye'||command.type==='place')&&config?.privacy_mode==='local'){tell('O mapa mundial está desativado em modo local.',true);return true;}
     if(command.type==='eye'){voice.prepare();eyeAnnouncement.current=true;setEyeOpen(true);setChatOpen(false);setModule(null);setNote(null);}
-    else if(command.type==='memory'){setEyeOpen(false);setDisplayTurn(null);setGraphRevision(value=>value+1);}
+    else if(command.type==='memory'){setEyeOpen(false);setShowSpokenCards(false);setChatOpen(false);setGraphRevision(value=>value+1);}
     else if(command.type==='panel')setChatOpen(true);
     else if(command.type==='place'){setPlaceQuery(command.query);setEyeOpen(true);setChatOpen(false);}
     return true;
   };commandRef.current=runCommand;
   const selectNote=useCallback(async(path:string)=>{if(eyeOpen){setEyeOpen(false);return;}try{setNote(await jsonApi(`/memory/note?path=${encodeURIComponent(path)}`));}catch(error){tell('Não foi possível abrir essa nota.',true);}},[eyeOpen,tell]);
   const worldReady=()=>{if(eyeAnnouncement.current){eyeAnnouncement.current=false;if(config?.fish_speech_configured)void voice.speak('Ampliando sua perspectiva. Olho de Deus aberto.');}};
-  useEffect(()=>{const key=(event:KeyboardEvent)=>{if(event.key==='Escape'){setEyeOpen(false);setNote(null);setChatOpen(false);setDisplayTurn(null);}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);},[]);
+  useEffect(()=>{const key=(event:KeyboardEvent)=>{if(event.key==='Escape'){setEyeOpen(false);setNote(null);setChatOpen(false);setShowSpokenCards(false);}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);},[]);
   useEffect(()=>{if(!notice)return;const timer=setTimeout(()=>setNotice(''),8000);return()=>clearTimeout(timer);},[notice]);
 
+  const autoMic=useRef(false);
+  useEffect(()=>{if(connected&&!autoMic.current){autoMic.current=true;void microphone.start();}},[connected,microphone.start]);
   const handleMic=()=>{
-    if(!connected){tell('A conexão automática ainda não está disponível. Feche e abra o Kronos novamente.',true);return;}
-    if(microphone.recording){void microphone.toggle();return;}
-    if(voice.isSpeaking||voice.isGenerating){voice.stop();return;}
-    if(config?.transcription_provider!=='vosk'&&!config?.fish_configured){tell('Configure Fish Audio em modo online para transcrever voz. A conversa por texto continua disponível.',true);setModule('voice');return;}
-    if(moduleActivity!=='IDLE'){
-      (iframe.current?.contentWindow as (Window & {cronosPanelClose?:()=>void})|null)?.cronosPanelClose?.();
-      setModuleActivity('IDLE');return;
-    }
-    if(busy||microphone.transcribing)return;
-    setChatOpen(false);setShowSpokenCards(false);
-    if(autoVoice)voice.prepare();
-    void microphone.toggle();
+    if(!connected){tell('A conexão automática ainda não está disponível.',true);return;}
+    setChatOpen(false);setShowSpokenCards(false);void microphone.toggle();
   };
   const sendText=async(value:string,source:'text'|'transcription'='text')=>{
     const text=value.trim();if(!text||inFlight.current)return;if(runCommand(text)){setDraft('');return;}
@@ -150,16 +142,19 @@ export default function App(){
   const openModule=(index:number)=>{if(index===7){setEyeOpen(false);setGraphRevision(value=>value+1);return;}if(index===3){setChatOpen(true);return;}setModule(moduleIds[index]);setModuleActivity('IDLE');};
   useEffect(()=>{document.documentElement.dataset.cronosPanel=module?'true':'false';return()=>{delete document.documentElement.dataset.cronosPanel;};},[module]);
   const closeModule=()=>{(iframe.current?.contentWindow as (Window & {cronosPanelClose?:()=>void})|null)?.cronosPanelClose?.();setModule(null);setModuleActivity('IDLE');setGraphRevision(value=>value+1);if(connected)void jsonApi('/status').then(setConfig).catch(()=>{});};
+  const handlers=useRef({mic:handleMic,module:openModule});handlers.current={mic:handleMic,module:openModule};
+  const stageMic=useCallback(()=>handlers.current.mic(),[]);
+  const stageModule=useCallback((index:number)=>handlers.current.module(index),[]);
   const activeAlerts=monitor?.alerts||[];
   const fresh=monitor?.checked_at&&Date.now()-Date.parse(monitor.checked_at)<45000;
   const diagnostic=!connected?'DESCONECTADO':!monitor||!fresh?'DIAGNÓSTICO INDISPONÍVEL':activeAlerts.length?`${activeAlerts.length} ALERTA(S)`:'SEM ALERTAS NOS SINAIS MONITORADOS';
   return <div className="relative h-screen w-screen overflow-hidden bg-black text-slate-100 flex flex-col select-none">
-    <main className="absolute inset-0"><IntegratedNeuralStage state={state} audioLevelSource={audioLevelSource} onOrbClick={handleMic} onMicToggle={handleMic} onModuleClick={openModule}/></main>
+    <main className="absolute inset-0"><IntegratedNeuralStage state={state} audioLevelSource={audioLevelSource} onOrbClick={stageMic} onMicToggle={stageMic} onModuleClick={stageModule}/></main>
     <div className={`memory-slot ${eyeOpen?'small':''}`}><MemorySpiral graph={graph} small={eyeOpen} onSelect={selectNote}/></div>
     <div className={`eye-slot ${eyeOpen?'expanded':''}`}>
       {eyeOpen?<Suspense fallback={<HolographicGlobe onOpen={()=>{}}/>}><WorldMap query={placeQuery} onError={message=>tell(message,true)} onReady={worldReady}/></Suspense>:<HolographicGlobe onOpen={()=>{if(config?.privacy_mode==='local'){tell('O mapa mundial usa serviços externos e está desativado em modo local.',true);return;}voice.prepare();eyeAnnouncement.current=true;setEyeOpen(true);setNote(null);}}/>}
     </div>
-    <button className={`reference-mic ${microphone.recording?'recording':microphone.starting?'starting':microphone.transcribing?'transcribing':busy?'thinking':voice.isGenerating?'generating':voice.isSpeaking?'speaking':''}`} aria-pressed={microphone.recording} title={microphone.starting?'Abrindo microfone':microphone.recording?'Microfone ligado':microphone.transcribing?'Transcrevendo':busy?'Aguardando Gemini':voice.isGenerating?'Preparando voz':voice.isSpeaking?'Falando':'Microfone desligado'} aria-label={microphone.recording?'Parar e transcrever':'Gravar pelo microfone'} onClick={handleMic} disabled={microphone.starting||microphone.transcribing||(busy&&!microphone.recording)}><Mic size={16}/></button>
+    <button className={`reference-mic ${microphone.starting?'starting':microphone.transcribing?'transcribing':busy?'thinking':voice.isGenerating?'generating':voice.isSpeaking?'speaking':microphone.recording?'recording':''}`} aria-pressed={microphone.recording} title={microphone.starting?'Abrindo microfone':microphone.transcribing?'Transcrevendo':busy?'Aguardando Gemini':voice.isGenerating?'Preparando voz':voice.isSpeaking?'Falando — escuta em espera':microphone.recording?'Microfone ligado':'Microfone desligado'} aria-label={microphone.recording?'Desligar microfone':'Ligar microfone'} onClick={handleMic} ><Mic size={16}/></button>
     {notice&&error&&<div className="scene-notice" role="status">{notice}</div>}
     {note&&<section className="note-window" aria-label="Nota Obsidian"><button onClick={()=>setNote(null)} aria-label="Fechar nota"><X size={18}/></button><pre>{note.content}</pre></section>}
     {displayTurn?.reply&&showSpokenCards&&!chatOpen&&!module&&!eyeOpen&&<AnswerCards reply={displayTurn.reply}/>}
@@ -167,7 +162,7 @@ export default function App(){
     {chatOpen&&<section className="card-composer" aria-label="Escrever para Kronos"><HolographicCard title="PERGUNTA" variant="layered">
       <button className="holo-close" onClick={()=>setChatOpen(false)} aria-label="Fechar conversa"><X size={17}/></button>
       <form onSubmit={send}><label htmlFor="chat-input">O que você quer perguntar?</label><textarea id="chat-input" value={draft} onChange={event=>{setDraft(event.target.value);event.target.style.height='auto';event.target.style.height=Math.min(260,event.target.scrollHeight)+'px';}} maxLength={16000} rows={2}/>
-        <div className="footer-actions"><button type="submit" disabled={busy||microphone.recording||microphone.transcribing||!draft.trim()}><Send size={15}/>Enviar mensagem</button></div>
+        <div className="footer-actions"><button type="submit" disabled={busy||microphone.transcribing||!draft.trim()}><Send size={15}/>Enviar mensagem</button></div>
       </form>
     </HolographicCard></section>}
     {tools.some(result=>result.status==='pending_confirmation')&&<section className="holo-tool-deck" aria-label="Ações pendentes">{tools.filter(result=>result.status==='pending_confirmation').map((result,index)=><HolographicCard key={index} title={result.name} variant="layered"><pre>{JSON.stringify(result.arguments,null,2)}</pre><div className="footer-actions"><button disabled={busy} onClick={()=>approve(result,true)}>Confirmar ação</button><button disabled={busy} onClick={()=>approve(result,false)}>Cancelar</button></div></HolographicCard>)}</section>}

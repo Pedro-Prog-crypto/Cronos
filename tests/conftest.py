@@ -10,3 +10,11 @@ def local_http_client_defaults(monkeypatch):
         kwargs.setdefault('client', ('127.0.0.1', 50000))
         original(self, *args, **kwargs)
     monkeypatch.setattr(TestClient, '__init__', initialize)
+
+@pytest.fixture(autouse=True)
+def isolate_gemini_cooldown_and_error_log(monkeypatch):
+    from cronos import providers
+    providers.Gemini.cooldowns.clear()
+    monkeypatch.setattr(providers, 'record_gemini_error', lambda *args: None)
+    yield
+    providers.Gemini.cooldowns.clear()

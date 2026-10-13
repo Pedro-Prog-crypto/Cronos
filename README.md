@@ -14,7 +14,7 @@ Leia [a análise do pacote antigo](docs/ANALISE_LEGADO.md), o
 1. Extraia o ZIP inteiro numa pasta gravável.
 2. Abra `Instalar-Cronos.bat`. Ele instala backend, janela desktop, busca, imagens e dependências do ouvinte local.
 3. Configure `.env` no Bloco de Notas, sem compartilhar suas chaves.
-4. Abra `Iniciar-Cronos.bat`. Ele abre uma janela própria, sem navegador externo.
+4. Abra `Iniciar-Cronos.vbs`. Ele abre uma janela própria sem prompt. O `.bat` continua disponível como alternativa.
 
 Python 3.11+ e Microsoft Edge WebView2 Runtime são necessários. O aplicativo
 continua dependendo de Python; ainda não é um instalador `.exe` independente.
@@ -223,3 +223,4 @@ O teste de compatibilidade legado com `s2.1-pro-free` retornou HTTP 400 no noteb
 Configuração real de voz recuperada: siga [Voz original](docs/VOZ_ORIGINAL.md).
 
 Microfone e início da voz: [correções e atualização](docs/MICROFONE_E_LATENCIA.md).
+Escuta contínua, memória e comandos do mapa: [atualização](docs/ESCUTA_CONTINUA.md).
