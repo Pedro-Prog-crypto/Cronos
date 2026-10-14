@@ -18,6 +18,9 @@ if errorlevel 1 (
 if errorlevel 1 goto :failed
 ".venv\Scripts\python.exe" -m pip install -e ".[desktop,search,wake]"
 if errorlevel 1 goto :failed
+echo Preparando suporte de reproducao de musica e clipes...
+".venv\Scripts\python.exe" -m cronos.media_runtime
+if errorlevel 1 goto :failed
 if not exist ".env" copy ".env.example" ".env" >nul
 ".venv\Scripts\python.exe" -m cronos.recognition --prepare
 if errorlevel 1 echo Modelo portugues pendente. Execute esta instalacao novamente com internet.

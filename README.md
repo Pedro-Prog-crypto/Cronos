@@ -236,10 +236,8 @@ Painéis desktop e controles disponíveis: [documentação dos 12 painéis](docs
 Abra `Iniciar-Cronos-Web.bat` (Brave ou navegador padrão). O player só é criado
 quando solicitado. Exemplos: “Kronos, colocar música Evidências”, “colocar músicas
 parecidas de MC Hariel”, “pausar música”, “continuar música”, “próxima música” e
-“parar música”. O YouTube reproduz o vídeo no próprio player oficial, incluindo
-seus controles e eventuais anúncios/restrições. O navegador pode exigir um clique
-inicial para permitir áudio. Vídeos com incorporação bloqueada devem ser abertos
-no YouTube ou substituídos por outro resultado.
+“parar música”. O player interno reproduz os fluxos públicos de áudio/vídeo da fonte, sem iframe nem janela externa. O navegador pode exigir um clique
+inicial para permitir áudio. Conteúdo indisponível ou que exige login/assinatura não é reproduzido por este player; escolha outro resultado.
 
 A pesquisa consulta os resultados públicos do YouTube e usa yt-dlp como alternativa de metadados; mudanças no site,
 consentimento ou bloqueios de rede podem impedir essa busca. Nesse caso, o painel
@@ -306,13 +304,25 @@ Música e clipes têm player interno com fila, pausa, continuação, anterior/pr
 volume e posição. Aceita “Chronos, coloque minha música preferida, que é Nada pra
 Fazer” e “quero ver o clipe Nada pra Fazer”; informe o artista se houver homônimos.
 A IA também tem a ferramenta `music_search`, cujos resultados são entregues ao
-player. A reprodução continua no player oficial do YouTube: vídeos indisponíveis,
-restrições de incorporação e permissões de autoplay do navegador ainda se aplicam.
+player. A reprodução acontece nos elementos nativos de áudio/vídeo da interface: disponibilidade da fonte, compatibilidade de formatos e permissões de autoplay ainda se aplicam.
 Nenhuma janela externa é aberta como substituto automático. A alternativa
-`yt-dlp` consulta só metadados públicos, sem baixar áudio/vídeo ou usar cookies.
+`yt-dlp` consulta vídeos públicos e resolve URLs temporárias de mídia, sem baixar arquivos ou usar cookies.
 Para instalar a nova dependência, execute novamente `Instalar-Cronos.bat`.
 
 Quando a fonte Overpass principal de restaurantes falha, a pesquisa tenta duas
 instâncias alternativas, com tempo e tamanho de resposta limitados. Se todas
 falharem, informa a indisponibilidade, sem resultados inventados. Isso não torna
 as fontes externas permanentemente disponíveis.
+
+
+O comando “Chronos, abre a música Nada pra Fazer” abre a barra própria do Kronos.
+“Abre o clipe Nada pra Fazer” inclui vídeo, limitado a 480p/30 fps. Quando a fonte
+entrega áudio e imagem separados, a interface sincroniza ambos; pausa, busca de
+posição e ESC atingem os dois. Não há link de abertura externa como fallback.
+As URLs de mídia ficam em RAM por até quatro minutos e não vão para o histórico.
+O instalador prepara o runtime JavaScript necessário ao resolvedor: reutiliza
+Node 20+ existente ou baixa uma versão portátil oficial, verificando SHA-256,
+na pasta privada `.cronos-local/media-runtime`. Essa preparação pode exigir
+internet na instalação. Não é necessário instalar FFmpeg para a reprodução;
+o teste de desenvolvimento `frontend/scripts/check-music.py` usa FFmpeg apenas
+para gerar um vídeo de teste temporário.

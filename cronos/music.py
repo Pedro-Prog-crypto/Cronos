@@ -90,7 +90,7 @@ async def search_music(query,similar=False,video=False):
     cached=CACHE.get(cache_key)
     if cached and time.monotonic()-cached[0]<600:return cached[1]
     ident=video_id(query)
-    if ident:return {'tracks':[{'id':ident,'title':'Vídeo solicitado'}],'search_url':'https://www.youtube.com/watch?v='+ident}
+    if ident:return {'tracks':[{'id':ident,'title':'Vídeo solicitado'}],'video':video,'search_url':'https://www.youtube.com/watch?v='+ident}
     term=query+(' mix músicas parecidas' if similar else ' clipe oficial' if video else '')
     link='https://www.youtube.com/results?'+urlencode({'search_query':term})
     tracks=[];key=os.getenv('YOUTUBE_API_KEY','').strip()
@@ -113,7 +113,7 @@ async def search_music(query,similar=False,video=False):
     if not tracks:
         try:tracks=await asyncio.wait_for(asyncio.to_thread(metadata_search,term),18)
         except Exception:pass
-    result={'tracks':tracks,'search_url':link,'message':None if tracks else 'Não consegui consultar o catálogo de vídeos. Nenhuma música começou. Tente outra busca ou cole o link do vídeo para reproduzir aqui; não vou abrir uma janela externa.'}
+    result={'tracks':tracks,'video':video,'search_url':link,'message':None if tracks else 'Não consegui consultar o catálogo de vídeos. Nenhuma música começou. Tente outra busca ou cole o link do vídeo para reproduzir aqui; não vou abrir uma janela externa.'}
     if tracks:
         if len(CACHE)>=16:CACHE.pop(next(iter(CACHE)))
         CACHE[cache_key]=(time.monotonic(),result)
@@ -121,7 +121,64 @@ async def search_music(query,similar=False,video=False):
 
 
 def install_music(app,authenticate):
+    install_native_music(app,authenticate)
     @app.get('/music/search',dependencies=[Depends(authenticate)])
     async def search(query:str=Query(min_length=1,max_length=240),similar:bool=False,video:bool=False):
         if app.state.engine.settings.privacy_mode=='local':raise HTTPException(403,'Música online está desativada no modo local.')
         return await search_music(query,similar,video)
+
+
+MEDIA_CACHE={}
+
+
+def allowed_stream(url):
+    try:
+        parsed=urlparse(url)
+        return parsed.scheme=='https' and bool(parsed.hostname) and parsed.hostname.endswith('.googlevideo.com') and not parsed.username and not parsed.password and parsed.port in {None,443} and len(url)<=16000
+    except (ValueError,TypeError):return False
+
+
+def select_media(info,clip):
+    if info.get('availability') in {'private','premium_only','subscriber_only','needs_auth'}:
+        raise ValueError('Este conteúdo exige acesso próprio e não será reproduzido por este player.')
+    formats=[f for f in info.get('formats',[]) if str(f.get('protocol','')).startswith('http') and allowed_stream(f.get('url',''))]
+    def has(f,key):return f.get(key) not in {None,'none'}
+    audios=[f for f in formats if has(f,'acodec') and not has(f,'vcodec')]
+    audios.sort(key=lambda f:(f.get('language_preference') or 0,f.get('ext')=='m4a',0<(f.get('abr') or 0)<=160,f.get('abr') or 0),reverse=True)
+    combined=[f for f in formats if has(f,'acodec') and has(f,'vcodec') and 0<(f.get('height') or 0)<=480 and (f.get('fps') or 30)<=30]
+    combined.sort(key=lambda f:(f.get('language_preference') or 0,f.get('ext')=='mp4',str(f.get('vcodec','')).startswith('avc'),f.get('height') or 0),reverse=True)
+    videos=[f for f in formats if has(f,'vcodec') and not has(f,'acodec') and 0<(f.get('height') or 0)<=480 and (f.get('fps') or 30)<=30 and not str(f.get('vcodec','')).startswith('av01')]
+    videos.sort(key=lambda f:(f.get('ext')=='mp4',str(f.get('vcodec','')).startswith('avc'),f.get('height') or 0),reverse=True)
+    if not clip and (audios or combined):
+        return {'audio_url':(audios or combined)[0]['url'],'video_url':None,'title':str(info.get('title') or 'Música')[:250]}
+    if combined:return {'video_url':combined[0]['url'],'audio_url':None,'title':str(info.get('title') or 'Clipe')[:250]}
+    if videos and audios:return {'video_url':videos[0]['url'],'audio_url':audios[0]['url'],'title':str(info.get('title') or 'Clipe')[:250]}
+    raise ValueError('A fonte não forneceu um formato de áudio/vídeo compatível com o player interno.')
+
+
+def resolve_native(ident,clip):
+    if not METADATA_LOCK.acquire(blocking=False):raise RuntimeError('Outra música está sendo preparada. Tente novamente em alguns segundos.')
+    try:
+        import yt_dlp
+        from cronos.media_runtime import node_executable
+        node=node_executable()
+        options={'js_runtimes':{'node':{'path':node}},'quiet':True,'no_warnings':True,'skip_download':True,'noplaylist':True,'socket_timeout':7,'retries':0,'extractor_retries':0,'logger':QuietLogger()}
+        with yt_dlp.YoutubeDL(options) as client:
+            info=client.extract_info('https://www.youtube.com/watch?v='+ident,download=False)
+        return select_media(info or {},clip)
+    finally:METADATA_LOCK.release()
+
+
+def install_native_music(app,authenticate):
+    @app.get('/music/resolve',dependencies=[Depends(authenticate)])
+    async def resolve(id:str=Query(pattern=r'^[A-Za-z0-9_-]{11}$'),video:bool=False):
+        if app.state.engine.settings.privacy_mode=='local':raise HTTPException(403,'Música online está desativada no modo local.')
+        key=(id,video);cached=MEDIA_CACHE.get(key)
+        if cached and time.monotonic()-cached[0]<240:return cached[1]
+        try:result=await asyncio.wait_for(asyncio.to_thread(resolve_native,id,video),25)
+        except RuntimeError as exc:raise HTTPException(409,str(exc)) from None
+        except ValueError as exc:raise HTTPException(502,str(exc)) from None
+        except Exception:raise HTTPException(502,'Não consegui preparar o fluxo de mídia. Confira a instalação de yt-dlp, a conexão e a disponibilidade do vídeo. Nenhuma aba externa foi aberta.') from None
+        if len(MEDIA_CACHE)>=8:MEDIA_CACHE.pop(next(iter(MEDIA_CACHE)))
+        MEDIA_CACHE[key]=(time.monotonic(),result)
+        return result

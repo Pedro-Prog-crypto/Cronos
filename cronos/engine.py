@@ -117,6 +117,14 @@ class Engine:
             batch = []
             self.phase="tools"
             for call in calls:
+                if call['name'] in {'browser_open','browser_search'}:
+                    import re,unicodedata
+                    clean=''.join(c for c in unicodedata.normalize('NFD',message.casefold()) if not unicodedata.combining(c))
+                    native_media=bool(re.search(r'\b(?:abre|abrir|abra|tocar|toque|toca|coloque|colocar|coloca|reproduzir)\b.{0,60}\b(?:musica|clipe|video)\b',clean) or any(r['name']=='music_search' for r in results))
+                    if native_media:
+                        outcome={'name':call['name'],'status':'failed','error':'Pedido de mídia deve usar o player interno. Nenhuma aba externa foi aberta. Use music_search ou informe o erro da fonte.'}
+                        results.append(outcome);self.memory.log_tool(session,outcome);batch.append(outcome)
+                        continue
                 if prefs and prefs.search_requested_only and call['name'] in {'web_search','web_news','browser_search'}:
                     import re
                     if not re.search(r'pesquis|busc|procur|not[ií]cia|atual|hoje|agora|previs[aã]o|cota[cç][aã]o', message, re.I):

@@ -1,80 +1,80 @@
-"""Exercise commands, player messages, cancelled searches and actual Web Audio cleanup."""
-import asyncio,http.server,threading,json,os
+"""Native HTML audio/video playback with generated media; external catalogs mocked."""
+import asyncio,http.server,threading,json,math,struct,wave,io,tempfile,subprocess
 from functools import partial
 from pathlib import Path
-from playwright.async_api import async_playwright
+from playwright.async_api import async_playwright,expect
 ROOT=Path(__file__).resolve().parents[2]
+buffer=io.BytesIO()
+with wave.open(buffer,'wb') as out:
+ out.setnchannels(1);out.setsampwidth(2);out.setframerate(8000)
+ out.writeframes(b''.join(struct.pack('<h',int(2000*math.sin(2*math.pi*220*i/8000))) for i in range(160000)))
+WAV=buffer.getvalue()
 class Handler(http.server.SimpleHTTPRequestHandler):
  def log_message(self,*args):pass
- def end_headers(self):
-  self.send_header('Referrer-Policy','no-referrer');super().end_headers()
-s=http.server.ThreadingHTTPServer(('127.0.0.1',0),partial(Handler,directory=str(ROOT/'cronos')))
-threading.Thread(target=s.serve_forever,daemon=True).start()
-async def main():
+server=http.server.ThreadingHTTPServer(('127.0.0.1',0),partial(Handler,directory=str(ROOT/'cronos')))
+threading.Thread(target=server.serve_forever,daemon=True).start()
+async def main(mp4):
  async with async_playwright() as p:
-  b=await p.chromium.launch(executable_path='/usr/bin/chromium',args=['--no-sandbox','--autoplay-policy=no-user-gesture-required'],headless=True)
-  page=await b.new_page(viewport={'width':1366,'height':900})
-  await page.add_init_script("""window.pywebview={api:{connection:async()=>({token:'test'})}};window.musicMessages=[];window.tones=[];const create=AudioContext.prototype.createOscillator;AudioContext.prototype.createOscillator=function(){const o=create.call(this);window.tones.push({context:this,oscillator:o});return o;};""")
-  await page.route('**/status',lambda r:r.fulfill(json={'fish_configured':False,'fish_speech_configured':False,'transcription_provider':'vosk'}))
+  browser=await p.chromium.launch(executable_path='/usr/bin/chromium',args=['--no-sandbox','--autoplay-policy=no-user-gesture-required'],headless=True)
+  page=await browser.new_page(viewport={'width':1366,'height':900})
+  await page.add_init_script("window.pywebview={api:{connection:async()=>({token:'test'})}}")
+  await page.route('**/status',lambda r:r.fulfill(json={'fish_configured':False,'fish_speech_configured':False}))
   await page.route('**/panels',lambda r:r.fulfill(json={'preferences':{'device_auto_connect':False}}))
   await page.route('**/monitor?*',lambda r:r.fulfill(json={'cursor':0,'alerts':[],'events':[]}))
   await page.route('**/memory/**',lambda r:r.fulfill(json={'nodes':[],'edges':[],'total':0,'next_offset':None}))
-  requests=[];release=asyncio.Event()
+  release=asyncio.Event();calls=[]
   async def search(r):
-   requests.append(r.request.url)
+   calls.append(r.request.url)
    if 'Slow' in r.request.url:await release.wait()
-   await r.fulfill(json={'tracks':[{'id':'abcdefghijk','title':'Song'}],'search_url':'https://www.youtube.com/watch?v=abcdefghijk'})
+   await r.fulfill(json={'tracks':[{'id':'abcdefghijk','title':'Nada pra Fazer'},{'id':'12345678901','title':'Outra música'}]})
   await page.route('**/music/search?*',search)
-  player="""<html><body>Embedded player fixture<script>window.addEventListener('message',e=>{try{const d=JSON.parse(e.data);if(d.event==='command')parent.postMessage(JSON.stringify({event:'fixture',func:d.func}),'*')}catch{}});</script></body></html>"""
-  player_requests=[]
-  async def embedded(r):
-   player_requests.append(r.request.headers);await r.fulfill(body=player,content_type='text/html')
-  await page.route('https://www.youtube-nocookie.com/embed/**',embedded)
-  await page.goto(f'http://127.0.0.1:{s.server_port}/ui/index.html')
-  await page.evaluate("window.addEventListener('message',e=>{try{const d=JSON.parse(e.data);if(d.event==='fixture')window.musicMessages.push(d.func)}catch{}})")
+  async def resolve(r):
+   clip='video=true' in r.request.url
+   await r.fulfill(json={'audio_url':'https://rr1.googlevideo.com/audio','video_url':'https://rr1.googlevideo.com/video' if clip else None,'title':'Nada pra Fazer'})
+  await page.route('**/music/resolve?*',resolve)
+  async def stream(r,content,mime):
+   import re
+   requested=r.request.headers.get('range','');match=re.match(r'bytes=(\d+)-(\d*)',requested)
+   if match:
+    start=int(match[1]);end=min(len(content)-1,int(match[2]) if match[2] else len(content)-1)
+    await r.fulfill(status=206,body=content[start:end+1],content_type=mime,headers={'Accept-Ranges':'bytes','Content-Range':f'bytes {start}-{end}/{len(content)}'})
+   else:await r.fulfill(body=content,content_type=mime,headers={'Accept-Ranges':'bytes'})
+  await page.route('https://rr1.googlevideo.com/audio',lambda r:stream(r,WAV,'audio/wav'))
+  await page.route('https://rr1.googlevideo.com/video',lambda r:stream(r,mp4,'video/mp4'))
+  errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
+  await page.goto(f'http://127.0.0.1:{server.server_port}/ui/index.html')
   async def command(text):
-   await page.get_by_role('button',name='ENTENDIMENTO DE LINGUAGEM',exact=True).click()
-   await page.locator('.phrase-card').click()
-   await page.locator('#chat-input').fill(text)
-   await page.get_by_role('button',name='Enviar mensagem').click()
-  assert await page.locator('.music-player').count()==0
-  await command('Chronos, coloque a minha música preferida, que é Nada pra Fazer')
-  await page.locator('.music-player iframe').wait_for()
-  assert 'abcdefghijk' in await page.locator('.music-player iframe').get_attribute('src')
-  assert player_requests[0].get('referer')==f'http://127.0.0.1:{s.server_port}/',player_requests
-  assert 'test' not in player_requests[0].get('referer','')
-  assert 'Nada+pra+Fazer' in requests[0],requests
+   await page.get_by_role('button',name='ENTENDIMENTO DE LINGUAGEM',exact=True).click();await page.locator('.phrase-card').click()
+   await page.locator('#chat-input').fill(text);await page.get_by_role('button',name='Enviar mensagem').click()
+  await command('Chronos, abre a música Nada pra Fazer')
+  await page.wait_for_function('()=>document.querySelector(".music-player audio")?.currentTime>.1')
+  assert await page.locator('.music-player iframe').count()==0
+  assert 'Nada+pra+Fazer' in calls[0]
   await page.get_by_role('button',name='Pausar',exact=True).click()
-  await page.wait_for_function("window.musicMessages.includes('pauseVideo')")
-  await page.frame_locator('.music-player iframe').locator('body').evaluate("()=>parent.postMessage(JSON.stringify({event:'infoDelivery',info:{currentTime:12,duration:90,playerState:1}}),'*')")
-  await page.get_by_label('Posição da música',exact=True).fill('30')
-  await page.wait_for_function("window.musicMessages.includes('seekTo')")
+  assert await page.locator('.music-player audio').evaluate('a=>a.paused')
+  await page.get_by_label('Posição da música',exact=True).fill('3')
+  await page.wait_for_timeout(200)
+  assert await page.locator('.music-player audio').evaluate('a=>Math.abs(a.currentTime-3)<.2')
   await page.get_by_label('Volume da música',exact=True).fill('35')
-  await page.wait_for_function("window.musicMessages.includes('setVolume')")
+  assert await page.locator('.music-player audio').evaluate('a=>Math.abs(a.volume-.35)<.01')
   await page.get_by_role('button',name='Continuar',exact=True).click()
-  await page.wait_for_function("window.musicMessages.includes('playVideo')")
-  await command('Kronos, tocar frequência 528 Hz')
-  await page.wait_for_function('window.tones.length===1')
-  assert await page.evaluate('window.tones[0].oscillator.frequency.value')==528
+  await page.wait_for_function('()=>document.querySelector(".music-player audio").currentTime>3.1')
+  await command('Chronos, abre o clipe Nada pra Fazer')
+  await page.wait_for_function('()=>document.querySelector(".music-player video")?.videoWidth===160&&document.querySelector(".music-player audio")?.currentTime>.2')
+  await page.wait_for_timeout(900)
+  assert await page.evaluate('Math.abs(document.querySelector(".music-player video").currentTime-document.querySelector(".music-player audio").currentTime)<.6')
   await page.get_by_role('button',name='Pausar',exact=True).click()
-  await page.wait_for_function("window.tones[0].context.state==='suspended'")
-  await page.get_by_role('button',name='Continuar',exact=True).click()
-  await page.wait_for_function("window.tones[0].context.state==='running'")
+  assert await page.evaluate('document.querySelector(".music-player audio").paused&&document.querySelector(".music-player video").paused')
   await page.keyboard.press('Escape')
-  await page.wait_for_function("window.tones[0].context.state==='closed'")
-  assert await page.locator('.music-player').count()==0
-  await page.route('**/chat/stream',lambda r:r.fulfill(body=json.dumps({'type':'result','result':{'reply':'Encontrei um resultado para o player interno.','session_id':'music-test','tool_results':[{'name':'music_search','status':'completed','result':{'tracks':[{'id':'12345678901','title':'Nada pra Fazer — modelo'}]}}]}})+'\n',content_type='application/x-ndjson'))
-  await command('Gostaria de ouvir Nada pra Fazer')
-  await page.locator('.music-player iframe').wait_for()
-  assert '12345678901' in await page.locator('.music-player iframe').get_attribute('src')
-  assert len(page.context.pages)==1,'music must not open an external browser tab'
-  await page.keyboard.press('Escape')
-  await command('tocar música Slow')
-  await page.locator('.music-player').wait_for()
-  await page.keyboard.press('Escape');release.set()
-  await page.wait_for_timeout(500)
-  assert await page.locator('.music-player').count()==0
-  print('PASS: commands mount official embed, pause/resume messaging, 528Hz real oscillator, ESC closes audio and prevents late search revival. External YouTube playback is mocked, not verified.')
-  await b.close()
-try:asyncio.run(main())
-finally:s.shutdown()
+  assert await page.locator('.music-player audio,.music-player video,.music-player iframe').count()==0
+  await command('tocar música Slow');await page.locator('.music-player').wait_for();await page.keyboard.press('Escape');release.set()
+  await page.wait_for_timeout(500);assert await page.locator('.music-player').count()==0
+  assert len(page.context.pages)==1 and not errors,errors
+  print('PASS: native audio plays, pauses, seeks and changes volume; separate real MP4 video decodes and synchronizes; ESC removes players and cancels pending searches; no iframe or external tab. Catalog/stream addresses mocked.')
+  await browser.close()
+try:
+ with tempfile.TemporaryDirectory() as directory:
+  video=Path(directory)/'fixture.mp4'
+  subprocess.run(['ffmpeg','-loglevel','error','-f','lavfi','-i','color=c=blue:s=160x90:r=10','-t','20','-c:v','libx264','-pix_fmt','yuv420p','-movflags','+faststart',str(video)],check=True)
+  asyncio.run(main(video.read_bytes()))
+finally:server.shutdown()

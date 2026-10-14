@@ -82,3 +82,53 @@ def test_metadata_fallback_when_public_page_changes(monkeypatch):
     assert result['tracks'][0]['id']=='abcdefghijk'
     assert calls==['Nada pra Fazer clipe oficial']
     assert result['message'] is None
+
+
+def test_native_stream_selection_original_audio_and_light_video():
+    from cronos.music import select_media, allowed_stream
+    info={'title':'Clipe','formats':[
+        {'url':'https://rr1.googlevideo.com/video480','protocol':'https','vcodec':'avc1','acodec':'none','height':480,'fps':30,'ext':'mp4'},
+        {'url':'https://rr1.googlevideo.com/video1080','protocol':'https','vcodec':'av01','acodec':'none','height':1080,'fps':60,'ext':'mp4'},
+        {'url':'https://rr1.googlevideo.com/original','protocol':'https','vcodec':'none','acodec':'mp4a','abr':128,'ext':'m4a','language_preference':10},
+        {'url':'https://rr1.googlevideo.com/dub','protocol':'https','vcodec':'none','acodec':'mp4a','abr':160,'ext':'m4a','language_preference':-1}]}
+    result=select_media(info,True)
+    assert result['video_url'].endswith('video480') and result['audio_url'].endswith('original')
+    assert select_media(info,False)['video_url'] is None
+    assert not allowed_stream('https://googlevideo.com.evil.invalid/audio')
+    assert not allowed_stream('http://127.0.0.1/private')
+    assert not allowed_stream('https://user:password@rr1.googlevideo.com/audio')
+    import pytest
+    with pytest.raises(ValueError):select_media({**info,'availability':'private'},True)
+
+
+def test_native_resolver_auth_validation_and_no_external_redirect(settings,monkeypatch):
+    from cronos.music import MEDIA_CACHE
+    MEDIA_CACHE.clear();calls=[]
+    def resolve(ident,clip):
+        calls.append((ident,clip));return {'audio_url':'https://rr1.googlevideo.com/original','video_url':None,'title':'Nada pra Fazer'}
+    monkeypatch.setattr('cronos.music.resolve_native',resolve)
+    with TestClient(create_app(settings)) as client:
+        assert client.get('/music/resolve?id=abcdefghijk').status_code==401
+        assert client.get('/music/resolve?id=../private',headers=AUTH).status_code==422
+        result=client.get('/music/resolve?id=abcdefghijk',headers=AUTH)
+        assert result.status_code==200 and 'location' not in result.headers
+        assert result.json()['title']=='Nada pra Fazer'
+        client.get('/music/resolve?id=abcdefghijk',headers=AUTH)
+        assert len(calls)==1
+        assert 'https://*.googlevideo.com' in client.get('/').headers['content-security-policy']
+
+
+def test_music_request_cannot_be_redirected_to_external_browser(settings):
+    class Provider:
+        calls=0
+        async def reply(self,system,messages):
+            self.calls+=1
+            if self.calls==1:return {'reply':'','topics':[],'tool_calls':[{'name':'browser_search','arguments':{'query':'Nada pra Fazer'}}]}
+            return {'reply':'Vou usar o player interno.','topics':[],'tool_calls':[]}
+    with TestClient(create_app(settings,provider=Provider())) as client:
+        async def forbidden(*args):raise AssertionError('External browser tool must not execute')
+        client.app.state.registry.execute=forbidden
+        result=client.post('/chat',headers=AUTH,json={'message':'Chronos, abre a música Nada pra Fazer'})
+        assert result.status_code==200,result.text
+        action=result.json()['tool_results'][0]
+        assert action['status']=='failed' and 'Nenhuma aba externa' in action['error']
