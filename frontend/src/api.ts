@@ -6,6 +6,13 @@ export function getToken() { return token; }
 export function onConnection(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; }
 declare global { interface Window { cronosConnect?: (token: string) => void; } }
 window.cronosConnect = connect;
+// O iniciador local envia uma credencial temporária pelo fragmento, nunca ao servidor.
+const launch = new URLSearchParams(window.location.hash.slice(1));
+const browserToken = launch.get('cronos-session');
+if (browserToken) {
+  history.replaceState(null, '', window.location.pathname + window.location.search);
+  connect(browserToken);
+}
 export class ApiError extends Error {
   constructor(message: string, public status: number, public detail?: any) { super(message); }
 }
