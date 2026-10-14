@@ -96,6 +96,9 @@ async def main(client):
     await switches.first.click();await page.wait_for_timeout(100)
     assert client.get('/panels',headers=AUTH).json()['preferences']['web_enabled'] is False
    if index==6:
+    await expect(page.get_by_role('heading',name='EVOLUÇÃO E CONSELHO DE IAS',exact=True)).to_be_visible()
+    await page.get_by_role('button',name='ATUALIZAR CHECK-UP',exact=True).click()
+    await expect(page.get_by_label('Provedor',exact=True)).to_be_visible()
     await page.get_by_role('button',name='TESTAR CONEXÃO',exact=True).click()
     await expect(page.get_by_role('status')).to_contain_text('integridade SQLite verificadas')
    if index==7:

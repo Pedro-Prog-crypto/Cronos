@@ -89,7 +89,7 @@ class CompatibleProvider:
             status = exc.response.status_code
             reason = {401: "chave rejeitada", 403: "acesso negado", 404: "modelo ou endpoint indisponível",
                       429: "cota esgotada ou limite de chamadas", 400: "requisição ou formato JSON não aceito"}.get(status, "serviço indisponível")
-            raise ProviderError(f"{spec.id}: {reason} (HTTP {status}).") from exc
+            raise ProviderError(f"{spec.id}: {reason} (HTTP {status}).", status) from exc
         except httpx.RequestError as exc:
             raise ProviderError(f"{spec.id}: falha de conexão ou tempo esgotado.") from exc
         except (ValueError, TypeError, KeyError, IndexError) as exc:

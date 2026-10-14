@@ -300,6 +300,9 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         return {"session_id": str(session_id), "messages": request.app.state.memory.history(session_id),
                 "tool_results": events}
 
+    from cronos.evolution import install_api
+    install_api(app, authenticate)
+
     @app.get("/providers", dependencies=[Depends(authenticate)])
     async def providers():
         try:

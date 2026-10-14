@@ -5,6 +5,7 @@ __pycache__/
 vault/
 *.egg-info/
 config/providers.json
+config/evolution.json
 config/api_keys.json
 config/fish_audio.json
 config/ai_council.json

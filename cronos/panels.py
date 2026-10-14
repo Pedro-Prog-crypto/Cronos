@@ -102,6 +102,7 @@ class PanelState:
         state.memory.save_diary = prefs.save_diary
         state.monitor.record_events = prefs.log_security
         state.registry.permission_policy = self.policy
+        state.registry.current_settings = lambda: state.engine.settings
 
     def policy(self, name):
         p = self.preferences

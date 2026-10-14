@@ -20,8 +20,9 @@ def record_gemini_error(status,message):
 
 
 class ProviderError(Exception):
-    def __init__(self,message,status=503):
+    def __init__(self,message,status=None):
         super().__init__(message)
+        self.retryable = status in {429, 502, 503, 504}
         self.status=status if status in {429,502,503,504} else 503
 
 
