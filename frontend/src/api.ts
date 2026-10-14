@@ -37,6 +37,12 @@ async function nativeConnection(){
 }
 window.addEventListener('pywebviewready',()=>void nativeConnection());
 void nativeConnection();
+// Only an HttpOnly, same-host cookie established by an authenticated managed session
+// may restore the in-memory token after a page reload. No localStorage credentials.
+if(!getToken())void fetch('/connection',{headers:{Accept:'application/json'}}).then(async response=>{
+ if(response.ok&&!getToken()){const data=await response.json();if(typeof data.token==='string')connect(data.token);}
+}).catch(()=>{});
+
 
 // Deliver the finished answer while its memory metadata is still arriving.
 // No automatic retry: a repeated request could repeat tools or consume quota.

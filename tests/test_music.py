@@ -37,6 +37,7 @@ def test_music_auth_local_mode_and_no_network_for_url(settings):
 def test_music_search_and_graceful_provider_failure(settings, monkeypatch):
     monkeypatch.delenv('YOUTUBE_API_KEY', raising=False)
     monkeypatch.setattr('cronos.music.metadata_search',lambda query:[])
+    monkeypatch.setattr('cronos.music.catalog_fallback',lambda query:[])
     from cronos.music import CACHE
     CACHE.clear()
     original = httpx.AsyncClient
@@ -67,6 +68,7 @@ def test_playback_commands_are_not_knowledge_notes():
 
 
 def test_metadata_fallback_when_public_page_changes(monkeypatch):
+    monkeypatch.setattr('cronos.music.catalog_fallback',lambda query:[])
     import asyncio
     from cronos.music import search_music, CACHE
     CACHE.clear()
@@ -149,3 +151,18 @@ def test_music_request_cannot_be_redirected_to_external_browser(settings):
         assert result.status_code==200,result.text
         action=result.json()['tool_results'][0]
         assert action['status']=='failed' and 'Nenhuma aba externa' in action['error']
+
+
+def test_modern_search_card_is_video_not_playlist():
+    data={'contents':[
+        {'lockupViewModel':{'contentType':'LOCKUP_CONTENT_TYPE_VIDEO','contentId':'abcdefghijk','metadata':{'lockupMetadataViewModel':{'title':{'content':'Nada pra Fazer'}}}}},
+        {'lockupViewModel':{'contentType':'LOCKUP_CONTENT_TYPE_PLAYLIST','contentId':'12345678901','metadata':{'lockupMetadataViewModel':{'title':{'content':'Playlist'}}}}}]}
+    assert public_results('var ytInitialData = '+json.dumps(data)+';')==[{'id':'abcdefghijk','title':'Nada pra Fazer'}]
+
+
+def test_fallback_catalogs_uses_fast_valid_result(monkeypatch):
+    import asyncio
+    from cronos.music import fallback_catalogs
+    monkeypatch.setattr('cronos.music.metadata_search',lambda query:[])
+    monkeypatch.setattr('cronos.music.catalog_fallback',lambda query:[{'id':'abcdefghijk','title':query}])
+    assert asyncio.run(fallback_catalogs('Nada pra Fazer'))==[{'id':'abcdefghijk','title':'Nada pra Fazer'}]

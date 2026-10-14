@@ -160,9 +160,9 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
     wakeUntil.current=0;if(mounted.current)setWakeOpen(false);resources.current.vad?.dispose();resources.current.vad=undefined;
     if(resources.current.timer)clearInterval(resources.current.timer);
     const recorder=resources.current.recorder;if(recorder?.state==='recording')recorder.stop();
-    if(resources.current.node){resources.current.node.port.onmessage=null;resources.current.node.disconnect();}
+    if(resources.current.node){resources.current.node.port.onmessage=null;try{resources.current.node.disconnect();}catch{}resources.current.node=undefined;}
     resources.current.recorded?.getTracks().forEach(track=>track.stop());resources.current.recorded=undefined;
-    resources.current.stream?.getTracks().forEach(track=>track.stop());resources.current.context?.close();
+    resources.current.stream?.getTracks().forEach(track=>{track.onended=null;track.stop();});const closing=resources.current.context;if(closing&&closing.state!=='closed')void closing.close().catch(()=>{});
     resources.current.stream=undefined;resources.current.context=undefined;audioLevelSource.current=0;
     if(mounted.current){setRecording(false);setCapturing(false);setStarting(false);setTranscribing(false);}
   },[]);
@@ -174,7 +174,7 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
       if(latest.current.preferences?.input_label){const devices=await navigator.mediaDevices.enumerateDevices();deviceId=devices.find(d=>d.kind==='audioinput'&&d.label===latest.current.preferences.input_label)?.deviceId;if(!deviceId)throw new Error('Microfone selecionado não disponível. Escolha outro dispositivo.');}
       const stream=await navigator.mediaDevices.getUserMedia({audio:{...(deviceId?{deviceId:{exact:deviceId}}:{}),channelCount:{ideal:1},echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
       if(!enabled.current||!mounted.current){stream.getTracks().forEach(track=>track.stop());return;}
-      resources.current.stream=stream;const context=new AudioContext({sampleRate:16000});resources.current.context=context;await context.resume();if(!enabled.current||!mounted.current)return;
+      resources.current.stream=stream;stream.getAudioTracks().forEach(track=>{track.onended=()=>{if(enabled.current){stop();latest.current.onError('O microfone foi desconectado. Clique para reconectar, sem recarregar a página.');}};});const context=new AudioContext({sampleRate:16000});resources.current.context=context;await context.resume();if(!enabled.current||!mounted.current)return;
       const meter=context.createAnalyser();meter.fftSize=256;context.createMediaStreamSource(stream).connect(meter);
       if(context.audioWorklet){
         await context.audioWorklet.addModule(captureWorkletUrl);if(!enabled.current||!mounted.current)return;
@@ -260,10 +260,10 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
         if(speechRun>=160){if(!heard)setCapturing(!latest.current.interrupt?.wakeOnly||wakeUntil.current>now);heard=true;lastSpeech=now;}
         if((heard&&now-lastSpeech>750)||(now-started>(heard?58000:3000)))recorder.stop();
       },80);
-    }catch(error){stop();latest.current.onError(error instanceof Error?error.message:'Não foi possível abrir o microfone.');}
+    }catch(error){const cancelled=!enabled.current;stop();if(!cancelled){const name=error instanceof DOMException?error.name:'';latest.current.onError(name==='NotAllowedError'||name==='SecurityError'?'Permita o microfone para o Cronos no navegador e tente novamente.':name==='NotReadableError'?'O Windows não liberou o microfone. Feche o aplicativo que está usando o dispositivo e tente novamente.':name==='NotFoundError'?'Nenhum microfone foi encontrado. Conecte um dispositivo e tente novamente.':error instanceof Error?error.message.slice(0,220):'Não foi possível abrir o microfone.');}}
     finally{opening.current=false;if(mounted.current)setStarting(false);}
   },[stop]);
-  const toggle=useCallback(()=>{if(enabled.current){stop();return Promise.resolve();}return start();},[start,stop]);
+  const toggle=useCallback(()=>{if(enabled.current&&resources.current.context?.state==='suspended'){return resources.current.context.resume().catch(()=>{stop();latest.current.onError('Clique novamente para reconectar o microfone.');});}if(enabled.current){stop();return Promise.resolve();}return start();},[start,stop]);
   const keywordActive=Boolean(interrupt?.active||(interrupt?.wakeOnly&&!blocked&&!wakeOpen));
   useEffect(()=>{if(!wakeOpen)return;const timeout=setTimeout(()=>{wakeUntil.current=0;setWakeOpen(false);setCapturing(false);},65000);return()=>clearTimeout(timeout);},[wakeOpen]);
   useEffect(()=>{

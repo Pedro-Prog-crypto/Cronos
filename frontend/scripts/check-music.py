@@ -20,7 +20,7 @@ async def main(mp4):
  async with async_playwright() as p:
   browser=await p.chromium.launch(executable_path='/usr/bin/chromium',args=['--no-sandbox','--autoplay-policy=no-user-gesture-required'],headless=True)
   page=await browser.new_page(viewport={'width':1366,'height':900})
-  await page.add_init_script("window.pywebview={api:{connection:async()=>({token:'test'})}}")
+  await page.add_init_script("window.micOpens=0;navigator.mediaDevices.getUserMedia=async()=>{window.micOpens++;const ctx=new AudioContext(),dest=ctx.createMediaStreamDestination(),osc=ctx.createOscillator(),gain=ctx.createGain();gain.gain.value=0;osc.connect(gain);gain.connect(dest);osc.start();window.testMic=dest.stream;return dest.stream;};window.pywebview={api:{connection:async()=>({token:'test'})}}")
   await page.route('**/status',lambda r:r.fulfill(json={'fish_configured':False,'fish_speech_configured':False}))
   await page.route('**/panels',lambda r:r.fulfill(json={'preferences':{'device_auto_connect':False}}))
   await page.route('**/monitor?*',lambda r:r.fulfill(json={'cursor':0,'alerts':[],'events':[]}))
@@ -59,6 +59,10 @@ async def main(mp4):
   await page.wait_for_function('()=>document.querySelector(".music-player audio")?.currentTime>.1')
   assert await page.locator('.music-player iframe').count()==0
   assert 'Nada+pra+Fazer' in calls[0]
+  assert await page.get_by_label('Buscar música ou clipe',exact=True).is_visible()
+  await page.get_by_role('button',name='Maximizar player').click()
+  assert await page.locator('.music-player').evaluate('e=>e.clientWidth>1000')
+  await page.get_by_role('button',name='Reduzir player').click()
   await page.get_by_role('button',name='Pausar',exact=True).click()
   assert await page.locator('.music-player audio').evaluate('a=>a.paused')
   await page.get_by_label('Posição da música',exact=True).fill('3')
@@ -95,6 +99,16 @@ async def main(mp4):
   await page.wait_for_function('()=>document.querySelector(".music-playback-status").textContent.includes("0:04")')
   await page.get_by_role('button',name='Continuar',exact=True).click()
   await expect(page.locator('.music-playback-status')).to_contain_text('Reproduzindo')
+  await page.get_by_role('button',name='Pausar música e falar com Cronos').click()
+  await expect(page.get_by_role('button',name='Desligar microfone')).to_have_attribute('aria-pressed','true')
+  await expect(page.locator('.music-playback-status')).to_contain_text('Pausado')
+  await page.evaluate('testMic.getAudioTracks()[0].dispatchEvent(new Event("ended"))')
+  await expect(page.get_by_role('button',name='Ligar microfone')).to_have_attribute('aria-pressed','false')
+  await page.get_by_role('button',name='Pausar música e falar com Cronos').click()
+  await expect(page.get_by_role('button',name='Desligar microfone')).to_have_attribute('aria-pressed','true')
+  assert await page.evaluate('micOpens')>=2
+  await page.keyboard.press('Escape')
+  assert await page.locator('.music-player iframe').count()==1, 'ESC must reduce expanded player without destroying playback'
   await page.keyboard.press('Escape')
   assert await page.locator('.music-player iframe').count()==0
   await command('tocar música Slow');await page.locator('.music-player').wait_for();await page.keyboard.press('Escape');release.set()

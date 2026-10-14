@@ -25,6 +25,6 @@ O resultado informa `provider_used` e `fallback_used`. Isso não transforma uma 
 
 ## Limites desta entrega
 
-Esta versão consulta dados, propõe melhorias e administra conectores compatíveis após confirmação. **Não reescreve, instala, testa ou publica alterações do próprio código.** Não há atualizador universal de APIs nem troca automática de modelo principal. Um executor de alterações de código exigiria checkout isolado, testes reais, versão de retorno e entrega verificada; não está implementado e o assistente é instruído a não afirmar isso.
+Esta central consulta dados, propõe melhorias e administra conectores compatíveis após confirmação. O [atualizador independente](ATUALIZADOR.md) agora também prepara pacotes do repositório, propostas limitadas de código explicitamente solicitadas e instalação com backup/recuperação. Não há reescrita irrestrita, testes funcionais universais, publicação automática ou autoaprovação por IA. As limitações e o fluxo de revisão estão no documento do atualizador.
 
 Não há garantia de resposta instantânea, ausência de cota, precisão de pesquisa ou compatibilidade de toda API OpenAI. Novas chaves e acessos continuam dependendo das contas do usuário.

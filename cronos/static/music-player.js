@@ -7,7 +7,7 @@
  let player=null,timer=null,ready=false;
  const send=(type,values={})=>parent.postMessage({type:'cronos:music:'+type,...values},parentOrigin);
  const frame=document.getElementById('player');
- frame.src='https://www.youtube-nocookie.com/embed/'+id+'?'+new URLSearchParams({enablejsapi:'1',autoplay:'1',playsinline:'1',rel:'0',origin:location.origin});
+ frame.src='https://www.youtube-nocookie.com/embed/'+id+'?'+new URLSearchParams({enablejsapi:'1',autoplay:'1',playsinline:'1',controls:'1',fs:'1',rel:'0',origin:location.origin});
  const timeout=setTimeout(()=>{if(!ready)send('error',{code:0});},15000);
  window.onYouTubeIframeAPIReady=()=>{
   player=new YT.Player(frame,{events:{

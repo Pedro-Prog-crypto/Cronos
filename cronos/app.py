@@ -82,7 +82,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         app.state.monitor = Monitor(settings, app.state.memory)
         app.state.windows = WindowsSystem(windows_runner, app.state.monitor, windows_platform, settings.privacy_mode)
         app.state.missions = Missions(app.state.memory)
-        app.state.registry = create_registry(settings, app.state.memory, app.state.monitor, app.state.windows, app.state.missions, app.state.prospects)
+        app.state.registry = create_registry(settings, app.state.memory, app.state.monitor, app.state.windows, app.state.missions, app.state.prospects, updates=app.state.updater)
         app.state.engine = Engine(settings, app.state.memory, app.state.registry, provider)
         app.state.vision_provider = vision_provider
         app.state.features = Features(app)
@@ -96,9 +96,15 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
             try:await asyncio.to_thread(local_recognizer.prepare)
             except ValueError:pass # The transcription endpoint reports configuration errors on use.
         recognition_task=asyncio.create_task(warm_recognition())
+        update_task=asyncio.create_task(app.state.updater.maintain())
         try:
             yield
         finally:
+            update_task.cancel()
+            with suppress(asyncio.CancelledError):await update_task
+            if app.state.updater.task and not app.state.updater.task.done():
+                app.state.updater.task.cancel()
+                with suppress(asyncio.CancelledError):await app.state.updater.task
             panel_task.cancel()
             with suppress(asyncio.CancelledError):await panel_task
             recognition_task.cancel()
@@ -143,6 +149,20 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         if not secrets.compare_digest((authorization or "").encode('utf-8'), ("Bearer " + settings.token).encode('utf-8')):
             raise HTTPException(401, "Autenticação necessária.")
 
+    @app.get('/connection')
+    async def reconnect(request: Request):
+        import os
+        if (os.getenv('CRONOS_SUPERVISED')!='1' or request.headers.get('sec-fetch-site') not in {'same-origin','none'}
+                or not settings.token or not secrets.compare_digest(request.cookies.get('cronos_browser_session','').encode('utf-8'),settings.token.encode('utf-8'))):
+            raise HTTPException(401,'Sessão local indisponível. Abra pelo iniciador do Cronos.')
+        return {'token':settings.token}
+
+    from cronos.updates import install_updates
+    install_updates(app, authenticate)
+
+    from cronos.stremio import install_stremio
+    install_stremio(app,authenticate)
+
     from cronos.music import install_music
     install_music(app, authenticate)
     from cronos.prospects import install_prospects
@@ -175,7 +195,10 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         return {"acknowledged": True}
 
     @app.get("/status", dependencies=[Depends(authenticate)])
-    async def status():
+    async def status(response: Response):
+        import os
+        if os.getenv('CRONOS_SUPERVISED')=='1':
+            response.set_cookie('cronos_browser_session',settings.token,httponly=True,samesite='strict',path='/connection')
         current = app.state.engine.settings
         warning = None
         try:

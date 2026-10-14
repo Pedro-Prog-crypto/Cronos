@@ -13,8 +13,13 @@ from dotenv import load_dotenv
 
 
 def main():
+    managed_token=os.getenv('CRONOS_API_TOKEN','')
+    managed_environment={key:os.environ[key] for key in ('CRONOS_SUPERVISED','CRONOS_SUPERVISOR_PID','CRONOS_MANAGED_PORT','CRONOS_OPEN_BROWSER') if key in os.environ}
     load_dotenv('.env', override=True)
-    os.environ['CRONOS_API_TOKEN'] = secrets.token_urlsafe(32)
+    if '--managed' in __import__('sys').argv and managed_environment.get('CRONOS_SUPERVISED')=='1':os.environ.update(managed_environment)
+    managed='--managed' in __import__('sys').argv and os.getenv('CRONOS_SUPERVISED')=='1'
+    if managed:os.environ['CRONOS_API_TOKEN']=managed_token
+    else:os.environ['CRONOS_API_TOKEN'] = secrets.token_urlsafe(32)
     from cronos.app import create_app
     from cronos.config import Settings
     import uvicorn
@@ -22,7 +27,8 @@ def main():
     settings = Settings.from_env()
     server = uvicorn.Server(uvicorn.Config(create_app(settings), log_level='warning', access_log=False))
     listener = socket.socket()
-    listener.bind(('127.0.0.1', 0))
+    listener.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
+    listener.bind(('127.0.0.1', int(os.getenv('CRONOS_MANAGED_PORT','0')) if managed else 0))
     thread = threading.Thread(target=server.run, kwargs={'sockets': [listener]}, daemon=True)
     thread.start()
     try:
@@ -38,7 +44,9 @@ def main():
             if root:
                 candidates.append(str(Path(root) / 'BraveSoftware/Brave-Browser/Application/brave.exe'))
         brave = next((path for path in candidates if path and Path(path).is_file()), None)
-        if brave:
+        if managed and os.getenv('CRONOS_OPEN_BROWSER')=='0':
+            pass
+        elif brave:
             subprocess.Popen([brave, '--new-window', url])
         else:
             webbrowser.open(url)

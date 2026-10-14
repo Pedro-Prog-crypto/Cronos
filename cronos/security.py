@@ -94,7 +94,7 @@ class SecurityMiddleware:
             denied()
             return await JSONResponse({'detail': 'Origin não autorizada.'}, 403)(scope, receive, send)
         path = scope.get('path', '')
-        public = path in {'/', '/tests', '/world/view', '/music/player', '/health', '/docs', '/docs/oauth2-redirect', '/redoc', '/openapi.json'} or path.startswith(('/static/', '/ui/'))
+        public = path in {'/', '/tests', '/world/view', '/music/player', '/connection', '/health', '/docs', '/docs/oauth2-redirect', '/redoc', '/openapi.json'} or path.startswith(('/static/', '/ui/'))
         preflight = scope.get('method') == 'OPTIONS' and bool(origin)
         if not public and not preflight:
             now = time.monotonic()
@@ -110,6 +110,13 @@ class SecurityMiddleware:
                 self.failures.append(now)
                 denied()
                 return await JSONResponse({'detail': 'Autenticação necessária.'}, 401)(scope, receive, send)
+        # During installation/trial do not admit new mutations or cloud requests.
+        updater=getattr(application.state,'updater',None) if application else None
+        if updater and path not in {'/updates','/updates/health','/status','/connection','/health'} and not public:
+            from cronos.update_transaction import read_json
+            state=read_json(updater.folder/'status.json',{})
+            if state.get('phase') in {'queued','installing','testing'}:
+                return await JSONResponse({'detail':'Atualização em andamento. Aguarde a verificação e recarregue a página.'},503)(scope,receive,send)
         limit = 10 * 1024 * 1024 if path == '/voice/transcribe' else 2 * 1024 * 1024 if path == '/chat/audio/stream' else 3 * 1024 * 1024 if path == '/vision/analyze' else 2 * 1024 * 1024 if path == '/vision/preview' else 256 * 1024
         try:
             length = int(headers.get('content-length', '0'))

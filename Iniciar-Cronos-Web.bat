@@ -7,7 +7,9 @@ if not exist ".venv\Scripts\python.exe" (
     pause
     exit /b 1
 )
-echo Cronos no navegador. Feche o Cronos desktop antes de testar.
-echo Mantenha esta janela aberta. Para encerrar, pressione Ctrl+C.
-".venv\Scripts\python.exe" -m cronos.browser
+if exist ".cronos-local\updater\runner.py" (
+    start "" ".venv\Scripts\pythonw.exe" ".cronos-local\updater\runner.py" --run "%CD%"
+) else (
+    start "" ".venv\Scripts\pythonw.exe" -m cronos.supervisor
+)
 popd

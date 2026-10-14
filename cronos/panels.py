@@ -24,6 +24,7 @@ from cronos.providers import ProviderError
 
 
 class Preferences(BaseModel):
+    proactive_suggestions: bool = True
     model_config = ConfigDict(extra='forbid')
     context_messages: int = Field(default=40, ge=2, le=100)
     language: Literal['pt-BR', 'en-US', 'es-ES'] = 'pt-BR'
@@ -105,8 +106,13 @@ class PanelState:
         state.registry.current_settings = lambda: state.engine.settings
 
     def policy(self, name):
+        updater=getattr(self.app.state,'updater',None)
+        if updater:
+            from cronos.update_transaction import read_json
+            if read_json(updater.folder/'status.json',{}).get('phase') in {'queued','installing','testing'}:
+                return False,False
         p = self.preferences
-        group = 'web_enabled' if name in {'web_search', 'web_news', 'browser_open', 'browser_search', 'prospect_restaurants', 'music_search'} else 'apps_enabled' if name == 'desktop_open_app' else 'commands_enabled' if name == 'desktop_run_executable' else 'files_enabled' if name.startswith('files_') or name == 'desktop_open_folder' else None
+        group = 'web_enabled' if name in {'web_search', 'web_news', 'browser_open', 'browser_search', 'prospect_restaurants', 'music_search','stremio_search'} else 'apps_enabled' if name in {'desktop_open_app','stremio_open'} else 'commands_enabled' if name == 'desktop_run_executable' else 'files_enabled' if name.startswith('files_') or name == 'desktop_open_folder' else None
         return (not group or getattr(p, group)), p.confirm_tools or (p.confirm_critical and name == 'desktop_run_executable')
 
     def save(self, changes):

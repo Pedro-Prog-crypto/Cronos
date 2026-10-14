@@ -56,6 +56,12 @@ def public_results(html):
                     title = video.get('title', {})
                     text = title.get('simpleText') or ''.join(x.get('text', '') for x in title.get('runs', []))
                     results.append({'id': ident, 'title': text[:250] or 'Vídeo do YouTube'})
+            lockup=item.get('lockupViewModel')
+            if isinstance(lockup,dict) and lockup.get('contentType')=='LOCKUP_CONTENT_TYPE_VIDEO':
+                ident=lockup.get('contentId','')
+                title=lockup.get('metadata',{}).get('lockupMetadataViewModel',{}).get('title',{}).get('content','')
+                if isinstance(ident,str) and VIDEO.fullmatch(ident) and ident not in seen and isinstance(title,str):
+                    seen.add(ident);results.append({'id':ident,'title':title[:250] or 'Vídeo do YouTube'})
             for child in item.values():
                 walk(child)
     walk(data)
@@ -87,6 +93,41 @@ def metadata_search(query):
     finally:METADATA_LOCK.release()
 
 
+CATALOG_LOCK=threading.BoundedSemaphore(1)
+
+
+def catalog_fallback(query):
+    if not CATALOG_LOCK.acquire(blocking=False):return []
+    try:
+        from ddgs import DDGS
+        results=DDGS(timeout=6).videos(query+' site:youtube.com/watch',region='br-pt',safesearch='moderate',max_results=8)
+        tracks=[];seen=set()
+        for item in results:
+            ident=video_id(item.get('content') or item.get('url') or '')
+            if ident and ident not in seen:
+                seen.add(ident);tracks.append({'id':ident,'title':str(item.get('title') or 'Vídeo do YouTube')[:250]})
+        return tracks
+    except Exception:return []
+    finally:CATALOG_LOCK.release()
+
+
+async def fallback_catalogs(term):
+    tasks=[asyncio.create_task(asyncio.to_thread(fn,term)) for fn in (metadata_search,catalog_fallback)]
+    try:
+        pending=set(tasks);deadline=time.monotonic()+10
+        while pending and time.monotonic()<deadline:
+            done,pending=await asyncio.wait(pending,timeout=max(.01,deadline-time.monotonic()),return_when=asyncio.FIRST_COMPLETED)
+            for task in done:
+                try:
+                    result=task.result()
+                    if result:return result
+                except Exception:pass
+        return []
+    finally:
+        for task in tasks:
+            if not task.done():task.cancel()
+
+
 async def search_music(query,similar=False,video=False):
     cache_key=(query.casefold().strip(),similar,video)
     cached=CACHE.get(cache_key)
@@ -113,9 +154,9 @@ async def search_music(query,similar=False,video=False):
                         tracks=public_results(b''.join(chunks).decode('utf-8',errors='replace'))
     except (httpx.HTTPError,ValueError,RecursionError):pass
     if not tracks:
-        try:tracks=await asyncio.wait_for(asyncio.to_thread(metadata_search,term),18)
+        try:tracks=await fallback_catalogs(term)
         except Exception:pass
-    result={'tracks':tracks,'video':video,'search_url':link,'message':None if tracks else 'Não consegui consultar o catálogo de vídeos. Nenhuma música começou. Tente outra busca ou cole o link do vídeo para reproduzir aqui; não vou abrir uma janela externa.'}
+    result={'query':query,'tracks':tracks,'video':video,'search_url':link,'message':None if tracks else 'Não consegui consultar o catálogo de vídeos. Nenhuma música começou. Tente outra busca ou cole o link do vídeo para reproduzir aqui; não vou abrir uma janela externa.'}
     if tracks:
         if len(CACHE)>=16:CACHE.pop(next(iter(CACHE)))
         CACHE[cache_key]=(time.monotonic(),result)
