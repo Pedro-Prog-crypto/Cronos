@@ -153,7 +153,15 @@ class Prospector:
                             region='';area=f'(around:15000,{float(place["lat"])},{float(place["lon"])})'
                         cuisine_filter=f'["cuisine"~"{cuisine}"]' if cuisine else ''
                         query=f'[out:json][timeout:20];{region}nwr["amenity"~"^({amenity})$"]["name"]{cuisine_filter}{area};out tags center 100;'
-                        raw=await fetch_json(client,'POST','https://overpass-api.de/api/interpreter',data={'data':query})
+                        raw=None
+                        for endpoint in ('https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://overpass.private.coffee/api/interpreter'):
+                            try:
+                                async with asyncio.timeout(12):
+                                    data=await fetch_json(client,'POST',endpoint,data={'data':query})
+                                if data.get('remark'):continue
+                                raw=data;break
+                            except (httpx.HTTPError,HTTPException,TimeoutError):continue
+                        if raw is None:raise HTTPException(502,'As fontes de restaurantes não responderam. Tente mais tarde. Os servidores alternativos também foram consultados; nenhum resultado foi inventado.')
                         if raw.get('remark'):raise HTTPException(502,'A pesquisa do mapa foi interrompida. Tente uma categoria mais específica.')
                         leads=[lead for item in raw.get('elements',[]) if item.get('type') in {'node','way','relation'} and (lead:=osm_lead(item,city))]
                         attribution='© colaboradores do OpenStreetMap (ODbL). A cobertura varia por cidade; não é uma lista de todos os negócios.'

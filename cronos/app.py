@@ -219,7 +219,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
             queue=asyncio.Queue(maxsize=4);spoken=None;intro_text=None;recognized_question=None
             def may_speak():
                 import re
-                return audio is None or not panels.preferences.called_only or bool(recognized_question and re.search(r'\b(?:cronos|kronos)\b',recognized_question,re.I))
+                return audio is None or not panels.preferences.called_only or bool(recognized_question and re.search(r'\b(?:cronos|kronos|chronos)\b',recognized_question,re.I))
             async def ready(reply):
                 nonlocal spoken
                 if spoken is None and may_speak():

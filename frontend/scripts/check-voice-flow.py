@@ -165,6 +165,29 @@ async def main():
   image=await transferred.locator('canvas').first.evaluate('c=>c.toDataURL()');await transferred.wait_for_timeout(180)
   assert image!=await transferred.locator('canvas').first.evaluate('c=>c.toDataURL()')
   print('PASS: a failure after canvas transfer recreates a usable fallback canvas.',flush=True)
+  # Spoken study requests must show real answer sections, never the raw question bubble.
+  await page.bring_to_front()
+  await page.keyboard.press('Escape')
+  await page.get_by_role('button',name='Ligar microfone').click()
+  await page.wait_for_function('()=>document.querySelector(".reference-mic").title==="Microfone ligado"',timeout=20000)
+  await page.wait_for_timeout(900)
+  reply='## Contexto\nTomás de Aquino viveu no século XIII. \n\n## Exemplo\nPodemos comparar caminhos diferentes para chegar a uma conclusão. \n\n## Sua vez\nComo você explicaria a relação entre razão e fé?'
+  transcript[0]='Chronos, me explique Santo Tomás de Aquino em cards'
+  await say(.008)
+  await expect(page.get_by_role('heading',name='Contexto',exact=True)).to_be_visible(timeout=20000)
+  await expect(page.locator('.answer-card-deck .holo-card')).to_have_count(3)
+  assert await page.locator('.spoken-question').count()==0
+  await page.wait_for_function('()=>document.querySelector(".reference-mic").title==="Microfone ligado"',timeout=20000)
+  reply='## Aplicação\nSua resposta distingue os caminhos sem tratar fé como demonstração científica. \n\n## Sua vez\nVocê consegue dar um exemplo diferente?'
+  transcript[0]='A razão usa argumentos, a fé parte da revelação'
+  await say(.008)
+  await expect(page.get_by_role('heading',name='Aplicação',exact=True)).to_be_visible(timeout=20000)
+  assert await page.locator('.spoken-question').count()==0
+  await page.wait_for_function('()=>document.querySelector(".reference-mic").title==="Microfone ligado"',timeout=20000)
+  transcript[0]='Kronos, ocultar os cards'
+  await say(.008)
+  await expect(page.locator('.answer-card-deck')).to_have_count(0,timeout=20000)
+  print('PASS: spoken teaching request shows sectional cards, retains cards for a follow-up and hides them on request; no transcript bubble.',flush=True)
   await b.close()
 try:asyncio.run(main())
 finally:server.shutdown()

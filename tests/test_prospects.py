@@ -124,3 +124,19 @@ def test_google_never_auto_enabled_by_model_tool(settings,monkeypatch):
         client.app.state.panels.preferences.web_enabled=True
         result=client.post('/prospects/search',headers=AUTH,json={'city':'Manaus','source':'google'})
         assert result.status_code==503
+
+
+def test_restaurant_source_failover(settings,monkeypatch):
+    original=REAL_ASYNC_CLIENT;seen=[]
+    def handle(r):
+        seen.append(r.url.host)
+        if r.url.host=='nominatim.openstreetmap.org':return httpx.Response(200,json=[PLACE])
+        if r.url.host=='overpass-api.de':return httpx.Response(503,text='busy')
+        if r.url.host=='overpass.kumi.systems':return httpx.Response(200,json={'elements':ITEMS})
+        raise AssertionError('Unexpected source')
+    monkeypatch.setattr('cronos.prospects.httpx.AsyncClient',lambda **kw:original(transport=httpx.MockTransport(handle),trust_env=False,**kw))
+    with TestClient(create_app(settings)) as client:
+        result=client.post('/prospects/search',headers=AUTH,json={'city':'Manaus, AM'})
+        assert result.status_code==200,result.text
+        assert len(result.json()['leads'])==3
+        assert seen[-2:]==['overpass-api.de','overpass.kumi.systems']

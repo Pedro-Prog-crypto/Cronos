@@ -1,0 +1,9 @@
+import assert from 'node:assert/strict';
+import {cardRequest,cardDisplayCommand} from '../src/cardRequests.ts';
+for(const phrase of ['Cronos, explique Santo Tomás de Aquino em cards','Coloque a explicação em cartões','Me explique e mostre na tela','Explique usando cards'])assert.equal(cardRequest(phrase),true,phrase);
+assert.equal(cardRequest('Não mostre os cards'),false);
+assert.equal(cardDisplayCommand('Chronos, mostrar os cards'),true);
+assert.equal(cardDisplayCommand('ocultar os cards'),false);
+assert.equal(cardDisplayCommand('me explique Tomás em cards'),null);
+assert.equal(cardRequest('Explique a relação entre fé e razão'),null);
+console.log('PASS: mixed teaching/card requests, display controls, neutral follow-ups and negative display requests.');

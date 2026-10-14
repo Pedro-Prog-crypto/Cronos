@@ -97,7 +97,7 @@ class PanelState:
 
     def policy(self, name):
         p = self.preferences
-        group = 'web_enabled' if name in {'web_search', 'web_news', 'browser_open', 'browser_search', 'prospect_restaurants'} else 'apps_enabled' if name == 'desktop_open_app' else 'commands_enabled' if name == 'desktop_run_executable' else 'files_enabled' if name.startswith('files_') or name == 'desktop_open_folder' else None
+        group = 'web_enabled' if name in {'web_search', 'web_news', 'browser_open', 'browser_search', 'prospect_restaurants', 'music_search'} else 'apps_enabled' if name == 'desktop_open_app' else 'commands_enabled' if name == 'desktop_run_executable' else 'files_enabled' if name.startswith('files_') or name == 'desktop_open_folder' else None
         return (not group or getattr(p, group)), p.confirm_tools or (p.confirm_critical and name == 'desktop_run_executable')
 
     def save(self, changes):

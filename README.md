@@ -241,9 +241,9 @@ seus controles e eventuais anúncios/restrições. O navegador pode exigir um cl
 inicial para permitir áudio. Vídeos com incorporação bloqueada devem ser abertos
 no YouTube ou substituídos por outro resultado.
 
-A pesquisa tenta ler os resultados públicos do YouTube; mudanças no site,
+A pesquisa consulta os resultados públicos do YouTube e usa yt-dlp como alternativa de metadados; mudanças no site,
 consentimento ou bloqueios de rede podem impedir essa busca. Nesse caso, o painel
-oferece a busca externa e um campo para colar o link escolhido e tocar aqui.
+oferece busca dentro do painel e aceita colar um link para tocar aqui; não abre janela externa automaticamente.
 Opcionalmente, `YOUTUBE_API_KEY` no `.env` usa a API oficial de pesquisa com sua
 cota; não é necessário mudar as chaves de Gemini ou Fish. “Músicas parecidas”
 busca mixes do artista, sem prometer uma recomendação personalizada.
@@ -290,3 +290,29 @@ As consultas são feitas sob demanda, uma por vez, com até 40 registros exibido
 (até 20 no Google) e cache por 30 minutos. O cache de no máximo oito pesquisas fica
 em RAM, não é gravado no Obsidian. É possível exportar os resultados filtrados em
 JSON. Permissão de busca desativada ou modo local bloqueia as consultas online.
+
+### Explicações de estudo e cards por voz
+
+“Kronos, explique Santo Tomás de Aquino em cards” mostra a resposta em seções na
+tela. Os cards continuam nas perguntas seguintes da conversa até “ocultar os
+cards” ou ESC. “Mostrar os cards” exibe a última resposta; a transcrição da fala
+não aparece como card de explicação. A orientação de estudo acrescenta contexto,
+exemplos do cotidiano, perguntas abertas e aplicação a situações novas, sem
+inventar suas respostas. Uma pergunta por vez, quando a conversa for interativa.
+O modelo ainda pode errar: instrução de personalidade não garante a qualidade de
+cada aula, fidelidade histórica ou resultado em uma prova.
+
+Música e clipes têm player interno com fila, pausa, continuação, anterior/próxima,
+volume e posição. Aceita “Chronos, coloque minha música preferida, que é Nada pra
+Fazer” e “quero ver o clipe Nada pra Fazer”; informe o artista se houver homônimos.
+A IA também tem a ferramenta `music_search`, cujos resultados são entregues ao
+player. A reprodução continua no player oficial do YouTube: vídeos indisponíveis,
+restrições de incorporação e permissões de autoplay do navegador ainda se aplicam.
+Nenhuma janela externa é aberta como substituto automático. A alternativa
+`yt-dlp` consulta só metadados públicos, sem baixar áudio/vídeo ou usar cookies.
+Para instalar a nova dependência, execute novamente `Instalar-Cronos.bat`.
+
+Quando a fonte Overpass principal de restaurantes falha, a pesquisa tenta duas
+instâncias alternativas, com tempo e tamanho de resposta limitados. Se todas
+falharem, informa a indisponibilidade, sem resultados inventados. Isso não torna
+as fontes externas permanentemente disponíveis.

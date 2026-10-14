@@ -12,3 +12,6 @@ assert.equal(musicCommand('Quem foi Sócrates?'),null);
 assert.equal(musicCommand('colocar o olho de Deus'),null);
 console.log('PASS: music, artist mix, frequency, playback commands, no negative/information triggers.');
 assert.equal(musicCommand('colocar uma nota no Obsidian'),null);
+assert.deepEqual(musicCommand('Chronos, coloque a minha música preferida, que é Nada pra Fazer'),{action:'search',query:'Nada pra Fazer',similar:false});
+assert.deepEqual(musicCommand('Kronos, quero ver o clipe Nada pra Fazer'),{action:'search',query:'Nada pra Fazer',similar:false,video:true});
+assert.deepEqual(musicCommand('música anterior'),{action:'previous'});

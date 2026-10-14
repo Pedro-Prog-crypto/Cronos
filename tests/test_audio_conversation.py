@@ -136,3 +136,22 @@ def test_partial_input_transcript_is_not_used_as_a_complete_command(settings):
         finally:transcript_sink.reset(token)
     result=asyncio.run(run())
     assert received==['Quem foi Sócrates?'] and result['recognized_text']==received[0]
+
+
+def test_chronos_spelling_is_allowed_by_native_wake_gate(settings):
+    from cronos.reply_stream import reply_sink
+    class Provider:
+        async def reply(self,system,messages):
+            recognized='Chronos, explique Tomás de Aquino em cards'
+            sink=transcript_sink.get()
+            if sink:await sink(recognized)
+            sink=reply_sink.get()
+            if sink:await sink('## Contexto\nTomás de Aquino viveu no século XIII.')
+            return {'recognized_text':recognized,'reply':'## Contexto\nTomás de Aquino viveu no século XIII.','topics':[],'tool_calls':[]}
+    with TestClient(create_app(replace(settings,gemini_transport='live'),Provider())) as client:
+        assert client.patch('/panels/preferences',headers=AUTH,json={'called_only':True}).status_code==200
+        response=client.post('/chat/audio/stream',headers={**AUTH,'Content-Type':'audio/wav'},content=wav())
+        events=[json.loads(line) for line in response.text.splitlines()]
+        assert any(e['type']=='reply' for e in events)
+        assert events[-1]['type']=='result'
+        assert not events[-1]['result'].get('ignored')

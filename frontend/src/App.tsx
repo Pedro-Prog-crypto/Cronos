@@ -9,6 +9,7 @@ import {MemorySpiral,MemoryGraph} from './components/MemorySpiral';
 import {HolographicGlobe} from './components/HolographicGlobe';
 import {AnswerCards,HolographicCard} from './components/HolographicCards';
 import {localCommand} from './commands';
+import {cardRequest,cardDisplayCommand} from './cardRequests';
 import {prospectCommand} from './prospectCommands';
 const ProspectPanel=lazy(()=>import('./components/ProspectPanel'));
 import {MusicPlayer,MusicHandle} from './components/MusicPlayer';
@@ -32,6 +33,8 @@ export default function App(){
   const [autoVoice,setAutoVoice]=useState(true),[announceAlerts,setAnnounceAlerts]=useState(false),[monitor,setMonitor]=useState<any>(null);
   const [eyeOpen,setEyeOpen]=useState(false),[placeQuery,setPlaceQuery]=useState(''),[graph,setGraph]=useState<MemoryGraph>({nodes:[],edges:[],total:0}),[graphRevision,setGraphRevision]=useState(0),[note,setNote]=useState<{path:string;content:string}|null>(null);
   const [showSpokenCards,setShowSpokenCards]=useState(false);
+  const spokenCards=useRef(false);
+  const applyCardRequest=(text:string,typed=false)=>{const requested=cardRequest(text);if(requested!==null)spokenCards.current=requested;setShowSpokenCards(requested===false?false:typed||spokenCards.current);};
   const [displayTurn,setDisplayTurn]=useState<{question:string;source:'text'|'transcription';reply:string}|null>(null);
   const sendRef=useRef<(text:string,audio?:Blob)=>Promise<void>>(async()=>{});
   const commandRef=useRef<(text:string)=>boolean>(()=>false),eyeAnnouncement=useRef(false);
@@ -45,7 +48,7 @@ export default function App(){
   const saveLatency=useCallback((value:any)=>{const {started,armed,...metrics}=value;void jsonApi('/panels/latency',metrics).catch(()=>{});},[]);
   const tell=useCallback((message:string,isError=false)=>{setNotice(message);setError(isError);},[]);
   const voice=useCronosVoice({preferences:panelPrefs,streaming:Boolean(config?.fish_pcm_streaming),onSpeechStart:metrics=>{const current=latency.current;if(current?.armed&&metrics?.turn_id===current.turn_id){current.armed=false;saveLatency({...current,...metrics,first_audio_ms:Math.round(performance.now()-current.started)});}},onError:message=>{if(latency.current)latency.current.armed=false;tell(message,true);}});
-  const microphone=useMicrophone(useCallback((text,metrics)=>{recognition.current=metrics;if(!text.trim()){tell('Não consegui entender a fala. Tente novamente.',true);return;}if(commandRef.current(text))return;if(prefsRef.current?.called_only&&!/\b(?:cronos|kronos)\b/i.test(text))return;setChatOpen(false);void sendRef.current(text);},[tell]),useCallback(message=>tell(message,true),[tell]),Boolean(config?.direct_audio_chat)||config?.transcription_provider==='vosk',busy||voice.isSpeaking||voice.isGenerating||(pageHidden&&panelPrefs?.background_processing===false),panelPrefs,config?.direct_audio_chat?async(audio,metrics)=>{recognition.current=metrics;await sendRef.current('Pergunta por voz',audio);}:undefined);
+  const microphone=useMicrophone(useCallback((text,metrics)=>{recognition.current=metrics;if(!text.trim()){tell('Não consegui entender a fala. Tente novamente.',true);return;}if(commandRef.current(text))return;if(prefsRef.current?.called_only&&!/\b(?:cronos|kronos|chronos)\b/i.test(text))return;setChatOpen(false);void sendRef.current(text);},[tell]),useCallback(message=>tell(message,true),[tell]),Boolean(config?.direct_audio_chat)||config?.transcription_provider==='vosk',busy||voice.isSpeaking||voice.isGenerating||(pageHidden&&panelPrefs?.background_processing===false),panelPrefs,config?.direct_audio_chat?async(audio,metrics)=>{recognition.current=metrics;await sendRef.current('Pergunta por voz',audio);}:undefined);
   const state=voice.isSpeaking?'SPEAKING':microphone.capturing?'LISTENING':moduleActivity;
   const audioLevelSource=voice.isSpeaking?voice.audioLevelSource:microphone.audioLevelSource;
   const live=useRef({busy:false,recording:false,transcribing:false,speaking:false,generating:false,module:null as string|null,announce:false,fish:false});
@@ -111,7 +114,7 @@ export default function App(){
   const runCommand=(text:string)=>{
     const leadCommand=prospectCommand(text);if(leadCommand){if(config?.privacy_mode==='local'){tell('Prospecção online desativada no modo local.',true);return true;}voice.stop();setProspect(leadCommand);setModule(null);setChatOpen(false);return true;}
     if(music.current?.handle(text)){setChatOpen(false);voice.stop();return true;}
-    if(/^(?:kronos[, ]+|cronos[, ]+)?(?:mostrar|mostre|exibir) (?:o )?(?:texto|resposta)[.!?]*$/i.test(text.trim())){setShowSpokenCards(true);setChatOpen(false);return true;}
+    const cards=cardDisplayCommand(text);if(cards!==null){spokenCards.current=cards;setShowSpokenCards(cards);setChatOpen(false);if(cards){setModule(null);setEyeOpen(false);setNote(null);}return true;}
     const command=localCommand(text,eyeOpen);if(!command)return false;latency.current=null;
     if(command.type==='presence'){
       if(connected&&config?.fish_speech_configured){voice.prepare();void voice.speak('Estou na escuta.');}
@@ -127,7 +130,7 @@ export default function App(){
   };commandRef.current=runCommand;
   const selectNote=useCallback(async(path:string)=>{if(eyeOpen){setEyeOpen(false);return;}try{setNote(await jsonApi(`/memory/note?path=${encodeURIComponent(path)}`));}catch(error){tell('Não foi possível abrir essa nota.',true);}},[eyeOpen,tell]);
   const worldReady=()=>{if(eyeAnnouncement.current){eyeAnnouncement.current=false;if(config?.fish_speech_configured)void voice.speak('Ampliando sua perspectiva. Olho de Deus aberto.');}};
-  interrupt.current=()=>{setProspect(null);music.current?.stop();latency.current=null;turnVersion.current++;chatAbort.current?.abort();voice.stop();microphone.cancelCapture();eyeAnnouncement.current=false;pendingAlerts.current.clear();setBusy(false);inFlight.current=false;setModule(null);setEyeOpen(false);setNote(null);setChatOpen(false);setShowSpokenCards(false);setNotice('');};
+  interrupt.current=()=>{spokenCards.current=false;setProspect(null);music.current?.stop();latency.current=null;turnVersion.current++;chatAbort.current?.abort();voice.stop();microphone.cancelCapture();eyeAnnouncement.current=false;pendingAlerts.current.clear();setBusy(false);inFlight.current=false;setModule(null);setEyeOpen(false);setNote(null);setChatOpen(false);setShowSpokenCards(false);setNotice('');};
   useEffect(()=>{const key=(event:KeyboardEvent)=>{if(event.key==='Escape'){event.preventDefault();interrupt.current();}};window.addEventListener('keydown',key);return()=>{window.removeEventListener('keydown',key);chatAbort.current?.abort();};},[]);
   useEffect(()=>{if(!notice)return;const timer=setTimeout(()=>setNotice(''),8000);return()=>clearTimeout(timer);},[notice]);
 
@@ -140,7 +143,7 @@ export default function App(){
   const sendText=async(value:string,source:'text'|'transcription'='text',audio?:Blob)=>{
     const text=value.trim();if(!text||inFlight.current)return;if(!audio&&runCommand(text)){setDraft('');return;}
     if(!connected){tell('A conexão automática ainda não está disponível. Feche e abra o Kronos novamente.',true);return;}
-    setShowSpokenCards(source==='text');if(!audio)setDisplayTurn({question:text,source,reply:''});setChatOpen(false);
+    applyCardRequest(text,source==='text');if(!audio)setDisplayTurn({question:text,source,reply:''});setChatOpen(false);
     inFlight.current=true;setBusy(true);voice.stop();if(autoVoice)voice.prepare();setDraft('');tell('Cronos está processando sua mensagem…');
     latency.current={turn_id:crypto.randomUUID(),source:source==='transcription'?'voice':'text',started:performance.now(),armed:false,chat_ms:0,...(source==='transcription'?recognition.current:{})};
     const turnLatency=latency.current;
@@ -168,12 +171,13 @@ export default function App(){
       };
       const result=await streamChat({message:text,session_id:session.current},controller.signal,ready,intro,recognized=>{
         if(version!==turnVersion.current||controller.signal.aborted)return;
-        if(music.current?.handle(recognized)){controller.abort();voice.stop();setChatOpen(false);return;}if(prefsRef.current?.called_only&&!/\b(?:cronos|kronos)\b/i.test(recognized)){controller.abort();voice.stop();setDisplayTurn(null);setNotice('');return;}
+        if(music.current?.handle(recognized)){controller.abort();voice.stop();setChatOpen(false);return;}if(prefsRef.current?.called_only&&!/\b(?:cronos|kronos|chronos)\b/i.test(recognized)){controller.abort();voice.stop();setDisplayTurn(null);setNotice('');return;}
         voiceAllowed=true;if(audio)turnLatency.recognition_ms=Math.round(performance.now()-turnLatency.started);
         if(runCommand(recognized)){controller.abort();return;}
-        question=recognized;setDisplayTurn({question,source,reply:''});
-      },audio);if(version!==turnVersion.current||controller.signal.aborted)return;if(result.ignored){setDisplayTurn(null);setNotice('');return;}if(!voiced)turnLatency.chat_ms=Math.round(performance.now()-turnLatency.started);saveLatency(turnLatency);session.current=result.session_id;setDisplayTurn({question:result.recognized_text||text,source,reply:result.reply});setGraphRevision(value=>value+1);
+        applyCardRequest(recognized);question=recognized;setDisplayTurn({question,source,reply:''});
+      },audio);if(version!==turnVersion.current||controller.signal.aborted)return;if(result.ignored){setDisplayTurn(null);setNotice('');return;}if(!voiced)turnLatency.chat_ms=Math.round(performance.now()-turnLatency.started);saveLatency(turnLatency);session.current=result.session_id;if(result.recognized_text)applyCardRequest(result.recognized_text);setDisplayTurn({question:result.recognized_text||text,source,reply:result.reply});setGraphRevision(value=>value+1);
       setTools(old=>[...old,...(result.tool_results||[])]);
+      const mediaResult=result.tool_results?.find((r:any)=>r.name==='music_search'&&r.status==='completed');if(mediaResult?.result){music.current?.load(mediaResult.result);}
       const leadResult=result.tool_results?.find((r:any)=>r.name==='prospect_restaurants'&&r.status==='completed');if(leadResult?.result){setProspect({city:leadResult.result.city,category:leadResult.result.category,report:leadResult.result});setModule(null);setChatOpen(false);}
       if(result.warnings?.length)tell(result.warnings.join('\n'),true);else setNotice('');
       if(autoVoice&&config?.fish_speech_configured){ready(result.reply);}
@@ -215,7 +219,7 @@ export default function App(){
     {notice&&error&&<div className="scene-notice" role="status">{notice}</div>}
     {note&&<section className="note-window" aria-label="Nota Obsidian"><button onClick={()=>setNote(null)} aria-label="Fechar nota"><X size={18}/></button><pre>{note.content}</pre></section>}
     {displayTurn?.reply&&showSpokenCards&&!chatOpen&&!module&&!eyeOpen&&<AnswerCards reply={displayTurn.reply}/>}
-    {displayTurn&&showSpokenCards&&!chatOpen&&!module&&!eyeOpen&&<div className="spoken-question"><HolographicCard title={displayTurn.source==='transcription'?'TRANSCRIÇÃO':'PERGUNTA'} variant="ribbon"><p className="holo-text">{displayTurn.question}</p></HolographicCard></div>}
+    {displayTurn&&displayTurn.source==='text'&&showSpokenCards&&!chatOpen&&!module&&!eyeOpen&&<div className="spoken-question"><HolographicCard title="PERGUNTA" variant="ribbon"><p className="holo-text">{displayTurn.question}</p></HolographicCard></div>}
     {chatOpen&&<section className="card-composer" aria-label="Escrever para Kronos"><HolographicCard title="PERGUNTA" variant="layered">
       <button className="holo-close" onClick={()=>setChatOpen(false)} aria-label="Fechar conversa"><X size={17}/></button>
       <form onSubmit={send}><label htmlFor="chat-input">O que você quer perguntar?</label><textarea id="chat-input" value={draft} onChange={event=>{setDraft(event.target.value);event.target.style.height='auto';event.target.style.height=Math.min(260,event.target.scrollHeight)+'px';}} maxLength={16000} rows={2}/>

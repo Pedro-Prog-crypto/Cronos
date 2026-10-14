@@ -36,6 +36,9 @@ def test_music_auth_local_mode_and_no_network_for_url(settings):
 
 def test_music_search_and_graceful_provider_failure(settings, monkeypatch):
     monkeypatch.delenv('YOUTUBE_API_KEY', raising=False)
+    monkeypatch.setattr('cronos.music.metadata_search',lambda query:[])
+    from cronos.music import CACHE
+    CACHE.clear()
     original = httpx.AsyncClient
     requests=[]
     def handle(request):
@@ -61,3 +64,21 @@ def test_playback_commands_are_not_knowledge_notes():
     assert knowledge_topics('Kronos, colocar música Evidências',topics)==[]
     assert knowledge_topics('Kronos, pausar música',topics)==[]
     assert knowledge_topics('O que é uma frequência de 432 Hz?',topics)==topics
+
+
+def test_metadata_fallback_when_public_page_changes(monkeypatch):
+    import asyncio
+    from cronos.music import search_music, CACHE
+    CACHE.clear()
+    monkeypatch.delenv('YOUTUBE_API_KEY',raising=False)
+    original=httpx.AsyncClient
+    monkeypatch.setattr('cronos.music.httpx.AsyncClient',lambda **kw:original(transport=httpx.MockTransport(lambda r:httpx.Response(200,text='no initial data')),trust_env=False,**kw))
+    calls=[]
+    def fallback(query):
+        calls.append(query)
+        return [{'id':'abcdefghijk','title':'Nada pra Fazer · clipe'}]
+    monkeypatch.setattr('cronos.music.metadata_search',fallback)
+    result=asyncio.run(search_music('Nada pra Fazer',video=True))
+    assert result['tracks'][0]['id']=='abcdefghijk'
+    assert calls==['Nada pra Fazer clipe oficial']
+    assert result['message'] is None

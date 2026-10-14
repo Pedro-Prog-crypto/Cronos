@@ -178,6 +178,16 @@ def create_registry(settings, memory, monitor=None, windows=None, missions=None,
     def add(name, description, schema, handler, confirm=False):
         registry.register(Tool(name, description, schema, handler, confirm))
 
+    if settings.privacy_mode == 'online':
+        class MusicQuery(Arguments):
+            query: str = Field(min_length=1, max_length=240)
+            similar: bool = False
+            video: bool = False
+        async def music_search(args):
+            from cronos.music import search_music
+            return await search_music(args.query,args.similar,args.video)
+        add('music_search', 'Pesquisa música ou clipe para o player interno do Kronos. Retorna vídeos públicos; a interface recebe os resultados e abre o player. Não abre navegador externo nem comprova que o áudio já começou.', MusicQuery, music_search)
+
     if prospects is not None and settings.privacy_mode == 'online':
         from cronos.prospects import ProspectSearch
         class ProspectToolSearch(ProspectSearch, Arguments):
