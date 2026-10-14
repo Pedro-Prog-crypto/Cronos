@@ -7,3 +7,4 @@ assert.equal(cardDisplayCommand('ocultar os cards'),false);
 assert.equal(cardDisplayCommand('me explique Tomás em cards'),null);
 assert.equal(cardRequest('Explique a relação entre fé e razão'),null);
 console.log('PASS: mixed teaching/card requests, display controls, neutral follow-ups and negative display requests.');
+for(const command of ['Cronos, abrir texto na tela','Chronos, abre o texto na tela','Kronos, abra os cards','abrir resposta na tela'])assert.equal(cardDisplayCommand(command),true,command);

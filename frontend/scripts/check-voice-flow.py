@@ -127,7 +127,7 @@ async def main():
   assert await page.evaluate('micOpens')==2
   print('PASS: automatic persistent microphone, silence does not disable it, two turns reuse one stream, manual off/on, no voice boxes, early full ordered speech, active workers.',flush=True)
   await page.get_by_role('button',name='Desligar microfone').click()
-  await page.get_by_role('button',name='ENTENDIMENTO DE LINGUAGEM',exact=True).click();await page.locator('.phrase-card').click();await page.locator('#chat-input').fill('mostrar resposta');await page.get_by_role('button',name='Enviar mensagem').click()
+  await page.get_by_role('button',name='ENTENDIMENTO DE LINGUAGEM',exact=True).click();await page.locator('.phrase-card').click();await page.locator('#chat-input').fill('Cronos, abrir texto na tela');await page.get_by_role('button',name='Enviar mensagem').click()
   await expect(page.locator('.answer-card-deck')).to_contain_text('Sócrates')
   # ESC must interrupt current audio and suppress a response that was still pending.
   async def ask(text):
@@ -187,6 +187,11 @@ async def main():
   transcript[0]='Kronos, ocultar os cards'
   await say(.008)
   await expect(page.locator('.answer-card-deck')).to_have_count(0,timeout=20000)
+  await page.wait_for_function('()=>document.querySelector(".reference-mic").title==="Microfone ligado"',timeout=20000)
+  transcript[0]='Cronos, abrir texto na tela'
+  await say(.008)
+  await expect(page.get_by_role('heading',name='Aplicação',exact=True)).to_be_visible(timeout=20000)
+  assert await page.locator('.spoken-question').count()==0
   print('PASS: spoken teaching request shows sectional cards, retains cards for a follow-up and hides them on request; no transcript bubble.',flush=True)
   await b.close()
 try:asyncio.run(main())

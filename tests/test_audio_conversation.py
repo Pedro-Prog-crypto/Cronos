@@ -76,6 +76,7 @@ def test_native_audio_preserves_history_and_delivers_input_transcript(settings):
         finally:transcript_sink.reset(token)
     result=asyncio.run(run())
     assert result['recognized_text']=='Quem foi Sócrates?' and recognized==['Quem foi Sócrates?']
+    assert configs[0].thinking_config.thinking_budget==0
     assert configs[0].input_audio_transcription is not None
     assert configs[0].realtime_input_config.automatic_activity_detection.disabled
     assert sent[0][1]['turn_complete'] is False and len(sent[0][1]['turns'])==2

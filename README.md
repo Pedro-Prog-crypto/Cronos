@@ -326,3 +326,21 @@ na pasta privada `.cronos-local/media-runtime`. Essa preparação pode exigir
 internet na instalação. Não é necessário instalar FFmpeg para a reprodução;
 o teste de desenvolvimento `frontend/scripts/check-music.py` usa FFmpeg apenas
 para gerar um vídeo de teste temporário.
+
+### Resposta rápida e exibição da última explicação
+
+“Cronos, abrir texto na tela”, “abre o texto na tela” e “abrir os cards” são
+comandos locais: mostram a última resposta, sem pedir uma nova explicação à IA.
+Os primeiros trechos também podem aparecer em cards enquanto a resposta termina
+de chegar. “Ocultar os cards” esconde a apresentação.
+
+Gemini Live agora recebe `thinking_budget=0` por padrão, para reduzir o tempo
+antes da resposta. O modelo e a rota Live são preservados. Se desejar voltar ao
+raciocínio dinâmico do provedor, configure `GEMINI_LIVE_THINKING_BUDGET=-1` no
+`.env`; orçamentos positivos até 8192 também são aceitos conforme o modelo.
+Mais raciocínio pode aumentar a espera. Rapidez não comprova correção de uma
+explicação ou solução; exercícios e exemplos continuam sendo orientados pela
+personalidade de estudo. O modo rápido foi aceito em uma chamada real, mas não
+há garantia de resposta instantânea: reconhecimento, conexão, provedor e síntese
+Fish Audio têm seus próprios tempos. Nenhuma resposta é simulada para esconder
+uma falha desses serviços.

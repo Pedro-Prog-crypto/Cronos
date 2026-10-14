@@ -36,6 +36,7 @@ export default function App(){
   const spokenCards=useRef(false);
   const applyCardRequest=(text:string,typed=false)=>{const requested=cardRequest(text);if(requested!==null)spokenCards.current=requested;setShowSpokenCards(requested===false?false:typed||spokenCards.current);};
   const [displayTurn,setDisplayTurn]=useState<{question:string;source:'text'|'transcription';reply:string}|null>(null);
+  const lastAnswer=useRef<{question:string;source:'text'|'transcription';reply:string}|null>(null);
   const sendRef=useRef<(text:string,audio?:Blob)=>Promise<void>>(async()=>{});
   const commandRef=useRef<(text:string)=>boolean>(()=>false),eyeAnnouncement=useRef(false);
   const music=useRef<MusicHandle>(null);
@@ -114,7 +115,7 @@ export default function App(){
   const runCommand=(text:string)=>{
     const leadCommand=prospectCommand(text);if(leadCommand){if(config?.privacy_mode==='local'){tell('Prospecção online desativada no modo local.',true);return true;}voice.stop();setProspect(leadCommand);setModule(null);setChatOpen(false);return true;}
     if(music.current?.handle(text)){setChatOpen(false);voice.stop();return true;}
-    const cards=cardDisplayCommand(text);if(cards!==null){spokenCards.current=cards;setShowSpokenCards(cards);setChatOpen(false);if(cards){setModule(null);setEyeOpen(false);setNote(null);}return true;}
+    const cards=cardDisplayCommand(text);if(cards!==null){spokenCards.current=cards;setShowSpokenCards(cards);setChatOpen(false);if(cards){if(lastAnswer.current)setDisplayTurn(lastAnswer.current);else if(!displayTurn?.reply)tell('Ainda não há uma resposta para mostrar. Faça uma pergunta e peça a explicação em cards.',true);setModule(null);setEyeOpen(false);setNote(null);}return true;}
     const command=localCommand(text,eyeOpen);if(!command)return false;latency.current=null;
     if(command.type==='presence'){
       if(connected&&config?.fish_speech_configured){voice.prepare();void voice.speak('Estou na escuta.');}
@@ -149,15 +150,16 @@ export default function App(){
     const turnLatency=latency.current;
     const version=++turnVersion.current,controller=new AbortController();chatAbort.current=controller;
     try{
-      let question=text;let voiced=false,introText='',replyDelivered=false,voiceAllowed=!audio||!prefsRef.current?.called_only;let finishSpeech:((text:string)=>void)|null=null;
+      let question=text;let previewIntro='';let voiced=false,introText='',replyDelivered=false,voiceAllowed=!audio||!prefsRef.current?.called_only;let finishSpeech:((text:string)=>void)|null=null;
       const intro=(reply:string)=>{
+        if(version!==turnVersion.current||controller.signal.aborted||!voiceAllowed)return;previewIntro=reply;if(!audio||question!==text)setDisplayTurn({question,source,reply});
         if(version!==turnVersion.current||controller.signal.aborted||!voiceAllowed||voiced||!autoVoice||!config?.fish_speech_configured)return;
         introText=reply;voiced=true;turnLatency.chat_ms=Math.round(performance.now()-turnLatency.started);latency.current=turnLatency;turnLatency.armed=true;saveLatency(turnLatency);const continuation=new Promise<string>(resolve=>{finishSpeech=resolve;});void voice.speak(reply,turnLatency.turn_id,continuation);
       };
       const ready=(reply:string)=>{
         if(version!==turnVersion.current||controller.signal.aborted)return;
         if(!voiceAllowed||replyDelivered)return;replyDelivered=true;
-        setDisplayTurn({question,source,reply});setNotice('');
+        if(!audio||question!==text)lastAnswer.current={question,source,reply};setDisplayTurn({question,source,reply});setNotice('');
         if(introText){
           if(!reply.startsWith(introText))throw new ApiError('A resposta inicial divergiu da resposta completa.',502);
           const rest=reply.slice(introText.length);
@@ -174,8 +176,8 @@ export default function App(){
         if(music.current?.handle(recognized)){controller.abort();voice.stop();setChatOpen(false);return;}if(prefsRef.current?.called_only&&!/\b(?:cronos|kronos|chronos)\b/i.test(recognized)){controller.abort();voice.stop();setDisplayTurn(null);setNotice('');return;}
         voiceAllowed=true;if(audio)turnLatency.recognition_ms=Math.round(performance.now()-turnLatency.started);
         if(runCommand(recognized)){controller.abort();return;}
-        applyCardRequest(recognized);question=recognized;setDisplayTurn({question,source,reply:''});
-      },audio);if(version!==turnVersion.current||controller.signal.aborted)return;if(result.ignored){setDisplayTurn(null);setNotice('');return;}if(!voiced)turnLatency.chat_ms=Math.round(performance.now()-turnLatency.started);saveLatency(turnLatency);session.current=result.session_id;if(result.recognized_text)applyCardRequest(result.recognized_text);setDisplayTurn({question:result.recognized_text||text,source,reply:result.reply});setGraphRevision(value=>value+1);
+        applyCardRequest(recognized);question=recognized;setDisplayTurn({question,source,reply:previewIntro});
+      },audio);if(version!==turnVersion.current||controller.signal.aborted)return;if(result.ignored){setDisplayTurn(null);setNotice('');return;}if(!voiced)turnLatency.chat_ms=Math.round(performance.now()-turnLatency.started);saveLatency(turnLatency);session.current=result.session_id;lastAnswer.current={question:result.recognized_text||text,source,reply:result.reply};if(result.recognized_text)applyCardRequest(result.recognized_text);setDisplayTurn({question:result.recognized_text||text,source,reply:result.reply});setGraphRevision(value=>value+1);
       setTools(old=>[...old,...(result.tool_results||[])]);
       const mediaResult=result.tool_results?.find((r:any)=>r.name==='music_search'&&r.status==='completed');if(mediaResult?.result){music.current?.load(mediaResult.result);}
       const leadResult=result.tool_results?.find((r:any)=>r.name==='prospect_restaurants'&&r.status==='completed');if(leadResult?.result){setProspect({city:leadResult.result.city,category:leadResult.result.category,report:leadResult.result});setModule(null);setChatOpen(false);}

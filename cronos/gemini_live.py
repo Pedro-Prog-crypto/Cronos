@@ -22,12 +22,12 @@ def make_client(key):
     from google import genai
     return genai.Client(api_key=key,http_options={'api_version':'v1beta'})
 
-async def turn(client,model,system,messages):
+async def turn(client,model,system,messages,thinking_budget=0):
     from google.genai import types
     started=time.perf_counter();metrics={}
     delivered=False;intro_delivered=False
     audio=messages[-1].get('audio_pcm') if messages else None
-    config=types.LiveConnectConfig(response_modalities=['AUDIO'],output_audio_transcription={},system_instruction=system+'\n'+OUTPUT_RULES,**({'input_audio_transcription':{},'realtime_input_config':{'automatic_activity_detection':{'disabled':True}}} if audio is not None else {}))
+    config=types.LiveConnectConfig(response_modalities=['AUDIO'],output_audio_transcription={},thinking_config=types.ThinkingConfig(thinking_budget=thinking_budget),system_instruction=system+'\n'+OUTPUT_RULES,**({'input_audio_transcription':{},'realtime_input_config':{'automatic_activity_detection':{'disabled':True}}} if audio is not None else {}))
     async with client.aio.live.connect(model=model,config=config) as session:
         metrics['connection_ms']=round((time.perf_counter()-started)*1000)
         turns=[]
@@ -105,7 +105,7 @@ async def reply(settings,system,messages):
         client=None
         try:
             client=make_client(settings.gemini_key.strip())
-            result=await asyncio.wait_for(turn(client,model,system,messages),settings.provider_timeout)
+            result=await asyncio.wait_for(turn(client,model,system,messages,settings.gemini_live_thinking_budget),settings.provider_timeout)
             usage.audit(model,200,characters);usage.clear_pause(identity)
             return result
         except ImportError:
