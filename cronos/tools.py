@@ -171,12 +171,22 @@ def file_path(root, relative):
         raise ToolError(str(exc)) from exc
 
 
-def create_registry(settings, memory, monitor=None, windows=None, missions=None):
+def create_registry(settings, memory, monitor=None, windows=None, missions=None, prospects=None):
     registry = Registry()
     root = settings.files_root.resolve()
 
     def add(name, description, schema, handler, confirm=False):
         registry.register(Tool(name, description, schema, handler, confirm))
+
+    if prospects is not None and settings.privacy_mode == 'online':
+        from cronos.prospects import ProspectSearch
+        class ProspectToolSearch(ProspectSearch, Arguments):
+            source: Literal['osm'] = 'osm'
+        async def prospect_search(args):
+            from fastapi import HTTPException
+            try:return await prospects.search(args)
+            except HTTPException as exc:raise ToolError(str(exc.detail)) from None
+        add('prospect_restaurants', 'Busca uma amostra de possíveis clientes em uma cidade do Brasil. Categoria e fontes públicas; não garante ausência de site nem interesse em contratar. Fonte Google exige chave e pode cobrar; prefira osm.', ProspectToolSearch, prospect_search)
 
     if missions is not None:
         add("missions_list", "Lista planos salvos e etapas declaradas pelo usuário; não afirma que ações foram executadas automaticamente.", Arguments,

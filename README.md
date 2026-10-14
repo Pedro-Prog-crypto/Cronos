@@ -254,3 +254,39 @@ volume ajustável; para música nessas frequências, peça “colocar música re
 fecha o player e cancela buscas pendentes. O modo de privacidade local bloqueia
 música online, mas permite tons locais. Comandos de música não viram notas de
 conhecimento no Obsidian.
+
+### Prospecção de clientes no Brasil
+
+No painel **Internet**, abra **Prospecção de clientes · Brasil**, ou diga
+“Kronos, procurar restaurantes sem site em Manaus, AM”. Também aceita outras
+cidades brasileiras, como Brasília, DF ou Rio de Janeiro, RJ. Informe o estado
+para diferenciar municípios com nomes iguais. Se a fonte só fornece o ponto
+central da cidade, a pesquisa usa um raio de 15 km e informa essa limitação.
+
+A fonte padrão é OpenStreetMap/Nominatim/Overpass, sem chave de API. Os resultados
+são uma amostra, dependem do cadastro público e não representam todos os negócios
+da cidade. Há filtros por categoria, capacidade registrada (porte), dificuldade
+do projeto, presença de site e avaliações disponíveis. OSM não fornece notas de
+clientes; dados desconhecidos aparecem como desconhecidos. Para avaliações do
+Google, configure opcionalmente `GOOGLE_PLACES_API_KEY` no `.env` e selecione
+**Google Places**: exige uma API habilitada, cota e pode gerar cobrança. A busca
+por voz/IA usa OSM por padrão, sem ativar a fonte paga automaticamente.
+
+**Cruzar fontes sobre o site** consulta o cadastro e duas buscas na web, usando o
+extra `search` já incluído pelo instalador Windows. Candidatos a site podem ser
+homônimos e devem ser conferidos. “Nenhum site próprio encontrado” nunca comprova
+inexistência nem interesse em contratar: confirme com o responsável antes de
+oferecer trabalho. O programa não envia mensagens ou propostas automaticamente.
+Também não declara que um restaurante é bom apenas por uma nota pública.
+
+Cada resultado sugere um projeto inicial e explica a dificuldade, o que confirmar
+com o cliente e o que deixar para outra fase. **Pensar neste projeto com o Kronos**
+envia os dados públicos para a IA já configurada, para discutir escopo, tecnologias,
+código e testes. A orientação de personalidade agora prioriza parceria de
+programação, opiniões justificadas e ensino prático, sem promessas de competência
+infalível ou testes que não foram executados.
+
+As consultas são feitas sob demanda, uma por vez, com até 40 registros exibidos
+(até 20 no Google) e cache por 30 minutos. O cache de no máximo oito pesquisas fica
+em RAM, não é gravado no Obsidian. É possível exportar os resultados filtrados em
+JSON. Permissão de busca desativada ou modo local bloqueia as consultas online.

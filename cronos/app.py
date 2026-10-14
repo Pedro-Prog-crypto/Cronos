@@ -82,7 +82,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         app.state.monitor = Monitor(settings, app.state.memory)
         app.state.windows = WindowsSystem(windows_runner, app.state.monitor, windows_platform, settings.privacy_mode)
         app.state.missions = Missions(app.state.memory)
-        app.state.registry = create_registry(settings, app.state.memory, app.state.monitor, app.state.windows, app.state.missions)
+        app.state.registry = create_registry(settings, app.state.memory, app.state.monitor, app.state.windows, app.state.missions, app.state.prospects)
         app.state.engine = Engine(settings, app.state.memory, app.state.registry, provider)
         app.state.vision_provider = vision_provider
         app.state.features = Features(app)
@@ -143,6 +143,8 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
 
     from cronos.music import install_music
     install_music(app, authenticate)
+    from cronos.prospects import install_prospects
+    install_prospects(app, authenticate)
 
     @app.middleware('http')
     async def panel_metrics(request, call_next):
