@@ -9,7 +9,7 @@ function pcmWav(samples:Int16Array,rate=16000){
   return new Blob([bytes,samples.buffer as ArrayBuffer],{type:'audio/wav'});
 }
 
-export function speechChunks(text:string,firstLimit=120):string[]{
+export function speechChunks(text:string,firstLimit=80):string[]{
   const chunks:string[]=[];let remaining=text;
   while(remaining.length){
     const limit=chunks.length?360:firstLimit;

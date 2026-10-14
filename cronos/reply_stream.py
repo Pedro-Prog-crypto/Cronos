@@ -76,9 +76,9 @@ def ready_intro(raw):
         segment=re.sub(r'\\u[0-9a-fA-F]{0,3}$','',segment)
         text=json.loads('"'+segment+'"')
         match=re.search(r'[.!?](?:\s|$)',text[:140])
-        if match and 24<=match.end()<=120:return text[:match.end()]
-        if len(text)>=140:
-            end=text.rfind(' ',0,120)
+        if match and any(char.isalnum() for char in text[:match.start()]):return text[:match.end()]
+        if len(text)>=100:
+            end=text.rfind(' ',0,80)
             if end>=24:return text[:end+1]
     except (ValueError,IndexError):pass
     return None

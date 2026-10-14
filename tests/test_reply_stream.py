@@ -152,3 +152,19 @@ def test_closing_stream_cancels_pending_generation(settings):
             assert cancelled.wait(2), 'ESC/disconnect must not leave Gemini running'
     finally:
         server.should_exit=True;thread.join(5);sock.close()
+
+
+def test_short_intro_does_not_wait_for_answer_to_finish():
+    from cronos.reply_stream import ready_intro
+    assert ready_intro('{"tool_calls":[],"reply":"Sim. Ainda estou') == 'Sim. '
+    assert ready_intro('{"tool_calls":[],"reply":"Não. Explico') == 'Não. '
+    assert ready_intro('{"tool_calls":[{"name":"execute"}],"reply":"Sim. Depois') is None
+    assert ready_intro('{"tool_calls":[],"reply":"...') is None
+
+
+def test_long_first_sentence_can_start_at_word_boundary():
+    from cronos.reply_stream import ready_intro
+    text='A filosofia examina as ideias que orientam nossas escolhas e ajuda a avaliar os argumentos com cuidado e clareza'
+    raw=json.dumps({'tool_calls':[],'reply':text},ensure_ascii=False)[:-2]
+    intro=ready_intro(raw)
+    assert intro and text.startswith(intro) and len(intro)<=80 and intro.endswith(' ')
