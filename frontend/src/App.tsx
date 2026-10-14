@@ -9,6 +9,7 @@ import {MemorySpiral,MemoryGraph} from './components/MemorySpiral';
 import {HolographicGlobe} from './components/HolographicGlobe';
 import {AnswerCards,HolographicCard} from './components/HolographicCards';
 import {localCommand} from './commands';
+import {MusicPlayer,MusicHandle} from './components/MusicPlayer';
 const WorldMap=lazy(()=>import('./components/WorldMap'));
 const ModulePanel=lazy(()=>import('./panels/ModulePanel'));
 
@@ -32,6 +33,7 @@ export default function App(){
   const [displayTurn,setDisplayTurn]=useState<{question:string;source:'text'|'transcription';reply:string}|null>(null);
   const sendRef=useRef<(text:string,audio?:Blob)=>Promise<void>>(async()=>{});
   const commandRef=useRef<(text:string)=>boolean>(()=>false),eyeAnnouncement=useRef(false);
+  const music=useRef<MusicHandle>(null);
   const pendingAlerts=useRef(new Map<number,any>());
   const chatAbort=useRef<AbortController|null>(null),turnVersion=useRef(0),interrupt=useRef(()=>{});
   const session=useRef<string|null>(null),iframe=useRef<HTMLIFrameElement|null>(null),cursor=useRef(0),inFlight=useRef(false);
@@ -104,6 +106,7 @@ export default function App(){
   },[connected,graphRevision,tell]);
   useEffect(()=>{if(!connected)return;const timer=setInterval(()=>{if(prefsRef.current?.auto_index!==false&&!document.hidden&&!live.current.busy&&!live.current.recording&&!live.current.transcribing)setGraphRevision(value=>value+1);},60000);return()=>clearInterval(timer);},[connected]);
   const runCommand=(text:string)=>{
+    if(music.current?.handle(text)){setChatOpen(false);voice.stop();return true;}
     if(/^(?:kronos[, ]+|cronos[, ]+)?(?:mostrar|mostre|exibir) (?:o )?(?:texto|resposta)[.!?]*$/i.test(text.trim())){setShowSpokenCards(true);setChatOpen(false);return true;}
     const command=localCommand(text,eyeOpen);if(!command)return false;latency.current=null;
     if(command.type==='presence'){
@@ -120,7 +123,7 @@ export default function App(){
   };commandRef.current=runCommand;
   const selectNote=useCallback(async(path:string)=>{if(eyeOpen){setEyeOpen(false);return;}try{setNote(await jsonApi(`/memory/note?path=${encodeURIComponent(path)}`));}catch(error){tell('Não foi possível abrir essa nota.',true);}},[eyeOpen,tell]);
   const worldReady=()=>{if(eyeAnnouncement.current){eyeAnnouncement.current=false;if(config?.fish_speech_configured)void voice.speak('Ampliando sua perspectiva. Olho de Deus aberto.');}};
-  interrupt.current=()=>{latency.current=null;turnVersion.current++;chatAbort.current?.abort();voice.stop();microphone.cancelCapture();eyeAnnouncement.current=false;pendingAlerts.current.clear();setBusy(false);inFlight.current=false;setModule(null);setEyeOpen(false);setNote(null);setChatOpen(false);setShowSpokenCards(false);setNotice('');};
+  interrupt.current=()=>{music.current?.stop();latency.current=null;turnVersion.current++;chatAbort.current?.abort();voice.stop();microphone.cancelCapture();eyeAnnouncement.current=false;pendingAlerts.current.clear();setBusy(false);inFlight.current=false;setModule(null);setEyeOpen(false);setNote(null);setChatOpen(false);setShowSpokenCards(false);setNotice('');};
   useEffect(()=>{const key=(event:KeyboardEvent)=>{if(event.key==='Escape'){event.preventDefault();interrupt.current();}};window.addEventListener('keydown',key);return()=>{window.removeEventListener('keydown',key);chatAbort.current?.abort();};},[]);
   useEffect(()=>{if(!notice)return;const timer=setTimeout(()=>setNotice(''),8000);return()=>clearTimeout(timer);},[notice]);
 
@@ -161,7 +164,7 @@ export default function App(){
       };
       const result=await streamChat({message:text,session_id:session.current},controller.signal,ready,intro,recognized=>{
         if(version!==turnVersion.current||controller.signal.aborted)return;
-        if(prefsRef.current?.called_only&&!/\b(?:cronos|kronos)\b/i.test(recognized)){controller.abort();voice.stop();setDisplayTurn(null);setNotice('');return;}
+        if(music.current?.handle(recognized)){controller.abort();voice.stop();setChatOpen(false);return;}if(prefsRef.current?.called_only&&!/\b(?:cronos|kronos)\b/i.test(recognized)){controller.abort();voice.stop();setDisplayTurn(null);setNotice('');return;}
         voiceAllowed=true;if(audio)turnLatency.recognition_ms=Math.round(performance.now()-turnLatency.started);
         if(runCommand(recognized)){controller.abort();return;}
         question=recognized;setDisplayTurn({question,source,reply:''});
@@ -202,6 +205,7 @@ export default function App(){
       {eyeOpen?<Suspense fallback={<HolographicGlobe onOpen={()=>{}}/>}><WorldMap query={placeQuery} onError={message=>tell(message,true)} onReady={worldReady}/></Suspense>:<HolographicGlobe onOpen={()=>{if(config?.privacy_mode==='local'){tell('O mapa mundial usa serviços externos e está desativado em modo local.',true);return;}voice.prepare();eyeAnnouncement.current=true;setEyeOpen(true);setNote(null);}}/>}
     </div>
     <button className={`reference-mic ${microphone.starting?'starting':microphone.transcribing?'transcribing':busy?'thinking':voice.isGenerating?'generating':voice.isSpeaking?'speaking':microphone.recording?'recording':''}`} aria-pressed={microphone.recording} title={microphone.starting?'Abrindo microfone':microphone.transcribing?'Transcrevendo':busy?'Aguardando Gemini':voice.isGenerating?'Preparando voz':voice.isSpeaking?'Falando — escuta em espera':microphone.recording?'Microfone ligado':'Microfone desligado'} aria-label={microphone.recording?'Desligar microfone':'Ligar microfone'} onClick={handleMic} ><Mic size={16}/></button>
+    <MusicPlayer ref={music} local={config?.privacy_mode==='local'} onError={message=>tell(message,true)}/>
     {notice&&error&&<div className="scene-notice" role="status">{notice}</div>}
     {note&&<section className="note-window" aria-label="Nota Obsidian"><button onClick={()=>setNote(null)} aria-label="Fechar nota"><X size={18}/></button><pre>{note.content}</pre></section>}
     {displayTurn?.reply&&showSpokenCards&&!chatOpen&&!module&&!eyeOpen&&<AnswerCards reply={displayTurn.reply}/>}

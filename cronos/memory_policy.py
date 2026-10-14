@@ -13,6 +13,8 @@ def social_or_control(text):
     if not text:return True
     phrase=r'(?:oi|ola|ei|bom dia|boa tarde|boa noite|obrigad[oa]|valeu|ok|beleza|tchau|ate mais|tudo bem|sim|nao|na escuta|esta na escuta|voce esta na escuta|esta ai|ta ai|voce esta ai|voce ta ai|esta me ouvindo|ta me ouvindo|voce esta me ouvindo|voce ta me ouvindo|consegue me ouvir|me ouve|teste|testando|teste de (?:voz|audio|microfone))'
     if re.fullmatch(phrase+r'(?: '+phrase+r')*',text):return True
+    if re.fullmatch(r'(?:tocar|toque|colocar|coloque|reproduzir|reproduza) (?:a |uma |umas )?(?:musicas?|frequencia|tom) .+',text):return True
+    if re.fullmatch(r'(?:pausar|pause|continuar|continue|retomar|retome|parar|pare|desligar|fechar|pular) (?:a |o )?(?:musica|som|player|frequencia)',text) or text=='proxima musica':return True
     return bool(re.fullmatch(r'(?:abrir|abra|abre|fechar|feche|fecha|mostrar|mostre|ativar|ative|desativar|desative|ligar|desligar) (?:o |a )?(?:painel|conversa|microfone|olho de deus|memoria|obsidian)',text))
 
 GENERIC_TITLES={'saudacao','saudacoes','cumprimento','cumprimentos','conversa casual','chamada do assistente','disponibilidade do assistente','confirmacao de escuta','teste de audio','teste de voz','teste de microfone','status do assistente'}

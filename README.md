@@ -230,3 +230,27 @@ Microfone e início da voz: [correções e atualização](docs/MICROFONE_E_LATEN
 Escuta contínua, memória e comandos do mapa: [atualização](docs/ESCUTA_CONTINUA.md).
 
 Painéis desktop e controles disponíveis: [documentação dos 12 painéis](docs/PAINEIS.md).
+
+### Música na interface web
+
+Abra `Iniciar-Cronos-Web.bat` (Brave ou navegador padrão). O player só é criado
+quando solicitado. Exemplos: “Kronos, colocar música Evidências”, “colocar músicas
+parecidas de MC Hariel”, “pausar música”, “continuar música”, “próxima música” e
+“parar música”. O YouTube reproduz o vídeo no próprio player oficial, incluindo
+seus controles e eventuais anúncios/restrições. O navegador pode exigir um clique
+inicial para permitir áudio. Vídeos com incorporação bloqueada devem ser abertos
+no YouTube ou substituídos por outro resultado.
+
+A pesquisa tenta ler os resultados públicos do YouTube; mudanças no site,
+consentimento ou bloqueios de rede podem impedir essa busca. Nesse caso, o painel
+oferece a busca externa e um campo para colar o link escolhido e tocar aqui.
+Opcionalmente, `YOUTUBE_API_KEY` no `.env` usa a API oficial de pesquisa com sua
+cota; não é necessário mudar as chaves de Gemini ou Fish. “Músicas parecidas”
+busca mixes do artista, sem prometer uma recomendação personalizada.
+
+“Tocar frequência 432 Hz” ou “528 Hz” gera um tom puro local (20–2000 Hz), com
+volume ajustável; para música nessas frequências, peça “colocar música relaxante
+432 Hz”. Pausar/continuar/parar também controlam o tom. ESC na janela principal
+fecha o player e cancela buscas pendentes. O modo de privacidade local bloqueia
+música online, mas permite tons locais. Comandos de música não viram notas de
+conhecimento no Obsidian.

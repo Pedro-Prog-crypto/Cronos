@@ -141,6 +141,9 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         if not secrets.compare_digest((authorization or "").encode('utf-8'), ("Bearer " + settings.token).encode('utf-8')):
             raise HTTPException(401, "Autenticação necessária.")
 
+    from cronos.music import install_music
+    install_music(app, authenticate)
+
     @app.middleware('http')
     async def panel_metrics(request, call_next):
         measured = request.url.path in {'/chat', '/voice/speech', '/voice/transcribe', '/vision/analyze'}

@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {musicCommand} from '../src/musicCommands.ts';
+assert.deepEqual(musicCommand('Kronos, colocar música Evidências'),{action:'search',query:'Evidências',similar:false});
+assert.deepEqual(musicCommand('Chrome, colocar músicas parecidas de MC Hariel'),{action:'search',query:'MC Hariel',similar:true});
+assert.deepEqual(musicCommand('Cronos, tocar frequência 528 Hz'),{action:'frequency',hz:528});
+assert.deepEqual(musicCommand('pausar música'),{action:'pause'});
+assert.deepEqual(musicCommand('continuar música'),{action:'resume'});
+assert.deepEqual(musicCommand('parar música'),{action:'stop'});
+assert.deepEqual(musicCommand('próxima música'),{action:'next'});
+assert.equal(musicCommand('Não tocar música'),null);
+assert.equal(musicCommand('Quem foi Sócrates?'),null);
+assert.equal(musicCommand('colocar o olho de Deus'),null);
+console.log('PASS: music, artist mix, frequency, playback commands, no negative/information triggers.');
+assert.equal(musicCommand('colocar uma nota no Obsidian'),null);
