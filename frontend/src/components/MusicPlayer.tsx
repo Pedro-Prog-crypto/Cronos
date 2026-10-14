@@ -9,13 +9,16 @@ const time=(n:number)=>`${Math.floor(n/60)}:${String(Math.floor(n%60)).padStart(
 function officialPlayer(id:string){const url=new URL('/music/player',location.href);url.hostname=location.hostname==='localhost'?'127.0.0.1':'localhost';url.search=new URLSearchParams({id,parentOrigin:location.origin}).toString();return url;}
 export const MusicPlayer=forwardRef<MusicHandle,{local:boolean;onError:(message:string)=>void}>(({local,onError},ref)=>{
  const [visible,setVisible]=useState(false),[tracks,setTracks]=useState<Track[]>([]),[index,setIndex]=useState(0),[media,setMedia]=useState<Media|null>(null),[message,setMessage]=useState(''),[hz,setHz]=useState<number|null>(null);
+ const [expanded,setExpanded]=useState(false),[qualityHelp,setQualityHelp]=useState(false);
+ const container=useRef<HTMLElement>(null);
+ const fullscreen=async()=>{setExpanded(true);try{if(container.current&&!document.fullscreenElement)await container.current.requestFullscreen();}catch{setMessage('Tela cheia não foi liberada pelo navegador. O player foi ampliado dentro do Cronos.');}};
  const [query,setQuery]=useState(''),[clip,setClip]=useState(false),[volume,setVolume]=useState(60),[elapsed,setElapsed]=useState(0),[duration,setDuration]=useState(0),[state,setState]=useState('Em espera');
  const audio=useRef<HTMLAudioElement>(null),video=useRef<HTMLVideoElement>(null),official=useRef<HTMLIFrameElement>(null),context=useRef<AudioContext|null>(null),gain=useRef<GainNode|null>(null),request=useRef<AbortController|null>(null),generation=useRef(0);
  const playerCommand=(command:string,value?:number)=>official.current?.contentWindow?.postMessage({type:'cronos:music:command',command,value},officialPlayer('').origin);
  const primary=()=>media?.audio_url?audio.current:video.current;
  const pause=()=>{playerCommand('pause');audio.current?.pause();video.current?.pause();void context.current?.suspend().then(()=>setState('Pausado'));};
  const clear=()=>{generation.current++;request.current?.abort();pause();if(context.current)void context.current.close();context.current=null;gain.current=null;setTracks([]);setIndex(0);setMedia(null);setHz(null);setElapsed(0);setDuration(0);setState('Em espera');};
- const stop=()=>{clear();setVisible(false);setMessage('');};
+ const stop=()=>{clear();setVisible(false);setExpanded(false);setQualityHelp(false);setMessage('');if(document.fullscreenElement===container.current)void document.exitFullscreen().catch(()=>{});};
  const resume=async()=>{
   try{
    if(media?.player==='official'){playerCommand('play');return;}
@@ -73,10 +76,12 @@ export const MusicPlayer=forwardRef<MusicHandle,{local:boolean;onError:(message:
  const failed=()=>{audio.current?.pause();video.current?.pause();setState('Abrindo player interno');setMedia({player:'official',id:track.id});setMessage('O link temporário falhou. Abrindo a reprodução oficial aqui.');};
  const ended=()=>{if(index+1<tracks.length)next();else setState('Finalizado');};
  if(!visible)return null;
- return <section className="music-player" aria-label="Música no Kronos"><header><strong>{hz?`${hz} Hz`:media?.title||track?.title||'MÚSICA E CLIPES'}</strong><button onClick={stop} aria-label="Fechar música">×</button></header>
+ return <section ref={container} className={`music-player ${expanded?'music-expanded':''}`} aria-label="Música no Kronos"><header><strong>{hz?`${hz} Hz`:media?.title||track?.title||'MÚSICA E CLIPES'}</strong><button onClick={stop} aria-label="Fechar música">×</button></header>
   {media?.player==='official'&&<iframe ref={official} title="Player de música interno" src={officialPlayer(media.id||track.id).href} allow="autoplay; encrypted-media; fullscreen" allowFullScreen referrerPolicy="strict-origin-when-cross-origin"/>}
   {media?.video_url&&<video ref={video} src={media.video_url} playsInline preload="metadata" onTimeUpdate={media.audio_url?undefined:progress} onLoadedMetadata={progress} onPlaying={()=>setState('Reproduzindo')} onPause={()=>setState('Pausado')} onEnded={media.audio_url?undefined:ended} onError={failed}/>}
   {media?.audio_url&&<audio ref={audio} src={media.audio_url} preload="metadata" onTimeUpdate={progress} onLoadedMetadata={progress} onPlaying={()=>setState('Reproduzindo')} onPause={()=>setState('Pausado')} onEnded={ended} onError={failed}/>}
+  {(media?.player==='official'||media?.video_url)&&<div className="music-actions"><button onClick={()=>setExpanded(v=>!v)}>{expanded?'Reduzir player':'Ampliar player'}</button><button onClick={()=>void fullscreen()}>Tela cheia</button>{media?.player==='official'&&<button aria-expanded={qualityHelp} onClick={()=>{setQualityHelp(v=>!v);setExpanded(true);}}>Qualidade do vídeo</button>}</div>}
+  {qualityHelp&&media?.player==='official'&&<p className="music-quality-help">No vídeo, clique na engrenagem ⚙ → Qualidade. Escolha Automática, 480p, 720p, 1080p ou 1440p quando aparecerem. O YouTube mostra as opções disponíveis para este vídeo e dispositivo; o Cronos não força uma resolução. Se travar, escolha Automática ou 480p.</p>}
   {message&&<p role="status">{message}</p>}<div className="music-playback-status">{state}<span>{time(elapsed)} / {time(duration)}</span></div>
   <div className="music-actions"><button aria-label="Música anterior" disabled={index<=0} onClick={()=>next(-1)}>⏮</button><button onClick={pause}>Pausar</button><button onClick={()=>void resume()}>Continuar</button><button aria-label="Próxima música" disabled={index+1>=tracks.length} onClick={()=>next()}>⏭</button><button onClick={stop}>Parar</button></div>
   {!!tracks.length&&<><label>Posição da música<input aria-label="Posição da música" type="range" min="0" max={duration||1} value={Math.min(elapsed,duration||1)} disabled={!duration} onChange={e=>seek(Number(e.target.value))}/></label><label>Volume · {volume}%<input aria-label="Volume da música" type="range" min="0" max="100" value={volume} onChange={e=>setVolume(Number(e.target.value))}/></label><label>Fila<select aria-label="Escolher música" value={index} onChange={e=>{pause();setIndex(Number(e.target.value));}}>{tracks.map((t,i)=><option key={t.id} value={i}>{t.title}</option>)}</select></label></>}

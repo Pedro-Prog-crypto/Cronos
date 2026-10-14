@@ -81,6 +81,12 @@ async def main(mp4):
   await expect(page.locator('.music-playback-status')).to_contain_text('Reproduzindo')
   assert await page.locator('.music-player iframe').count()==1
   assert '/music/player?' in await page.locator('.music-player iframe').get_attribute('src')
+  await page.get_by_role('button',name='Qualidade do vídeo',exact=True).click()
+  await expect(page.locator('.music-quality-help')).to_contain_text('1440p')
+  assert await page.locator('.music-player').evaluate('e=>e.clientWidth>1000')
+  await page.get_by_role('button',name='Tela cheia',exact=True).click()
+  await page.wait_for_function('()=>document.fullscreenElement?.classList.contains("music-player")')
+  await page.evaluate('document.exitFullscreen()')
   child=page.frame_locator('.music-player iframe')
   assert not await child.locator('body').evaluate('()=>{try{return Boolean(parent.document)}catch{return false}}'), 'official API must not access the assistant document'
   await page.get_by_role('button',name='Pausar',exact=True).click()
