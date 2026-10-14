@@ -46,7 +46,7 @@ def finalize_wav(audio):
         raise ValueError('O provedor retornou WAV inválido.') from None
 
 
-async def synthesize_json(api_key, *, text, reference_id=None, format='mp3',
+async def stream_json(api_key, *, text, reference_id=None, format='mp3',
                           speed=1.0, latency='balanced', transport=None):
     payload={'text':text,'format':format,'latency':latency,'normalize':True}
     if format in {'wav','pcm'}:
@@ -67,13 +67,15 @@ async def synthesize_json(api_key, *, text, reference_id=None, format='mp3',
                 error=APIError(response.status_code,'Pedido JSON legado recusado pelo provedor.')
                 error.safe_detail=safe_error_detail(bytes(raw),(api_key,reference_id))
                 raise error
-            chunks=[];size=0
+            size=0
             async for chunk in response.aiter_bytes():
                 size+=len(chunk)
-                if size>16*1024*1024:
-                    raise ValueError('Áudio ultrapassa o limite de 16 MiB.')
-                chunks.append(chunk)
-            if not size:
-                raise ValueError('O provedor retornou áudio vazio.')
-            audio=b''.join(chunks)
-            return finalize_wav(audio) if format=='wav' else audio
+                if size>16*1024*1024:raise ValueError('Áudio ultrapassa o limite de 16 MiB.')
+                if chunk:yield chunk
+            if not size:raise ValueError('O provedor retornou áudio vazio.')
+
+
+async def synthesize_json(api_key, **arguments):
+    chunks=[chunk async for chunk in stream_json(api_key,**arguments)]
+    audio=b''.join(chunks)
+    return finalize_wav(audio) if arguments.get('format')=='wav' else audio

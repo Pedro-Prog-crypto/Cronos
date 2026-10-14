@@ -184,6 +184,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 "transcription_provider": settings.transcription_provider,
                 "direct_audio_chat":current.privacy_mode=="online" and current.provider=="gemini" and current.gemini_transport=="live",
                 "fish_model_in_use": active_fish_model,
+                "fish_pcm_streaming": active_fish_model=="s2.1-pro-free" and settings.privacy_mode=="online",
                 "fish_speech_configured": bool(settings.fish_key and settings.fish_model) and settings.privacy_mode == "online",
                 "custom_voice_configured": bool(settings.fish_reference),
                 "personality_available": settings.personality.is_file()}
@@ -367,13 +368,9 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
 
         async def request(selected):
             if selected == 's2.1-pro-free' and fish_factory is None:
-                from cronos.fish_legacy import synthesize_json
-                audio = await synthesize_json(settings.fish_key, **arguments)
-                if method == 'stream':
-                    async def chunks():
-                        yield audio
-                    return chunks()
-                return audio
+                from cronos.fish_legacy import synthesize_json,stream_json
+                if method=='stream':return stream_json(settings.fish_key,**arguments)
+                return await synthesize_json(settings.fish_key, **arguments)
             return await getattr(client.tts, method)(model=selected, **arguments)
 
         return await request(model)
@@ -395,6 +392,27 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
             return Response(content=audio, media_type="audio/wav" if settings.fish_format == "wav" else "audio/mpeg")
         except Exception as exc:
             raise HTTPException(502, fish_error(exc, "síntese")) from exc
+
+    @app.post('/voice/pcm',dependencies=[Depends(authenticate)])
+    async def speech_pcm(body: SpeechInput):
+        if settings.privacy_mode!='online' or not settings.fish_key:raise HTTPException(503,'Configure a voz Fish Audio em modo online.')
+        if active_fish_model!='s2.1-pro-free':raise HTTPException(503,'Streaming PCM não habilitado para este modelo. Nenhum modelo foi trocado.')
+        if not body.text.strip():raise HTTPException(422,'Informe um texto para sintetizar.')
+        from cronos.fish_legacy import stream_json
+        iterator=stream_json(settings.fish_key,text=body.text,reference_id=body.reference_id or settings.fish_reference or None,format='pcm',speed=body.speed or settings.fish_speed,latency=settings.fish_latency)
+        try:
+            first=await anext(iterator)
+            while len(first)<4:first+=await anext(iterator)
+            if first.startswith(b'RIFF'):raise ValueError('A síntese não retornou PCM bruto.')
+        except Exception as exc:
+            await iterator.aclose()
+            raise HTTPException(502,fish_error(exc,'síntese')) from exc
+        async def chunks():
+            try:
+                yield first
+                async for chunk in iterator:yield chunk
+            finally:await iterator.aclose()
+        return StreamingResponse(chunks(),media_type='audio/x-pcm',headers={'Cache-Control':'no-store','X-PCM-Sample-Rate':'24000','X-PCM-Channels':'1','X-PCM-Bits':'16'})
 
     @app.post("/voice/stream", dependencies=[Depends(authenticate)])
     async def speech_stream(body: SpeechInput):

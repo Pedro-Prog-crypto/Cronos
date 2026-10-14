@@ -1,5 +1,6 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {api} from '../api';
+import {playPCM} from '../audio/playPCM';
 
 function pcmWav(samples:Int16Array,rate=16000){
   const bytes=new ArrayBuffer(44),view=new DataView(bytes);
@@ -22,13 +23,13 @@ export function speechChunks(text:string,firstLimit=120):string[]{
   return chunks.filter(chunk=>chunk.trim());
 }
 
-interface VoiceProps { preferences?: any; onSpeechStart?: (metrics?:{speech_request_ms:number;playback_ms:number;turn_id?:string}) => void; onSpeechEnd?: () => void; onError?: (message: string) => void; }
-export function useCronosVoice({preferences,onSpeechStart,onSpeechEnd,onError}: VoiceProps = {}) {
+interface VoiceProps { preferences?: any; streaming?:boolean; onSpeechStart?: (metrics?:{speech_request_ms:number;playback_ms:number;turn_id?:string}) => void; onSpeechEnd?: () => void; onError?: (message: string) => void; }
+export function useCronosVoice({preferences,streaming,onSpeechStart,onSpeechEnd,onError}: VoiceProps = {}) {
   const [isSpeaking,setIsSpeaking]=useState(false), [isGenerating,setIsGenerating]=useState(false);
   const audioLevelSource=useRef(0);
   const prefs=useRef(preferences);prefs.current=preferences;
-  const callbacks=useRef({onSpeechStart,onSpeechEnd,onError});
-  callbacks.current={onSpeechStart,onSpeechEnd,onError};
+  const callbacks=useRef({streaming,onSpeechStart,onSpeechEnd,onError});
+  callbacks.current={streaming,onSpeechStart,onSpeechEnd,onError};
   const context=useRef<AudioContext|null>(null), audio=useRef<HTMLAudioElement|null>(null);
   const frame=useRef(0), url=useRef(''), pending=useRef<AbortController|null>(null);
   const source=useRef<MediaElementAudioSourceNode|null>(null), analyser=useRef<AnalyserNode|null>(null);
@@ -47,17 +48,17 @@ export function useCronosVoice({preferences,onSpeechStart,onSpeechEnd,onError}: 
     cancelAnimationFrame(frame.current);if(url.current)URL.revokeObjectURL(url.current);url.current='';
     audioLevelSource.current=0;setIsSpeaking(false);setIsGenerating(false);callbacks.current.onSpeechEnd?.();
   },[]);
-  const speak=useCallback(async(text:string,turn_id?:string,continuation?:Promise<string>)=>{
+  const speak=useCallback(async(text:string,turn_id?:string,continuation?:Promise<string>,completeFile=false)=>{
     stop();const current=generation.current;setIsGenerating(true);
     try {
       // Web Audio ativado no gesto do usuário; nunca simular fala se houver falha.
       context.current ||= new AudioContext(); await context.current.resume();
-      const controller=new AbortController();pending.current=controller;
+      const controller=new AbortController();pending.current=controller;const pcm=Boolean(callbacks.current.streaming&&!completeFile);
       const chunks=speechChunks(text);
       const fetchChunk=async(part:string)=>{
         const speed=prefs.current?.voice_speed,started=performance.now();
-        try{const response=await api('/voice/speech',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:part,...(speed!==undefined?{speed}:{})}),signal:controller.signal});return {blob:await response.blob(),error:null,speed,elapsed:performance.now()-started};}
-        catch(error){return {blob:null,error,speed,elapsed:performance.now()-started};}
+        try{const response=await api(pcm?'/voice/pcm':'/voice/speech',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:part,...(speed!==undefined?{speed}:{})}),signal:controller.signal});return {response:pcm?response:null,blob:pcm?null:await response.blob(),error:null,speed,elapsed:performance.now()-started};}
+        catch(error){return {response:null,blob:null,error,speed,elapsed:performance.now()-started};}
       };
       // Start the next synthesis as soon as the final reply arrives, while
       // the introduction is still playing. Keep one playback/cancellation session.
@@ -78,6 +79,17 @@ export function useCronosVoice({preferences,onSpeechStart,onSpeechEnd,onError}: 
         const received=await next;if(current!==generation.current)return;
         if(received.error)throw received.error;
         if(index+1<chunks.length)next=fetchChunk(chunks[index+1]);
+        if(received.response){
+          const output=prefs.current?.output_label,ctx=context.current as any;
+          if(output){const devices=await navigator.mediaDevices.enumerateDevices(),chosen=devices.find(d=>d.kind==='audiooutput'&&d.label===output);if(!chosen||!ctx.setSinkId)throw new Error('Seleção de saída não disponível neste WebView.');await ctx.setSinkId(chosen.deviceId);}else if(ctx.setSinkId)await ctx.setSinkId('');
+          cancelAnimationFrame(frame.current);audio.current=null;renderedSpeed.current=received.speed??1;
+          await playPCM(received.response,context.current,controller.signal,{
+            rate:()=>2**(((prefs.current?.voice_pitch??.5)-.5)*.7)*(prefs.current?.voice_speed??renderedSpeed.current)/renderedSpeed.current,volume:()=>prefs.current?.voice_volume??1,
+            onNodes:(meter,gain)=>{analyser.current=meter;outputGain.current=gain;const values=new Uint8Array(meter.fftSize);let last=0;const measure=(now:number)=>{if(current!==generation.current)return;if(now-last>50){meter.getByteTimeDomainData(values);let sum=0;for(const v of values)sum+=((v-128)/128)**2;audioLevelSource.current=Math.min(1,Math.sqrt(sum/values.length)*4);last=now;}frame.current=requestAnimationFrame(measure);};frame.current=requestAnimationFrame(measure);},
+            onStart:(bytesMs,playbackMs)=>{setIsGenerating(false);setIsSpeaking(true);if(!index)callbacks.current.onSpeechStart?.({turn_id,speech_request_ms:Math.round(received.elapsed+bytesMs),playback_ms:Math.round(playbackMs)});}
+          });
+          cancelAnimationFrame(frame.current);
+        }else{
         if(url.current)URL.revokeObjectURL(url.current);
         source.current?.disconnect();analyser.current?.disconnect();cancelAnimationFrame(frame.current);
         const receivedAt=performance.now();url.current=URL.createObjectURL(received.blob!);const player=new Audio(url.current);audio.current=player;
@@ -95,6 +107,7 @@ export function useCronosVoice({preferences,onSpeechStart,onSpeechEnd,onError}: 
           player.onended=()=>{cleanup();resolve();};player.onerror=()=>{cleanup();reject(new Error('O áudio recebido não pôde ser reproduzido.'));};
           player.play().catch(error=>{cleanup();reject(error);});
         });
+        }
         if(current!==generation.current)return;
         if(index===chunks.length-1&&tail){
           const remaining=await waitTail();tail=undefined;
