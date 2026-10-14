@@ -354,6 +354,42 @@ ser descartados somente depois de uma resposta completa e ferramentas vazias.
 Ferramentas incompletas não são adivinhadas nem executadas. Não há uma segunda
 chamada automática à IA para refazer a formatação.
 
+### Encerrar a pergunta sem desligar a escuta
+
+O microfone pode permanecer ligado enquanto cada pergunta tem uma gravação
+separada. A captura agora usa o VAD clássico do WebRTC (WASM local de cerca de
+21 kB), com proteção contra ruído estável e picos breves; volume sozinho não
+define mais a presença de voz. A pausa de fechamento normal é de 750 ms após
+fala confirmada. Não é uma espera fixa adicional de três ou quatro segundos.
+Um pequeno trecho final é preservado para não cortar consoantes baixas.
+
+“Responder só após ser chamado” fica ligado nesta atualização. A migração
+ocorre uma vez; mudanças posteriores no controle existente são preservadas.
+Com o modelo português local instalado, a detecção de Cronos acontece antes
+do envio à IA: frases sem ativação ficam locais e não abrem uma chamada Gemini
+ou Fish. Ao ativar, a captura retém no máximo 1,5 s anteriores ao chamado, sem
+incluir toda uma gravação antiga do ambiente. Cada pergunta exige uma nova
+ativação. O detector compartilha o microfone e o modelo local de interrupção,
+sem abrir outro programa ou instalar uma IA grande no notebook.
+
+Se aparecer que o modelo português está ausente, execute `Instalar-Cronos.bat`
+uma vez para prepará-lo. O modo pelo nome precisa desse recurso. O painel
+existente permite desativar a exigência de chamada; nesse caso, falas do ambiente
+podem ser transcritas como antes.
+
+Isso é detecção de fala e palavra-chave, **não identificação exclusiva do dono**.
+Voz do celular/TV também é fala; se ela disser Cronos ou continuar junto com sua
+pergunta, ainda pode interferir. O cancelamento de eco do navegador ajuda com
+o áudio reproduzido no computador, mas não recebe uma referência do som de um
+celular separado. Distância, ruído e mistura de vozes não têm garantia de acerto.
+O tempo até começar a resposta também inclui Gemini e Fish, além da captura.
+
+Verificações locais: `node frontend/scripts/check-capture.mjs` usa áudio de
+fala público e o VAD WASM real; `frontend/scripts/check-wake-capture.py` verifica
+no navegador que fala sem ativação não abre chamadas à nuvem e que uma pergunta
+ativada termina com ruído contínuo. Nesse teste, reconhecimento da palavra-chave
+e provedores externos são simulados; não é uma medida da latência das APIs.
+
 ### Resposta rápida e exibição da última explicação
 
 “Cronos, abrir texto na tela”, “abre o texto na tela” e “abrir os cards” são

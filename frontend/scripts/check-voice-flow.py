@@ -1,9 +1,10 @@
 """Optional browser integration test; simulated providers and a synthetic test tone only."""
-import asyncio,http.server,threading,json,time,io,math,struct,wave,os
+import asyncio,http.server,threading,json,time,io,math,struct,wave,os,base64
 from functools import partial
 from pathlib import Path
 from playwright.async_api import async_playwright,expect
 ROOT=Path(__file__).resolve().parents[2]
+SPEECH=base64.b64encode((ROOT/'frontend/scripts/fixtures/speech-16k.pcm').read_bytes()).decode()
 def test_audio():
  buffer=io.BytesIO()
  with wave.open(buffer,'wb') as writer:
@@ -15,7 +16,7 @@ DIRECT=os.getenv('CRONOS_TEST_DIRECT_AUDIO')=='1'
 class Handler(http.server.SimpleHTTPRequestHandler):
  def log_message(self,*args):pass
  def end_headers(self):
-  self.send_header('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; frame-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+  self.send_header('Content-Security-Policy',"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; frame-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
   super().end_headers()
 server=http.server.ThreadingHTTPServer(('127.0.0.1',0),partial(Handler,directory=str(ROOT/'cronos')));threading.Thread(target=server.serve_forever,daemon=True).start()
 async def main():
@@ -55,7 +56,7 @@ async def main():
    await asyncio.sleep(.05 if index!=2 else 1.8)
    completed.append(index);speech_events.append(('completed',index));await route.fulfill(body=AUDIO,content_type='audio/wav')
   await page.route('**/voice/speech',speech)
-  await page.add_init_script("""window.micOpens=0;navigator.mediaDevices.getUserMedia=async()=>{window.micOpens++;await new Promise(r=>setTimeout(r,300));const ctx=new AudioContext(),osc=ctx.createOscillator(),gain=ctx.createGain(),dest=ctx.createMediaStreamDestination();osc.connect(gain);gain.connect(dest);gain.gain.value=0;osc.start();window.micGain=gain;window.micStream=dest.stream;return dest.stream;};""")
+  await page.add_init_script("window.testSpeech='"+SPEECH+"';"+"""window.micOpens=0;navigator.mediaDevices.getUserMedia=async()=>{window.micOpens++;await new Promise(r=>setTimeout(r,300));const ctx=new AudioContext(),osc=ctx.createBufferSource(),gain=ctx.createGain(),dest=ctx.createMediaStreamDestination();const bytes=Uint8Array.from(atob(window.testSpeech),c=>c.charCodeAt(0));const pcm=new Int16Array(bytes.buffer);osc.buffer=ctx.createBuffer(1,pcm.length,16000);osc.buffer.copyToChannel(Float32Array.from(pcm,v=>v/32768),0);osc.loop=true;osc.connect(gain);gain.connect(dest);gain.gain.value=0;osc.start();window.micGain=gain;window.micStream=dest.stream;return dest.stream;};""")
   await page.goto(f'http://127.0.0.1:{server.server_port}/ui/index.html')
   await expect(page.get_by_role('button',name='Desligar microfone')).to_have_attribute('aria-pressed','true',timeout=7000)
   assert await page.locator('canvas[data-render-thread=worker]').count()==1
@@ -64,7 +65,7 @@ async def main():
   before=await page.locator('canvas').first.evaluate('c=>c.toDataURL()');await page.wait_for_timeout(150);assert before!=await page.locator('canvas').first.evaluate('c=>c.toDataURL()')
   async def say(gain=.15):
    await page.evaluate('(gain)=>{micGain.gain.value=gain;setTimeout(()=>micGain.gain.value=0,650)}',gain)
-  await say(.008);await page.wait_for_function('()=>window.playTimes.length===1',timeout=20000)
+  await say(.025);await page.wait_for_function('()=>window.playTimes.length===1',timeout=20000)
   await page.wait_for_timeout(100)
   assert latencies[-1]['source']=='voice' and latencies[-1]['first_audio_ms']>=latencies[-1]['chat_ms']
   assert latencies[-1]['recognition_ms']>=0 and latencies[-1]['speech_request_ms']>0

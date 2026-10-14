@@ -139,3 +139,17 @@ def test_latency_metadata_contains_no_conversation_and_rejects_text(settings):
         assert 'question' not in measured
         assert client.post('/panels/latency',json={**data,'first_audio_ms':None},headers=AUTH).status_code==200
         assert client.get('/panels',headers=AUTH).json()['client_latency']['first_audio_ms']==1700
+
+
+def test_local_microphone_wake_upgrade_runs_once_and_later_choice_survives(settings):
+    with TestClient(create_app(settings)) as client:
+        assert client.get('/panels',headers=AUTH).json()['preferences']['called_only'] is True
+        client.patch('/panels/preferences',headers=AUTH,json={'called_only':False})
+        # Simulate the persisted default from versions before local activation.
+        with client.app.state.memory.connect() as db:
+            db.execute('DELETE FROM panel_migrations WHERE name=?',('local-microphone-wake-v1',))
+    with TestClient(create_app(settings)) as client:
+        assert client.get('/panels',headers=AUTH).json()['preferences']['called_only'] is True
+        client.patch('/panels/preferences',headers=AUTH,json={'called_only':False})
+    with TestClient(create_app(settings)) as client:
+        assert client.get('/panels',headers=AUTH).json()['preferences']['called_only'] is False

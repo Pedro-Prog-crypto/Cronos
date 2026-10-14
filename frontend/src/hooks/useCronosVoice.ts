@@ -1,6 +1,12 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {api,getToken} from '../api';
 import {playPCM} from '../audio/playPCM';
+import captureWorkletUrl from '../audio/capture.worklet.js?worker&url';
+import vadWasmUrl from '@echogarden/fvad-wasm/fvad.wasm?url';
+import {createSpeechDetector} from '../audio/speechDetector.js';
+
+let vadBinary:Promise<ArrayBuffer>|null=null;
+function loadVad(){return vadBinary||=(fetch(vadWasmUrl).then(response=>{if(!response.ok)throw new Error('Detector local de voz indisponível.');return response.arrayBuffer();}).catch(error=>{vadBinary=null;throw error;}));}
 
 function pcmWav(samples:Int16Array,rate=16000){
   const bytes=new ArrayBuffer(44),view=new DataView(bytes);
@@ -140,16 +146,18 @@ async function localWave(blob:Blob){
   return new Blob([bytes],{type:'audio/wav'});
 }
 
-export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms:number;endpoint_ms:number})=>void,onError:(message:string)=>void,local=false,blocked=false,preferences?:any,onAudio?:(audio:Blob,metrics:{recognition_ms:number;endpoint_ms:number})=>Promise<void>,interrupt?:{active:boolean;onKeyword:()=>void}) {
+export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms:number;endpoint_ms:number})=>void,onError:(message:string)=>void,local=false,blocked=false,preferences?:any,onAudio?:(audio:Blob,metrics:{recognition_ms:number;endpoint_ms:number})=>Promise<void>,interrupt?:{active:boolean;onKeyword:()=>void;wakeOnly?:boolean}) {
   const [recording,setRecording]=useState(false),[capturing,setCapturing]=useState(false),[starting,setStarting]=useState(false),[transcribing,setTranscribing]=useState(false);
   const audioLevelSource=useRef(0),enabled=useRef(false),opening=useRef(false),processing=useRef(false),mounted=useRef(true);
   const latest=useRef({onTranscript,onError,local,blocked,preferences,onAudio,interrupt});latest.current={onTranscript,onError,local,blocked,preferences,onAudio,interrupt};
   const keywordSocket=useRef<WebSocket|null>(null),keywordReady=useRef(false),keywordError=useRef(false);
+  const [wakeOpen,setWakeOpen]=useState(false),wakeUntil=useRef(0);
   const captureVersion=useRef(0),resumeAfter=useRef(0);
-  const resources=useRef<{stream?:MediaStream;recorded?:MediaStream;context?:AudioContext;recorder?:MediaRecorder;node?:AudioWorkletNode;timer?:ReturnType<typeof setInterval>;abort?:AbortController}>({});
-  const cancelCapture=useCallback(()=>{captureVersion.current++;processing.current=false;resumeAfter.current=performance.now()+250;resources.current.abort?.abort();resources.current.node?.port.postMessage({blocked:true});if(resources.current.recorder?.state==='recording')resources.current.recorder.stop();audioLevelSource.current=0;if(mounted.current){setCapturing(false);setTranscribing(false);}},[]);
+  const resources=useRef<{stream?:MediaStream;recorded?:MediaStream;context?:AudioContext;recorder?:MediaRecorder;node?:AudioWorkletNode;timer?:ReturnType<typeof setInterval>;abort?:AbortController;vad?:Awaited<ReturnType<typeof createSpeechDetector>>}>({});
+  const cancelCapture=useCallback(()=>{captureVersion.current++;processing.current=false;wakeUntil.current=0;resumeAfter.current=performance.now()+250;resources.current.abort?.abort();resources.current.node?.port.postMessage({blocked:true});if(resources.current.recorder?.state==='recording')resources.current.recorder.stop();audioLevelSource.current=0;if(mounted.current){setWakeOpen(false);setCapturing(false);setTranscribing(false);}},[]);
   const stop=useCallback(()=>{
     enabled.current=false;captureVersion.current++;processing.current=false;resources.current.abort?.abort();
+    wakeUntil.current=0;if(mounted.current)setWakeOpen(false);resources.current.vad?.dispose();resources.current.vad=undefined;
     if(resources.current.timer)clearInterval(resources.current.timer);
     const recorder=resources.current.recorder;if(recorder?.state==='recording')recorder.stop();
     if(resources.current.node){resources.current.node.port.onmessage=null;resources.current.node.disconnect();}
@@ -166,20 +174,25 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
       if(latest.current.preferences?.input_label){const devices=await navigator.mediaDevices.enumerateDevices();deviceId=devices.find(d=>d.kind==='audioinput'&&d.label===latest.current.preferences.input_label)?.deviceId;if(!deviceId)throw new Error('Microfone selecionado não disponível. Escolha outro dispositivo.');}
       const stream=await navigator.mediaDevices.getUserMedia({audio:{...(deviceId?{deviceId:{exact:deviceId}}:{}),channelCount:{ideal:1},echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
       if(!enabled.current||!mounted.current){stream.getTracks().forEach(track=>track.stop());return;}
-      resources.current.stream=stream;const context=new AudioContext(latest.current.local||latest.current.interrupt?{sampleRate:16000}:undefined);resources.current.context=context;await context.resume();if(!enabled.current||!mounted.current)return;
+      resources.current.stream=stream;const context=new AudioContext({sampleRate:16000});resources.current.context=context;await context.resume();if(!enabled.current||!mounted.current)return;
       const meter=context.createAnalyser();meter.fftSize=256;context.createMediaStreamSource(stream).connect(meter);
-      if(context.audioWorklet&&(latest.current.local||latest.current.interrupt)){
-        await context.audioWorklet.addModule(new URL('../audio/capture.worklet.js',import.meta.url).href);if(!enabled.current||!mounted.current)return;
+      if(context.audioWorklet){
+        await context.audioWorklet.addModule(captureWorkletUrl);if(!enabled.current||!mounted.current)return;
         const node=new AudioWorkletNode(context,'cronos-capture');resources.current.node=node;
         context.createMediaStreamSource(stream).connect(node);node.connect(context.destination);
         const values=new Uint8Array(256);
+        let initialize:(error?:Error)=>void=()=>{};
         node.port.onmessage=async event=>{
+          if(event.data.vadReady){initialize();return;}if(event.data.vadError){initialize(new Error('Não foi possível iniciar a detecção local de voz.'));return;}
+          if(event.data.keywordPre){const socket=keywordSocket.current,frames=event.data.keywordPre as Int16Array;if(keywordReady.current&&socket?.readyState===WebSocket.OPEN&&socket.bufferedAmount<12800)for(let offset=0;offset<frames.length;offset+=1600)socket.send(frames.slice(offset,offset+1600).buffer);return;}
           if(event.data.keyword){const socket=keywordSocket.current;if(keywordReady.current&&socket?.readyState===WebSocket.OPEN&&socket.bufferedAmount<12800)socket.send(event.data.keyword.buffer);return;}
-          if(typeof event.data.active==='boolean'){if(mounted.current)setCapturing(event.data.active);return;}
+          if(typeof event.data.active==='boolean'){if(mounted.current)setCapturing(event.data.active&&(!latest.current.interrupt?.wakeOnly||wakeUntil.current>performance.now()));return;}
           if(!enabled.current||latest.current.blocked||processing.current)return;
+          if(latest.current.interrupt?.wakeOnly&&wakeUntil.current<performance.now())return;
           const samples=event.data.samples as Int16Array,rate=event.data.rate as number;
           if(rate!==16000||samples.length>61*rate)return;
           processing.current=true;setTranscribing(true);node.port.postMessage({blocked:true});
+          wakeUntil.current=0;setWakeOpen(false);
           const version=captureVersion.current;
           const abort=new AbortController();resources.current.abort=abort;const recognitionStarted=performance.now();
           try{
@@ -190,26 +203,32 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
           }catch(error){if(enabled.current&&!abort.signal.aborted)latest.current.onError(error instanceof Error?error.message:'Transcrição indisponível.');}
           finally{if(version===captureVersion.current){processing.current=false;resumeAfter.current=performance.now()+250;if(mounted.current)setTranscribing(false);}}
         };
+        const binary=(await loadVad()).slice(0);
+        await new Promise<void>((resolve,reject)=>{const timeout=setTimeout(()=>reject(new Error('O detector de voz não iniciou. Atualize o WebView2 e reabra o Kronos.')),4000);initialize=error=>{clearTimeout(timeout);error?reject(error):resolve();};node.port.postMessage({vadBinary:binary},[binary]);});
+        if(!enabled.current||!mounted.current)return;
+        node.port.postMessage({waiting:Boolean(latest.current.interrupt?.wakeOnly)});
         setRecording(true);setStarting(false);
         resources.current.timer=setInterval(()=>{
           if(latest.current.blocked||processing.current)resumeAfter.current=performance.now()+250;
           const blocked=latest.current.blocked||processing.current||performance.now()<resumeAfter.current;
-          node.port.postMessage({blocked,keyword:keywordReady.current,sensitivity:latest.current.preferences?.microphone_sensitivity??70,gain:latest.current.preferences?.microphone_gain??2});meter.getByteTimeDomainData(values);let sum=0;for(const value of values)sum+=((value-128)/128)**2;audioLevelSource.current=blocked?0:Math.min(1,Math.sqrt(sum/values.length)*4);
+          node.port.postMessage({blocked,waiting:Boolean(latest.current.interrupt?.wakeOnly&&wakeUntil.current<performance.now()),keyword:keywordReady.current,sensitivity:latest.current.preferences?.microphone_sensitivity??70,gain:latest.current.preferences?.microphone_gain??2});meter.getByteTimeDomainData(values);let sum=0;for(const value of values)sum+=((value-128)/128)**2;audioLevelSource.current=blocked?0:Math.min(1,Math.sqrt(sum/values.length)*4);
         },80);
         return;
       }
+      const vad=await createSpeechDetector(await loadVad());if(!enabled.current||!mounted.current){vad.dispose();return;}resources.current.vad=vad;
       const recorded=context.createMediaStreamDestination(),gain=context.createGain();recorded.channelCount=1;resources.current.recorded=recorded.stream;context.createMediaStreamSource(stream).connect(gain);gain.connect(recorded);
-      const values=new Uint8Array(256);let heard=false,lastSpeech=0,started=0,discard=false;
+      meter.fftSize=512;const values=new Float32Array(512),vadSamples=new Int16Array(320);let heard=false,lastSpeech=0,started=0,discard=false,speechRun=0,voiceReference=0,voiceLevel=0,energyMean=0,energyVariance=0;
       const begin=()=>{
         const version=captureVersion.current;
         const type=['audio/webm;codecs=opus','audio/mp4','audio/ogg;codecs=opus'].find(type=>MediaRecorder.isTypeSupported(type));
         const recorder=new MediaRecorder(recorded.stream,type?{mimeType:type}:undefined);resources.current.recorder=recorder;
-        const parts:BlobPart[]=[];let bytes=0;heard=false;discard=false;started=performance.now();lastSpeech=started;
+        const parts:BlobPart[]=[];let bytes=0;heard=false;discard=false;speechRun=0;voiceReference=0;voiceLevel=0;energyMean=0;energyVariance=0;started=performance.now();lastSpeech=started;
         recorder.ondataavailable=event=>{parts.push(event.data);bytes+=event.data.size;if(bytes>10*1024*1024){discard=true;recorder.stop();}};
         recorder.onerror=()=>{discard=true;latest.current.onError('Falha na gravação do microfone.');stop();};
         recorder.onstop=async()=>{
           if(resources.current.recorder===recorder)resources.current.recorder=undefined;if(mounted.current)setCapturing(false);
           if(version!==captureVersion.current||!enabled.current||!mounted.current||discard||!heard||!bytes)return;
+          wakeUntil.current=0;setWakeOpen(false);
           processing.current=true;setTranscribing(true);const abort=new AbortController();resources.current.abort=abort;const recognitionStarted=performance.now();
           try{
             const blob=new Blob(parts,{type:recorder.mimeType}),audio=latest.current.local?await localWave(blob):blob;
@@ -229,27 +248,37 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
         if(latest.current.blocked||processing.current){resumeAfter.current=performance.now()+250;audioLevelSource.current=0;if(recorder?.state==='recording'){discard=true;recorder.stop();}return;}
         if(performance.now()<resumeAfter.current)return;
         if(!recorder){begin();return;}if(recorder.state!=='recording')return;
-        meter.getByteTimeDomainData(values);let sum=0;for(const value of values)sum+=((value-128)/128)**2;
+        meter.getFloatTimeDomainData(values);let sum=0;for(const value of values)sum+=value*value;
         gain.gain.value=latest.current.preferences?.microphone_gain??2;
         const rms=Math.sqrt(sum/values.length),now=performance.now();audioLevelSource.current=Math.min(1,rms*4);
-        const sensitivity=(latest.current.preferences?.microphone_sensitivity??70)/100;
-        if(rms>Math.max(.0015,.006-sensitivity*.005)){if(!heard)setCapturing(true);heard=true;lastSpeech=now;}
+        const sensitivity=latest.current.preferences?.microphone_sensitivity??70;vad.mode(sensitivity>=80?1:sensitivity>=40?2:3);
+        for(let i=0;i<320;i++)vadSamples[i]=Math.max(-32767,Math.min(32767,values[i]*32767*(latest.current.preferences?.microphone_gain??2)));
+        const delta=rms-energyMean;energyMean=energyMean?energyMean*.5+rms*.5:rms;energyVariance=energyVariance*.5+delta*delta*.5;voiceReference*=.99;
+        const speech=vad.process(vadSamples)&&rms>.0001&&(rms>voiceReference*.18||Math.sqrt(energyVariance)>energyMean*.25);
+        if(speech){voiceLevel=voiceLevel?voiceLevel*.8+rms*.2:rms;voiceReference=Math.max(voiceReference,voiceLevel);}
+        speechRun=speech?speechRun+80:0;
+        if(speechRun>=160){if(!heard)setCapturing(!latest.current.interrupt?.wakeOnly||wakeUntil.current>now);heard=true;lastSpeech=now;}
         if((heard&&now-lastSpeech>750)||(now-started>(heard?58000:3000)))recorder.stop();
       },80);
     }catch(error){stop();latest.current.onError(error instanceof Error?error.message:'Não foi possível abrir o microfone.');}
     finally{opening.current=false;if(mounted.current)setStarting(false);}
   },[stop]);
   const toggle=useCallback(()=>{if(enabled.current){stop();return Promise.resolve();}return start();},[start,stop]);
+  const keywordActive=Boolean(interrupt?.active||(interrupt?.wakeOnly&&!blocked&&!wakeOpen));
+  useEffect(()=>{if(!wakeOpen)return;const timeout=setTimeout(()=>{wakeUntil.current=0;setWakeOpen(false);setCapturing(false);},65000);return()=>clearTimeout(timeout);},[wakeOpen]);
   useEffect(()=>{
-    if(!recording||!interrupt?.active)return;
+    if(!recording||!keywordActive)return;
     if(!resources.current.node){if(!keywordError.current){keywordError.current=true;latest.current.onError('Este WebView não oferece escuta de interrupção. Use ESC ou atualize o WebView2.');}return;}
     const url=new URL('/voice/interrupt',location.href);url.protocol=location.protocol==='https:'?'wss:':'ws:';
-    const socket=new WebSocket(url);keywordSocket.current=socket;let alive=true;
-    socket.onopen=()=>socket.send(JSON.stringify({token:getToken()}));
-    socket.onmessage=event=>{if(!alive)return;try{const data=JSON.parse(event.data);if(data.type==='ready'){keywordReady.current=true;keywordError.current=false;}if(data.type==='keyword'&&latest.current.interrupt?.active)latest.current.interrupt.onKeyword();if(data.type==='unavailable'&&!keywordError.current){keywordError.current=true;latest.current.onError(data.message);}}catch{/* Ignore unrelated or malformed keyword events. */}};
-    socket.onclose=()=>{if(keywordSocket.current===socket){keywordReady.current=false;resources.current.node?.port.postMessage({keyword:false});}};
-    return()=>{alive=false;keywordReady.current=false;if(keywordSocket.current===socket)keywordSocket.current=null;resources.current.node?.port.postMessage({keyword:false});socket.close();};
-  },[recording,interrupt?.active]);
+    let alive=true,attempts=0;let socket:WebSocket|null=null,retry:ReturnType<typeof setTimeout>|undefined;
+    const open=()=>{
+      socket=new WebSocket(url);const current=socket;keywordSocket.current=current;
+      current.onopen=()=>current.send(JSON.stringify({token:getToken()}));
+      current.onmessage=event=>{if(!alive)return;try{const data=JSON.parse(event.data);if(data.type==='ready'){keywordReady.current=true;keywordError.current=false;}if(data.type==='keyword'){if(latest.current.interrupt?.active)latest.current.interrupt.onKeyword();else if(latest.current.interrupt?.wakeOnly&&!latest.current.blocked){wakeUntil.current=performance.now()+65000;resources.current.node?.port.postMessage({arm:true});setWakeOpen(true);setCapturing(true);}}if(data.type==='unavailable'&&!keywordError.current){keywordError.current=true;latest.current.onError(data.message);}}catch{/* Ignore unrelated or malformed keyword events. */}};
+      current.onclose=event=>{if(keywordSocket.current===current){keywordReady.current=false;resources.current.node?.port.postMessage({keyword:false});}if(alive&&[1006,1013].includes(event.code)&&attempts++<2)retry=setTimeout(open,300);};
+    };open();
+    return()=>{alive=false;clearTimeout(retry);keywordReady.current=false;if(keywordSocket.current===socket)keywordSocket.current=null;resources.current.node?.port.postMessage({keyword:false});socket?.close();};
+  },[recording,keywordActive,wakeOpen,interrupt?.active]);
   useEffect(()=>()=>{mounted.current=false;stop();},[stop]);
   return {recording,capturing,starting,transcribing,audioLevelSource,toggle,start,stop,cancelCapture};
 }

@@ -12,7 +12,7 @@ WAV=buffer.getvalue()
 class Handler(http.server.SimpleHTTPRequestHandler):
  def log_message(self,*args):pass
  def end_headers(self):
-  self.send_header('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'none'")
+  self.send_header('Content-Security-Policy',"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'none'")
   super().end_headers()
 server=http.server.ThreadingHTTPServer(('127.0.0.1',0),partial(Handler,directory=str(ROOT/'cronos')))
 threading.Thread(target=server.serve_forever,daemon=True).start()
@@ -22,7 +22,7 @@ async def main():
   page=await browser.new_page(viewport={'width':1366,'height':900})
   await page.add_init_script("""window.pywebview={api:{connection:async()=>({token:'test'})}};window.micOpens=0;window.playCount=0;const originalPlay=HTMLMediaElement.prototype.play;HTMLMediaElement.prototype.play=function(){window.playCount++;return originalPlay.call(this)};navigator.mediaDevices.getUserMedia=async()=>{window.micOpens++;const ctx=new AudioContext(),osc=ctx.createOscillator(),gain=ctx.createGain(),dest=ctx.createMediaStreamDestination();osc.connect(gain);gain.connect(dest);gain.gain.value=.01;osc.start();window.micGain=gain;window.micStream=dest.stream;return dest.stream;};""")
   await page.route('**/status',lambda r:r.fulfill(json={'fish_configured':True,'fish_speech_configured':True,'transcription_provider':'vosk','local_voice_interrupt':True}))
-  await page.route('**/panels',lambda r:r.fulfill(json={'preferences':{'device_auto_connect':True}}))
+  await page.route('**/panels',lambda r:r.fulfill(json={'preferences':{'device_auto_connect':True,'called_only':True}}))
   await page.route('**/panels/latency',lambda r:r.fulfill(json={}))
   await page.route('**/monitor?*',lambda r:r.fulfill(json={'cursor':0,'alerts':[],'events':[]}))
   await page.route('**/memory/**',lambda r:r.fulfill(json={'nodes':[],'edges':[],'total':0,'next_offset':None}))
@@ -57,11 +57,17 @@ async def main():
   sockets[-1].send(json.dumps({'type':'partial','text':'Estou conversando com outra pessoa'}))
   await page.wait_for_timeout(250)
   assert await page.locator('.reference-mic.speaking').count()==1
-  sockets[-1].send(json.dumps({'type':'keyword','word':'Cronos'}))
-  await page.wait_for_function('()=>!document.querySelector(".reference-mic").classList.contains("speaking")')
+  socket_count=len(sockets);target=sockets[-1];target.send(json.dumps({'type':'keyword','word':'Cronos'}))
+  await page.wait_for_function('()=>document.querySelector(".reference-mic").title==="Microfone ligado"',timeout=2500)
+  await target.close(code=1000)
   count=await page.evaluate('playCount');await page.wait_for_timeout(900)
   assert await page.evaluate('playCount')==count and len(chats)==1
   assert await page.evaluate('micOpens===1&&micStream.getAudioTracks()[0].readyState==="live"')
+  for _ in range(30):
+   if len(sockets)>socket_count:break
+   await page.wait_for_timeout(100)
+  assert await page.evaluate('playCount')==count
+  assert len(sockets)>socket_count, ('keyword listening must resume after interruption in name-only mode',len(sockets),socket_count,await page.locator('.reference-mic').get_attribute('title'))
   await ask();await page.wait_for_function('(n)=>window.playCount>n',arg=count)
   assert len(chats)==2
   await page.keyboard.press('Escape');await page.get_by_role('button',name='Desligar microfone').click()

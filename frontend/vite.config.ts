@@ -5,6 +5,7 @@ import {defineConfig} from 'vite';
 export default defineConfig({
   base: '/ui/',
   plugins: [react(), tailwindcss()],
+  worker:{format:'es'},
   build: {assetsInlineLimit:0,outDir: '../cronos/ui', emptyOutDir: true, rolldownOptions:{input:{main:'index.html',world:'world.html'}}},
   server: {host: '127.0.0.1', port: 3000, proxy: {
     '/chat': 'http://127.0.0.1:8003', '/status': 'http://127.0.0.1:8003',

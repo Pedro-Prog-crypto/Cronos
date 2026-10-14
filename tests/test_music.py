@@ -130,7 +130,7 @@ def test_official_internal_player_does_not_wait_for_extraction(settings,monkeypa
         assert 'frame-ancestors http://127.0.0.1 http://localhost' in frame.headers['content-security-policy']
         assert frame.headers['referrer-policy']=='strict-origin-when-cross-origin'
         assert 'https://www.youtube.com' in frame.headers['content-security-policy']
-        assert "script-src 'self';" in client.get('/').headers['content-security-policy']
+        assert "script-src 'self' 'wasm-unsafe-eval';" in client.get('/').headers['content-security-policy']
     with TestClient(create_app(replace(settings,privacy_mode='local'))) as client:
         assert client.get('/music/player?id=abcdefghijk').status_code==403
 

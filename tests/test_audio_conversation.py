@@ -25,6 +25,7 @@ def test_audio_is_recognized_and_answered_once_and_actual_question_is_saved(sett
             return {'recognized_text':'Quem foi Sócrates?','reply':'Sócrates foi um filósofo grego.','topics':[{'title':'Sócrates','summary':'Filósofo grego.'}],'tool_calls':[]}
     provider=Provider()
     with TestClient(create_app(replace(settings,gemini_transport='live'),provider)) as client:
+        client.patch('/panels/preferences',headers=AUTH,json={'called_only':False})
         r=client.post('/chat/audio/stream',headers={**AUTH,'Content-Type':'audio/wav'},content=wav())
         assert r.status_code==200
         result=json.loads(r.text)['result']

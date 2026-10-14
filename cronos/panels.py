@@ -28,7 +28,7 @@ class Preferences(BaseModel):
     context_messages: int = Field(default=40, ge=2, le=100)
     language: Literal['pt-BR', 'en-US', 'es-ES'] = 'pt-BR'
     response_style: Literal['natural', 'concise', 'detailed'] = 'natural'
-    called_only: bool = False
+    called_only: bool = True
     auto_index: bool = True
     save_diary: bool = True
     backup_daily: bool = False
@@ -69,7 +69,15 @@ class PanelState:
         state = app.state
         with state.memory.connect() as db:
             db.execute('CREATE TABLE IF NOT EXISTS panel_preferences (id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL)')
+            db.execute('CREATE TABLE IF NOT EXISTS panel_migrations (name TEXT PRIMARY KEY)')
             row = db.execute('SELECT payload FROM panel_preferences WHERE id=1').fetchone()
+            if not db.execute('SELECT 1 FROM panel_migrations WHERE name=?',('local-microphone-wake-v1',)).fetchone():
+                # This update enables the requested name-only microphone mode
+                # once. Later explicit changes in the existing panel survive.
+                if row:
+                    data=json.loads(row[0]);data['called_only']=True
+                    payload=json.dumps(data);db.execute('UPDATE panel_preferences SET payload=? WHERE id=1',(payload,));row=(payload,)
+                db.execute('INSERT INTO panel_migrations(name) VALUES(?)',('local-microphone-wake-v1',))
         self.preferences = Preferences(context_messages=state.engine.settings.context_messages,
                                        voice_speed=state.engine.settings.fish_speed,
                                        commands_enabled=state.engine.settings.allow_executables)

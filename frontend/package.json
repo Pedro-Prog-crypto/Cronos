@@ -9,6 +9,7 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@echogarden/fvad-wasm": "0.2.0",
     "@fontsource/jetbrains-mono": "5.3.0",
     "@fontsource/plus-jakarta-sans": "5.3.0",
     "@fontsource/rajdhani": "5.3.0",

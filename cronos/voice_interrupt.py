@@ -42,14 +42,14 @@ def install_interrupt(app,settings,recognizer):
             active=True;acquired=True
             try:listener=await asyncio.to_thread(recognizer.keyword_listener)
             except ValueError:
-                await socket.send_json({'type':'unavailable','message':'Interrupção por voz indisponível. Execute Instalar-Cronos.bat para preparar o reconhecimento local; ESC continua funcionando.'});return
+                await socket.send_json({'type':'unavailable','message':'Reconhecimento local de Cronos indisponível. Execute Instalar-Cronos.bat para preparar o modelo português. O modo de chamada pelo nome precisa desse modelo; ESC continua funcionando.'});return
             await socket.send_json({'type':'ready'})
-            # PCM is processed only while generating/speaking, never stored or
-            # sent to Gemini/Fish. A modest burst budget bounds local flooding.
-            credit=12800;last=time.monotonic()
+            # Keyword PCM is processed locally for activation/interruption, never
+            # stored or sent to Gemini/Fish. A bounded burst permits pre-roll.
+            credit=64000;last=time.monotonic() # one second of microphone pre-roll may arrive at once
             while True:
                 frames=await asyncio.wait_for(socket.receive_bytes(),15)
-                now=time.monotonic();credit=min(12800,credit+(now-last)*64000);last=now
+                now=time.monotonic();credit=min(64000,credit+(now-last)*64000);last=now
                 if not frames or len(frames)>6400 or len(frames)%2 or len(frames)>credit:
                     await socket.close(code=1009);return
                 credit-=len(frames)

@@ -132,7 +132,7 @@ class SecurityMiddleware:
                         if path == '/world/view' else
                         "default-src 'self'; script-src 'self' https://www.youtube.com https://s.ytimg.com; style-src 'self'; frame-src https://www.youtube-nocookie.com; connect-src 'self' https://www.youtube.com; img-src 'self' https://i.ytimg.com; object-src 'none'; frame-ancestors " + ' '.join('http://'+name+(':'+str(parsed.port) if parsed.port else '') for name in ('127.0.0.1','localhost','[::1]')) + "; base-uri 'none'; form-action 'none'"
                         if path == '/music/player' else
-                        "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob: https://*.googlevideo.com; connect-src 'self'; frame-src 'self' http://localhost:* http://127.0.0.1:* https://www.youtube-nocookie.com; object-src 'none'; frame-ancestors " + ("'self'" if path == '/tests' else "'none'") + "; base-uri 'none'; form-action 'self'"
+                        "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob: https://*.googlevideo.com; connect-src 'self'; frame-src 'self' http://localhost:* http://127.0.0.1:* https://www.youtube-nocookie.com; object-src 'none'; frame-ancestors " + ("'self'" if path == '/tests' else "'none'") + "; base-uri 'none'; form-action 'self'"
                     ),
                 }
                 if path=='/music/player':additions.pop('x-frame-options') # CSP restricts parents to this loopback port.

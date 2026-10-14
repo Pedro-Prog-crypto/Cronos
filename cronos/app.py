@@ -92,7 +92,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         task = asyncio.create_task(app.state.monitor.run())
         windows_task = asyncio.create_task(app.state.windows.watch())
         async def warm_recognition():
-            if settings.transcription_provider!='vosk':return
+            if settings.transcription_provider!='vosk' and not app.state.panels.preferences.called_only:return
             try:await asyncio.to_thread(local_recognizer.prepare)
             except ValueError:pass # The transcription endpoint reports configuration errors on use.
         recognition_task=asyncio.create_task(warm_recognition())
