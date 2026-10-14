@@ -1,4 +1,4 @@
-"""Search public video metadata; playback stays in YouTube's official player."""
+"""Public music catalog and an internal, official YouTube player."""
 import json
 import asyncio
 import threading
@@ -9,6 +9,8 @@ from urllib.parse import parse_qs, urlparse, urlencode
 
 import httpx
 from fastapi import Depends, HTTPException, Query
+from fastapi.responses import FileResponse
+from pathlib import Path
 
 METADATA_LOCK=threading.BoundedSemaphore(1)
 CACHE={}
@@ -170,9 +172,18 @@ def resolve_native(ident,clip):
 
 
 def install_native_music(app,authenticate):
-    @app.get('/music/resolve',dependencies=[Depends(authenticate)])
-    async def resolve(id:str=Query(pattern=r'^[A-Za-z0-9_-]{11}$'),video:bool=False):
+    @app.get('/music/player',include_in_schema=False)
+    async def player():
         if app.state.engine.settings.privacy_mode=='local':raise HTTPException(403,'Música online está desativada no modo local.')
+        return FileResponse(Path(__file__).parent/'static'/'music-player.html')
+
+    @app.get('/music/resolve',dependencies=[Depends(authenticate)])
+    async def resolve(id:str=Query(pattern=r'^[A-Za-z0-9_-]{11}$'),video:bool=False,native:bool=False):
+        if app.state.engine.settings.privacy_mode=='local':raise HTTPException(403,'Música online está desativada no modo local.')
+        # Signed CDN URLs can require extractor-specific headers and expire.
+        # The official embedded player negotiates playback itself, inside
+        # Kronos, without a subprocess, a new tab, or a 25-second extraction.
+        if not native:return {'player':'official','id':id,'video':video}
         key=(id,video);cached=MEDIA_CACHE.get(key)
         if cached and time.monotonic()-cached[0]<240:return cached[1]
         try:result=await asyncio.wait_for(asyncio.to_thread(resolve_native,id,video),25)

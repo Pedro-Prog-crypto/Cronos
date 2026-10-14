@@ -8,7 +8,7 @@ reply_sink = ContextVar('reply_sink', default=None)
 def ready_reply(raw):
     # Only accept the exact leading fields. Tool requests must never be spoken
     # as completed actions. JSONDecoder handles escaped quotes and braces.
-    decoder=json.JSONDecoder()
+    decoder=json.JSONDecoder(strict=False)
     try:
         index=0
         def space():
@@ -39,7 +39,7 @@ async def deliver(reply):
 def ready_intro(raw):
     """One short, complete sentence while the rest of reply is generated."""
     import re
-    decoder=json.JSONDecoder()
+    decoder=json.JSONDecoder(strict=False)
     try:
         # No regex matching inside user text: decode the leading tool field.
         if not raw.lstrip().startswith('{'):return None
@@ -74,7 +74,7 @@ def ready_intro(raw):
         segment=raw[start:index]
         if escaped:segment=segment[:-1]
         segment=re.sub(r'\\u[0-9a-fA-F]{0,3}$','',segment)
-        text=json.loads('"'+segment+'"')
+        text=json.loads('"'+segment+'"',strict=False)
         match=re.search(r'[.!?](?:\s|$)',text[:140])
         if match and any(char.isalnum() for char in text[:match.start()]):return text[:match.end()]
         if len(text)>=100:

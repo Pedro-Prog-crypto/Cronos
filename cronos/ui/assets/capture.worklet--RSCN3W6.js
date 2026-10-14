@@ -1,9 +1,15 @@
 // Local PCM/VAD with a short pre-roll; no encoder, network, or secrets here.
 class CronosCapture extends AudioWorkletProcessor {
-  constructor(){super();this.blocked=false;this.chunks=[];this.pre=[];this.active=false;this.silent=0;this.frames=0;this.voiced=0;this.noise=.0005;this.calibration=0;this.minimum=Infinity;this.sensitivity=70;this.gain=2;this.port.onmessage=e=>{this.sensitivity=e.data.sensitivity??this.sensitivity;this.gain=e.data.gain??this.gain;this.blocked=e.data.blocked;if(this.blocked)this.clear();};}
+  constructor(){super();this.blocked=false;this.keyword=false;this.keywordChunks=[];this.keywordFrames=0;this.chunks=[];this.pre=[];this.active=false;this.silent=0;this.frames=0;this.voiced=0;this.noise=.0005;this.calibration=0;this.minimum=Infinity;this.sensitivity=70;this.gain=2;this.port.onmessage=e=>{this.sensitivity=e.data.sensitivity??this.sensitivity;this.gain=e.data.gain??this.gain;if(e.data.keyword!==undefined&&e.data.keyword!==this.keyword){this.keyword=e.data.keyword;this.keywordChunks=[];this.keywordFrames=0;}this.blocked=e.data.blocked??this.blocked;if(this.blocked)this.clear();};}
   clear(){if(this.active)this.port.postMessage({active:false});this.chunks=[];this.pre=[];this.active=false;this.silent=0;this.frames=0;this.voiced=0;}
   process(inputs){
-    const data=inputs[0]?.[0];if(!data||this.blocked)return true;
+    const data=inputs[0]?.[0];if(!data)return true;
+    if(this.keyword){
+      const copy=new Int16Array(data.length);for(let i=0;i<data.length;i++)copy[i]=Math.max(-1,Math.min(1,data[i]))*32767;
+      this.keywordChunks.push(copy);this.keywordFrames+=copy.length;
+      if(this.keywordFrames>=sampleRate*.1){const output=new Int16Array(this.keywordFrames);let offset=0;for(const part of this.keywordChunks){output.set(part,offset);offset+=part.length;}this.port.postMessage({keyword:output},[output.buffer]);this.keywordChunks=[];this.keywordFrames=0;}
+    }
+    if(this.blocked)return true;
     let sum=0,peak=0;for(const sample of data){sum+=sample*sample;peak=Math.max(peak,Math.abs(sample));}
     const rms=Math.sqrt(sum/data.length);
     const calibrating=this.calibration<sampleRate*.15;

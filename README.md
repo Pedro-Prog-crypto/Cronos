@@ -121,7 +121,7 @@ conta. Não há fallback automático que esconda falhas ou mude sua voz.
 Há síntese MP3, transcrição e endpoint de áudio em streaming. A interface
 básica usa o MP3 completo; a interface definitiva pode consumir o streaming.
 A API permite selecionar referência e velocidade por solicitação. Ela não
-seleciona uma “voz sombria” com base em palavras do assunto. Gemini Live, interrupção de fala, STT offline de conversa e síntese local permanecem adaptações futuras. O novo ouvinte de abertura é local e separado da conversa; não foi transplantado do código antigo.
+seleciona uma “voz sombria” com base em palavras do assunto. A integração atual acrescenta Gemini Live, STT local e interrupção pela palavra Cronos. Síntese local ainda não está integrada. O novo ouvinte de abertura é local e separado da conversa; não foi transplantado do código antigo.
 
 ## Ferramentas e integrações
 
@@ -236,7 +236,7 @@ Painéis desktop e controles disponíveis: [documentação dos 12 painéis](docs
 Abra `Iniciar-Cronos-Web.bat` (Brave ou navegador padrão). O player só é criado
 quando solicitado. Exemplos: “Kronos, colocar música Evidências”, “colocar músicas
 parecidas de MC Hariel”, “pausar música”, “continuar música”, “próxima música” e
-“parar música”. O player interno reproduz os fluxos públicos de áudio/vídeo da fonte, sem iframe nem janela externa. O navegador pode exigir um clique
+“parar música”. O player oficial do YouTube fica incorporado dentro do Kronos, com os controles próprios do assistente, sem abrir uma aba externa. O navegador pode exigir um clique
 inicial para permitir áudio. Conteúdo indisponível ou que exige login/assinatura não é reproduzido por este player; escolha outro resultado.
 
 A pesquisa consulta os resultados públicos do YouTube e usa yt-dlp como alternativa de metadados; mudanças no site,
@@ -316,16 +316,43 @@ as fontes externas permanentemente disponíveis.
 
 
 O comando “Chronos, abre a música Nada pra Fazer” abre a barra própria do Kronos.
-“Abre o clipe Nada pra Fazer” inclui vídeo, limitado a 480p/30 fps. Quando a fonte
-entrega áudio e imagem separados, a interface sincroniza ambos; pausa, busca de
-posição e ESC atingem os dois. Não há link de abertura externa como fallback.
-As URLs de mídia ficam em RAM por até quatro minutos e não vão para o histórico.
-O instalador prepara o runtime JavaScript necessário ao resolvedor: reutiliza
-Node 20+ existente ou baixa uma versão portátil oficial, verificando SHA-256,
-na pasta privada `.cronos-local/media-runtime`. Essa preparação pode exigir
-internet na instalação. Não é necessário instalar FFmpeg para a reprodução;
-o teste de desenvolvimento `frontend/scripts/check-music.py` usa FFmpeg apenas
-para gerar um vídeo de teste temporário.
+“Abre o clipe Nada pra Fazer” e “coloque a música Nada pra Fazer com clipe”
+procuram o clipe oficial. O player incorporado negocia os formatos diretamente
+com o YouTube, evitando a espera do extrator e URLs temporárias recusadas pelo
+navegador. Fila, pausa, volume, posição e ESC controlam a reprodução interna.
+O player só existe enquanto solicitado e é descarregado ao fechar. Ele usa uma
+origem de loopback separada: o código do YouTube não acessa o documento do
+assistente nem recebe suas credenciais. Vídeos que
+não permitem incorporação, ou falhas de conexão, são informados sem abrir o Brave.
+A busca ainda depende do catálogo externo; também aceita o link público do vídeo.
+
+A rota opcional `/music/resolve?native=true` mantém o resolvedor de fluxos diretos
+para diagnóstico e compatibilidade. Ela usa Node 20+ e yt-dlp; limita clipes
+nativos a 480p/30 fps e conserva URLs temporárias apenas em RAM. A instalação
+verifica o SHA-256 do Node portátil oficial. FFmpeg só é usado para gerar os
+arquivos dos testes de desenvolvimento, nunca para reprodução normal.
+
+### Interromper a fala dizendo Cronos
+
+Com o microfone ligado, diga **Cronos** enquanto ele fala ou prepara a resposta.
+A interrupção cancela a voz e a geração pendente, preserva os cards e mantém o
+microfone ligado para a próxima pergunta. ESC continua disponível e fecha também
+os painéis. O detector reutiliza o mesmo microfone com cancelamento de eco: não
+abre outro processo nem envia essa escuta ao Gemini ou Fish.
+
+O reconhecimento usa o modelo português local preparado por `Instalar-Cronos.bat`.
+Como esse modelo não contém o nome Cronos no vocabulário, o detector usa a
+pronúncia mais próxima disponível, exige uma hipótese estável e confirma o áudio
+com confiança alta antes de interromper. Reconhecimento de voz pode errar; não
+há garantia de reconhecer qualquer distância, ruído ou sotaque. Sem o modelo,
+o programa informa a falta e mantém ESC, sem consumir uma API como substituição.
+
+A saída Live do Gemini é uma transcrição, não um canal JSON estrito. Quebras de
+linha literais ou metadados de memória inválidos agora são recuperados localmente
+quando a resposta e as ferramentas continuam válidas. Metadados truncados podem
+ser descartados somente depois de uma resposta completa e ferramentas vazias.
+Ferramentas incompletas não são adivinhadas nem executadas. Não há uma segunda
+chamada automática à IA para refazer a formatação.
 
 ### Resposta rápida e exibição da última explicação
 

@@ -110,12 +110,29 @@ def test_native_resolver_auth_validation_and_no_external_redirect(settings,monke
     with TestClient(create_app(settings)) as client:
         assert client.get('/music/resolve?id=abcdefghijk').status_code==401
         assert client.get('/music/resolve?id=../private',headers=AUTH).status_code==422
-        result=client.get('/music/resolve?id=abcdefghijk',headers=AUTH)
+        result=client.get('/music/resolve?id=abcdefghijk&native=true',headers=AUTH)
         assert result.status_code==200 and 'location' not in result.headers
         assert result.json()['title']=='Nada pra Fazer'
-        client.get('/music/resolve?id=abcdefghijk',headers=AUTH)
+        client.get('/music/resolve?id=abcdefghijk&native=true',headers=AUTH)
         assert len(calls)==1
         assert 'https://*.googlevideo.com' in client.get('/').headers['content-security-policy']
+
+
+def test_official_internal_player_does_not_wait_for_extraction(settings,monkeypatch):
+    def forbidden(*args):raise AssertionError('Default player must not extract a temporary CDN URL')
+    monkeypatch.setattr('cronos.music.resolve_native',forbidden)
+    with TestClient(create_app(settings)) as client:
+        result=client.get('/music/resolve?id=abcdefghijk&video=true',headers=AUTH)
+        assert result.json()=={'player':'official','id':'abcdefghijk','video':True}
+        frame=client.get('/music/player?id=abcdefghijk')
+        assert frame.status_code==200 and 'music-player.js' in frame.text
+        assert 'x-frame-options' not in frame.headers
+        assert 'frame-ancestors http://127.0.0.1 http://localhost' in frame.headers['content-security-policy']
+        assert frame.headers['referrer-policy']=='strict-origin-when-cross-origin'
+        assert 'https://www.youtube.com' in frame.headers['content-security-policy']
+        assert "script-src 'self';" in client.get('/').headers['content-security-policy']
+    with TestClient(create_app(replace(settings,privacy_mode='local'))) as client:
+        assert client.get('/music/player?id=abcdefghijk').status_code==403
 
 
 def test_music_request_cannot_be_redirected_to_external_browser(settings):

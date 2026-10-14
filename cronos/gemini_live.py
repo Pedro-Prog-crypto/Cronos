@@ -14,7 +14,8 @@ import time
 from cronos import conversation_metrics
 from cronos import usage
 from cronos.reply_stream import ready_reply,deliver,ready_intro,deliver_intro,deliver_transcript
-from cronos.providers import OUTPUT_RULES,ProviderError,parse_reply,record_gemini_error
+from cronos.providers import OUTPUT_RULES,ProviderError,record_gemini_error
+from cronos.live_output import parse_live_output
 
 ORIGINAL_MODELS=('models/gemini-3.1-flash-live-preview','models/gemini-2.5-flash-native-audio-preview-12-2025')
 
@@ -69,7 +70,7 @@ async def turn(client,model,system,messages,thinking_budget=0):
                             await deliver(early);delivered=True
                             metrics['reply_ready_ms']=round((time.perf_counter()-sent)*1000)
                     if candidate.endswith('}'):
-                        try:parse_reply(candidate)
+                        try:parse_live_output(candidate)
                         except ProviderError:pass
                         else:
                             if audio is None or input_chunks:return True  # Full payload and actual spoken question are available.
@@ -82,7 +83,8 @@ async def turn(client,model,system,messages,thinking_budget=0):
         raw=''.join(chunks).strip()
         # Some Live models wrap valid structured output in markdown fences.
         raw=re.sub(r'^```(?:json)?\s*|\s*```$','',raw,flags=re.I)
-        result=parse_reply(raw)
+        result,recovered=parse_live_output(raw,complete=True)
+        metrics['format_recovered']=recovered
         if audio is not None:
             recognized=''.join(input_chunks).strip()
             if not recognized or len(recognized)>16000:raise ProviderError('Gemini não retornou uma transcrição válida da pergunta falada.',502)

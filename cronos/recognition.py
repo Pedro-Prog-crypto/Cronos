@@ -4,6 +4,7 @@ import io
 import json
 import threading
 import wave
+import re
 from cronos import wake
 
 
@@ -41,6 +42,26 @@ class LocalRecognizer:
     def prepare(self):
         with self.lock:self._load()
 
+    def keyword_listener(self):
+        with self.lock:
+            factory=self._load()
+            words=[word for word in ('cronos','kronos','chronos') if self.model.vosk_model_find_word(word)>=0]
+            # The shipped Portuguese model lacks the proper name Cronos.
+            # Its closest supported pronunciation is "cromos" (validated
+            # with spoken Cronos). Unknown speech stays [unk], rather than
+            # forcing all input into the wake word.
+            if not words:words=['cromos']
+            grammar=json.dumps([*words,'[unk]'])
+            recognizer=factory(self.model,16000,grammar)
+        if hasattr(recognizer,'SetWords'):recognizer.SetWords(True)
+        def confirm(frames):
+            probe=factory(self.model,16000,grammar);probe.SetWords(True)
+            probe.AcceptWaveform(frames+bytes(16000))
+            data=json.loads(probe.FinalResult())
+            hits=[w for w in data.get('result',[]) if w.get('word') in words]
+            return any(w.get('conf',0)>=.92 and .25<=w.get('end',0)-w.get('start',0)<=1.1 for w in hits)
+        return KeywordListener(recognizer,words,confirm)
+
     def transcribe(self,audio):
         frames=read_pcm(audio)
         with self.lock:
@@ -57,6 +78,29 @@ class LocalRecognizer:
             if not text or (confidences and sum(confidences)/len(confidences)<.55):
                 raise ValueError('Não consegui reconhecer a fala com segurança. Repita a pergunta mais perto do microfone; ela não foi enviada à IA.')
             return text
+
+
+class KeywordListener:
+    """Stable keyword hypotheses with an explicit unknown-speech alternative."""
+    def __init__(self,recognizer,words=('cronos','kronos','chronos'),confirm=None):
+        self.recognizer=recognizer
+        self.words=set(words)
+        self.stable=0
+        self.confirm=confirm
+        self.frames=b''
+
+    def feed(self,frames):
+        if self.confirm:self.frames=(self.frames+frames)[-64000:]
+        final=self.recognizer.AcceptWaveform(frames)
+        data=json.loads(self.recognizer.Result() if final else self.recognizer.PartialResult())
+        text=data.get('text' if final else 'partial','').casefold()
+        found=bool(set(re.findall(r'\w+',text))&self.words)
+        if final:
+            self.stable=0
+            words=[w for w in data.get('result',[]) if w.get('word','').casefold() in self.words]
+            return found and bool(words) and all(w.get('conf',0)>=.92 for w in words)
+        self.stable=self.stable+1 if found else 0
+        return self.stable>=2 and (self.confirm is None or (self.stable%3==2 and self.confirm(self.frames)))
 
 
 def main():

@@ -16,3 +16,5 @@ assert.deepEqual(musicCommand('Chronos, coloque a minha música preferida, que �
 assert.deepEqual(musicCommand('Kronos, quero ver o clipe Nada pra Fazer'),{action:'search',query:'Nada pra Fazer',similar:false,video:true});
 assert.deepEqual(musicCommand('música anterior'),{action:'previous'});
 assert.deepEqual(musicCommand('Chronos, abre a música Nada pra Fazer'),{action:'search',query:'Nada pra Fazer',similar:false});
+assert.deepEqual(musicCommand('Cronos, coloque a música Nada pra Fazer com clipe'),{action:'search',query:'Nada pra Fazer',similar:false,video:true});
+assert.deepEqual(musicCommand('Cronos, abrir a música e o clipe de Nada pra Fazer'),{action:'search',query:'Nada pra Fazer',similar:false,video:true});

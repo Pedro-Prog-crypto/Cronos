@@ -11,6 +11,9 @@ with wave.open(buffer,'wb') as out:
 WAV=buffer.getvalue()
 class Handler(http.server.SimpleHTTPRequestHandler):
  def log_message(self,*args):pass
+ def do_GET(self):
+  if self.path.startswith('/music/player?'):self.path='/static/music-player.html'
+  return super().do_GET()
 server=http.server.ThreadingHTTPServer(('127.0.0.1',0),partial(Handler,directory=str(ROOT/'cronos')))
 threading.Thread(target=server.serve_forever,daemon=True).start()
 async def main(mp4):
@@ -28,7 +31,10 @@ async def main(mp4):
    if 'Slow' in r.request.url:await release.wait()
    await r.fulfill(json={'tracks':[{'id':'abcdefghijk','title':'Nada pra Fazer'},{'id':'12345678901','title':'Outra música'}]})
   await page.route('**/music/search?*',search)
+  official_mode=False
   async def resolve(r):
+   if official_mode:
+    await r.fulfill(json={'player':'official','id':'abcdefghijk'});return
    clip='video=true' in r.request.url
    await r.fulfill(json={'audio_url':'https://rr1.googlevideo.com/audio','video_url':'https://rr1.googlevideo.com/video' if clip else None,'title':'Nada pra Fazer'})
   await page.route('**/music/resolve?*',resolve)
@@ -41,6 +47,9 @@ async def main(mp4):
    else:await r.fulfill(body=content,content_type=mime,headers={'Accept-Ranges':'bytes'})
   await page.route('https://rr1.googlevideo.com/audio',lambda r:stream(r,WAV,'audio/wav'))
   await page.route('https://rr1.googlevideo.com/video',lambda r:stream(r,mp4,'video/mp4'))
+  await page.route('**/music-test.wav',lambda r:stream(r,WAV,'audio/wav'))
+  await page.route('https://www.youtube-nocookie.com/embed/**',lambda r:r.fulfill(body='<html><body>Official player fixture</body></html>',content_type='text/html'))
+  await page.route('https://www.youtube.com/iframe_api',lambda r:r.fulfill(body='''window.YT={Player:function(frame,options){const a=new Audio('/music-test.wav');this.playVideo=()=>a.play();this.pauseVideo=()=>a.pause();this.seekTo=n=>a.currentTime=n;this.setVolume=n=>a.volume=n/100;this.getCurrentTime=()=>a.currentTime;this.getDuration=()=>Number.isFinite(a.duration)?a.duration:0;this.destroy=()=>a.pause();a.onplaying=()=>options.events.onStateChange({data:1});a.onpause=()=>options.events.onStateChange({data:2});a.onended=()=>options.events.onStateChange({data:0});setTimeout(()=>options.events.onReady(),0);}};window.onYouTubeIframeAPIReady();''',content_type='text/javascript'))
   errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
   await page.goto(f'http://127.0.0.1:{server.server_port}/ui/index.html')
   async def command(text):
@@ -67,10 +76,25 @@ async def main(mp4):
   assert await page.evaluate('document.querySelector(".music-player audio").paused&&document.querySelector(".music-player video").paused')
   await page.keyboard.press('Escape')
   assert await page.locator('.music-player audio,.music-player video,.music-player iframe').count()==0
+  official_mode=True
+  await command('Chronos, abre o clipe Nada pra Fazer')
+  await expect(page.locator('.music-playback-status')).to_contain_text('Reproduzindo')
+  assert await page.locator('.music-player iframe').count()==1
+  assert '/music/player?' in await page.locator('.music-player iframe').get_attribute('src')
+  child=page.frame_locator('.music-player iframe')
+  assert not await child.locator('body').evaluate('()=>{try{return Boolean(parent.document)}catch{return false}}'), 'official API must not access the assistant document'
+  await page.get_by_role('button',name='Pausar',exact=True).click()
+  await expect(page.locator('.music-playback-status')).to_contain_text('Pausado')
+  await page.get_by_label('Posição da música',exact=True).fill('4')
+  await page.wait_for_function('()=>document.querySelector(".music-playback-status").textContent.includes("0:04")')
+  await page.get_by_role('button',name='Continuar',exact=True).click()
+  await expect(page.locator('.music-playback-status')).to_contain_text('Reproduzindo')
+  await page.keyboard.press('Escape')
+  assert await page.locator('.music-player iframe').count()==0
   await command('tocar música Slow');await page.locator('.music-player').wait_for();await page.keyboard.press('Escape');release.set()
   await page.wait_for_timeout(500);assert await page.locator('.music-player').count()==0
   assert len(page.context.pages)==1 and not errors,errors
-  print('PASS: native audio plays, pauses, seeks and changes volume; separate real MP4 video decodes and synchronizes; ESC removes players and cancels pending searches; no iframe or external tab. Catalog/stream addresses mocked.')
+  print('PASS: native audio and MP4 clip decode and synchronize; official internal player bridge plays real fixture audio, pauses and seeks; ESC unloads both players and cancels searches; no external tab. Catalog and official YouTube API mocked.')
   await browser.close()
 try:
  with tempfile.TemporaryDirectory() as directory:

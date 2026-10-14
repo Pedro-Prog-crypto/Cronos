@@ -92,7 +92,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         task = asyncio.create_task(app.state.monitor.run())
         windows_task = asyncio.create_task(app.state.windows.watch())
         async def warm_recognition():
-            if settings.transcription_provider!='vosk' or (settings.privacy_mode=='online' and settings.provider=='gemini' and settings.gemini_transport=='live'):return
+            if settings.transcription_provider!='vosk':return
             try:await asyncio.to_thread(local_recognizer.prepare)
             except ValueError:pass # The transcription endpoint reports configuration errors on use.
         recognition_task=asyncio.create_task(warm_recognition())
@@ -112,6 +112,8 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
             await app.state.windows.close()
 
     app = FastAPI(title="Cronos", version="0.5.0", lifespan=lifespan, docs_url=None, redoc_url=None)
+    from cronos.voice_interrupt import install_interrupt
+    install_interrupt(app,settings,local_recognizer)
     static = Path(__file__).parent / "static"
     app.mount("/static", StaticFiles(directory=static), name="static")
     ui = Path(__file__).parent / "ui"
@@ -187,6 +189,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 "privacy_mode": settings.privacy_mode,
                 "fish_configured": bool(settings.fish_key) and settings.privacy_mode == 'online',
                 "transcription_provider": settings.transcription_provider,
+                "local_voice_interrupt":True,
                 "direct_audio_chat":current.privacy_mode=="online" and current.provider=="gemini" and current.gemini_transport=="live",
                 "fish_model_in_use": active_fish_model,
                 "fish_pcm_streaming": active_fish_model=="s2.1-pro-free" and settings.privacy_mode=="online",

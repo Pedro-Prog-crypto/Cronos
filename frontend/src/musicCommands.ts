@@ -12,7 +12,13 @@ export function musicCommand(text:string):MusicCommand|null {
  const similar=clean.match(/^(?:tocar|toque|colocar|coloque|reproduzir|reproduza) (?:umas? )?m[uú]sicas? (?:parecidas?|semelhantes?) (?:com |(?:as? )?de )(.+)$/i);
  if(similar)return {action:'search',query:similar[1].trim(),similar:true};
  const media=clean.match(/^(?:tocar|toque|colocar|coloque|reproduzir|reproduza|abrir|abra|abre|ver|quero(?: ouvir| ver)?)\s+(?:(?:a |o |uma |um )?(?:minha |meu )?)(m[uú]sicas?|clipes?|v[ií]deos?)\s+(.+)$/i);
- if(media){const query=media[2].replace(/^(?:preferid[ao]|favorit[ao])(?:[, ]+(?:(?:que )?[eé]|chamad[ao]|se chama))?[, :]+/i,'').replace(/^(?:que )?[eé][, :]+/i,'').trim();if(!query)return null;return {action:'search',query,similar:false,...(/clipe|v[ií]deo/i.test(media[1])?{video:true}:{})};}
+ if(media){
+  const paired=/^(?:e |junto com )(?:o )?(?:clipe|v[ií]deo)(?: de)?\s+/i;
+  const withClip=/\s+(?:junto )?com (?:o )?(?:clipe|v[ií]deo)$/i;
+  const asVideo=/clipe|v[ií]deo/i.test(media[1])||paired.test(media[2])||withClip.test(media[2]);
+  const query=media[2].replace(paired,'').replace(withClip,'').replace(/^(?:da |de )?m[uú]sica\s+/i,'').replace(/^(?:preferid[ao]|favorit[ao])(?:[, ]+(?:(?:que )?[eé]|chamad[ao]|se chama))?[, :]+/i,'').replace(/^(?:que )?[eé][, :]+/i,'').trim();
+  if(!query)return null;return {action:'search',query,similar:false,...(asVideo?{video:true}:{})};
+ }
  const direct=clean.match(/^(?:tocar|toque)\s+(.+)$/i)||clean.match(/^(?:colocar|coloque|reproduzir|reproduza)\s+(https:\/\/.+)$/i);
  if(direct&&!/^(?:o |a )?(?:olho|mem[oó]ria|obsidian|painel|frequ[eê]ncia|tom)\b/i.test(direct[1]))return {action:'search',query:direct[1].trim(),similar:false};
  return null;
