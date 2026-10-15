@@ -219,11 +219,10 @@ def install_native_music(app,authenticate):
         return FileResponse(Path(__file__).parent/'static'/'music-player.html')
 
     @app.get('/music/resolve',dependencies=[Depends(authenticate)])
-    async def resolve(id:str=Query(pattern=r'^[A-Za-z0-9_-]{11}$'),video:bool=False,native:bool=False):
+    async def resolve(id:str=Query(pattern=r'^[A-Za-z0-9_-]{11}$'),video:bool=False,native:bool=True):
         if app.state.engine.settings.privacy_mode=='local':raise HTTPException(403,'Música online está desativada no modo local.')
-        # Signed CDN URLs can require extractor-specific headers and expire.
-        # The official embedded player negotiates playback itself, inside
-        # Kronos, without a subprocess, a new tab, or a 25-second extraction.
+        # Match the original native media approach; embedding is never a
+        # fallback for resolution failure. The legacy route is opt-in only.
         if not native:return {'player':'official','id':id,'video':video}
         key=(id,video);cached=MEDIA_CACHE.get(key)
         if cached and time.monotonic()-cached[0]<240:return cached[1]

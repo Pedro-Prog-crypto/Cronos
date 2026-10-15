@@ -51,8 +51,8 @@ export const MusicPlayer=forwardRef<MusicHandle,{local:boolean;onError:(message:
  const track=tracks[index];
  useEffect(()=>{
   if(!track)return;let alive=true;const controller=new AbortController();setMedia(null);setState('Preparando mídia');setDuration(0);setElapsed(0);
-  void(async()=>{try{const result=await(await api('/music/resolve?'+new URLSearchParams({id:track.id,video:String(clip)}),{signal:controller.signal})).json();if(alive){setMedia(result);setMessage('');}}
-  catch(error:any){if(alive&&!controller.signal.aborted){setState('Abrindo player interno');setMedia({player:'official',id:track.id});setMessage('Abrindo a reprodução oficial dentro do Kronos.');}}})();
+  void(async()=>{try{const result=await(await api('/music/resolve?'+new URLSearchParams({id:track.id,video:String(clip),native:'true'}),{signal:controller.signal})).json();if(result.player==='official')throw new Error('O servidor retornou o player antigo. Atualize o Cronos nesta mesma pasta para usar reprodução direta.');if(alive){setMedia(result);setMessage('');}}
+  catch(error:any){if(alive&&!controller.signal.aborted){setState('Mídia indisponível');setMedia(null);setMessage(error instanceof Error?error.message:'Não foi possível preparar o fluxo de mídia. Escolha outro resultado.');}}})();
   return()=>{alive=false;controller.abort();audio.current?.pause();video.current?.pause();};
  },[track?.id,clip]);
  useEffect(()=>{if(audio.current)audio.current.volume=volume/100;if(video.current){video.current.volume=media?.audio_url?0:volume/100;video.current.muted=Boolean(media?.audio_url);}if(media)void resume();},[media]);
@@ -77,7 +77,7 @@ export const MusicPlayer=forwardRef<MusicHandle,{local:boolean;onError:(message:
  useEffect(()=>()=>{request.current?.abort();audio.current?.pause();video.current?.pause();if(context.current&&context.current.state!=='closed')void context.current.close().catch(()=>{});},[]);
  const progress=()=>{const main=primary();if(!main)return;setElapsed(main.currentTime);setDuration(Number.isFinite(main.duration)?main.duration:0);if(media?.audio_url&&video.current&&Math.abs(video.current.currentTime-main.currentTime)>.35)video.current.currentTime=main.currentTime;};
  const seek=(value:number)=>{playerCommand('seek',value);if(audio.current)audio.current.currentTime=value;if(video.current)video.current.currentTime=value;setElapsed(value);};
- const failed=()=>{if(!track)return;audio.current?.pause();video.current?.pause();setState('Abrindo player interno');setMedia({player:'official',id:track.id});setMessage('O link temporário falhou. Abrindo a reprodução oficial aqui.');};
+ const failed=()=>{if(!track)return;audio.current?.pause();video.current?.pause();setState('Mídia indisponível');setMedia(null);setMessage('O fluxo de mídia falhou ou expirou. Pesquise novamente ou escolha outro resultado. Nenhum player do YouTube foi aberto.');};
  const ended=()=>{if(index+1<tracks.length)next();else setState('Finalizado');};
  if(!visible)return null;
  return <section ref={container} className={`music-player ${expanded?'music-expanded':''}`} aria-label="Música no Kronos"><header><strong>{hz?`${hz} Hz`:media?.title||track?.title||'MÚSICA E CLIPES'}</strong><button onClick={()=>setExpanded(v=>!v)} aria-label={expanded?'Reduzir player':'Maximizar player'}>{expanded?'▣':'□'}</button><button onClick={()=>void fullscreen()} aria-label={fullscreenActive?'Sair da tela cheia':'Tela cheia do Cronos'}>⛶</button><button onClick={talk} aria-label="Pausar música e falar com Cronos" title="Pausar música e falar com Cronos">🎙</button><button onClick={stop} aria-label="Fechar música">×</button></header>

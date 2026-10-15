@@ -13,7 +13,7 @@ def node_executable():
             version=subprocess.check_output([candidate,'--version'],creationflags=flags,timeout=5).decode().strip()
             if int(version.lstrip('v').split('.')[0])>=20:return candidate
         except (OSError,ValueError,subprocess.SubprocessError):pass
-    if os.name!='nt':raise RuntimeError('Node.js 20 ou superior é necessário para os serviços do Olho de Deus.')
+    if os.name!='nt':raise RuntimeError('Node.js 20 ou superior é necessário para resolver os fluxos de música e vídeo.')
     arch='arm64' if platform.machine().lower() in {'arm64','aarch64'} else 'x64'
     name=f'node-v{VERSION}-win-{arch}';target=STATE/'runtime'/name/'node.exe'
     if target.is_file():return str(target)

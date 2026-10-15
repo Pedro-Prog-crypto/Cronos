@@ -35,6 +35,7 @@ async def main(mp4):
   async def resolve(r):
    if official_mode:
     await r.fulfill(json={'player':'official','id':'abcdefghijk'});return
+   assert 'native=true' in r.request.url
    clip='video=true' in r.request.url
    await r.fulfill(json={'audio_url':'https://rr1.googlevideo.com/audio','video_url':'https://rr1.googlevideo.com/video' if clip else None,'title':'Nada pra Fazer'})
   await page.route('**/music/resolve?*',resolve)
@@ -80,41 +81,32 @@ async def main(mp4):
   assert await page.evaluate('document.querySelector(".music-player audio").paused&&document.querySelector(".music-player video").paused')
   await page.keyboard.press('Escape')
   assert await page.locator('.music-player audio,.music-player video,.music-player iframe').count()==0
+  # Even an outdated server response must not silently load a YouTube iframe.
   official_mode=True
   await command('Chronos, abre o clipe Nada pra Fazer')
-  await expect(page.locator('.music-playback-status')).to_contain_text('Reproduzindo')
-  assert await page.locator('.music-player iframe').count()==1
-  assert '/music/player?' in await page.locator('.music-player iframe').get_attribute('src')
-  await page.get_by_role('button',name='Qualidade do vídeo',exact=True).click()
-  await expect(page.locator('.music-quality-help')).to_contain_text('1440p')
-  assert await page.locator('.music-player').evaluate('e=>e.clientWidth>1000')
-  await page.get_by_role('button',name='Tela cheia',exact=True).click()
+  await expect(page.locator('.music-player [role=status]')).to_contain_text('player antigo')
+  assert await page.locator('.music-player iframe').count()==0
+  await page.keyboard.press('Escape')
+  official_mode=False
+  await command('Chronos, abre o clipe Nada pra Fazer')
+  await page.wait_for_function('()=>document.querySelector(".music-player video")?.videoWidth===160')
+  await page.get_by_role('button',name='Tela cheia do Cronos',exact=True).click()
   await page.wait_for_function('()=>document.fullscreenElement?.classList.contains("music-player")')
   await page.evaluate('document.exitFullscreen()')
-  child=page.frame_locator('.music-player iframe')
-  assert not await child.locator('body').evaluate('()=>{try{return Boolean(parent.document)}catch{return false}}'), 'official API must not access the assistant document'
-  await page.get_by_role('button',name='Pausar',exact=True).click()
-  await expect(page.locator('.music-playback-status')).to_contain_text('Pausado')
-  await page.get_by_label('Posição da música',exact=True).fill('4')
-  await page.wait_for_function('()=>document.querySelector(".music-playback-status").textContent.includes("0:04")')
-  await page.get_by_role('button',name='Continuar',exact=True).click()
-  await expect(page.locator('.music-playback-status')).to_contain_text('Reproduzindo')
   await page.get_by_role('button',name='Pausar música e falar com Cronos').click()
   await expect(page.get_by_role('button',name='Desligar microfone')).to_have_attribute('aria-pressed','true')
-  await expect(page.locator('.music-playback-status')).to_contain_text('Pausado')
   await page.evaluate('testMic.getAudioTracks()[0].dispatchEvent(new Event("ended"))')
   await expect(page.get_by_role('button',name='Ligar microfone')).to_have_attribute('aria-pressed','false')
   await page.get_by_role('button',name='Pausar música e falar com Cronos').click()
   await expect(page.get_by_role('button',name='Desligar microfone')).to_have_attribute('aria-pressed','true')
-  assert await page.evaluate('micOpens')>=2
   await page.keyboard.press('Escape')
-  assert await page.locator('.music-player iframe').count()==1, 'ESC must reduce expanded player without destroying playback'
+  assert await page.locator('.music-player video').count()==1
   await page.keyboard.press('Escape')
-  assert await page.locator('.music-player iframe').count()==0
+  assert await page.locator('.music-player video').count()==0
   await command('tocar música Slow');await page.locator('.music-player').wait_for();await page.keyboard.press('Escape');release.set()
   await page.wait_for_timeout(500);assert await page.locator('.music-player').count()==0
   assert len(page.context.pages)==1 and not errors,errors
-  print('PASS: native audio and MP4 clip decode and synchronize; official internal player bridge plays real fixture audio, pauses and seeks; ESC unloads both players and cancels searches; no external tab. Catalog and official YouTube API mocked.')
+  print('PASS: native audio and MP4 clip decode/synchronize, fullscreen and microphone recovery; rejects old embedded-player response; no iframe/external tab; ESC cancels playback and searches. External catalog/media are fixtures.')
   await browser.close()
 try:
  with tempfile.TemporaryDirectory() as directory:

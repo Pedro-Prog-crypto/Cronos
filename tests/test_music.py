@@ -124,7 +124,7 @@ def test_official_internal_player_does_not_wait_for_extraction(settings,monkeypa
     def forbidden(*args):raise AssertionError('Default player must not extract a temporary CDN URL')
     monkeypatch.setattr('cronos.music.resolve_native',forbidden)
     with TestClient(create_app(settings)) as client:
-        result=client.get('/music/resolve?id=abcdefghijk&video=true',headers=AUTH)
+        result=client.get('/music/resolve?id=abcdefghijk&video=true&native=false',headers=AUTH)
         assert result.json()=={'player':'official','id':'abcdefghijk','video':True}
         frame=client.get('/music/player?id=abcdefghijk')
         assert frame.status_code==200 and 'music-player.js' in frame.text
@@ -166,3 +166,22 @@ def test_fallback_catalogs_uses_fast_valid_result(monkeypatch):
     monkeypatch.setattr('cronos.music.metadata_search',lambda query:[])
     monkeypatch.setattr('cronos.music.catalog_fallback',lambda query:[{'id':'abcdefghijk','title':query}])
     assert asyncio.run(fallback_catalogs('Nada pra Fazer'))==[{'id':'abcdefghijk','title':'Nada pra Fazer'}]
+
+
+def test_native_playback_is_default_and_failures_never_embed(settings,monkeypatch):
+    from cronos.music import MEDIA_CACHE
+    MEDIA_CACHE.clear()
+    calls=[]
+    def resolve(ident,clip):
+        calls.append((ident,clip))
+        return {'video_url':'https://rr1.googlevideo.com/clip','audio_url':None,'title':'Clipe'}
+    monkeypatch.setattr('cronos.music.resolve_native',resolve)
+    with TestClient(create_app(settings)) as client:
+        result=client.get('/music/resolve?id=abcdefghijk&video=true',headers=AUTH)
+        assert result.status_code==200 and result.json()['video_url'].endswith('/clip')
+        assert 'player' not in result.json() and calls==[('abcdefghijk',True)]
+        MEDIA_CACHE.clear()
+        def broken(*args):raise ValueError('Fonte indisponível')
+        monkeypatch.setattr('cronos.music.resolve_native',broken)
+        failure=client.get('/music/resolve?id=abcdefghijk&video=true',headers=AUTH)
+        assert failure.status_code==502 and 'player' not in failure.json()
