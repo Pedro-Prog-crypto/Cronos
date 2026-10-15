@@ -98,3 +98,22 @@ def test_available_gemini_models_are_paginated_without_generation(monkeypatch):
         return httpx.Response(200, json={"models": [{"name": "models/chat-b", "supportedGenerationMethods": ["generateContent"]}]})
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: original(transport=httpx.MockTransport(handler)))
     assert asyncio.run(available_models(replace(Settings.from_env(), gemini_key="test-key"), "gemini")) == ["chat-a", "chat-b"]
+
+
+@pytest.mark.parametrize('kind',['openai','anthropic'])
+@pytest.mark.parametrize('raw',[
+    '```json\n{"reply":"Resposta útil","topics":[{"title":"sem resumo"}]}\n```',
+    '{"tool_calls":[{"name":"obsidian_search","arguments":{"query":"Platão"}}]}'
+])
+def test_compatible_recovers_format_without_second_request(kind,raw,monkeypatch):
+    calls=[];original=httpx.AsyncClient
+    def handler(request):
+        calls.append(request)
+        body={'content':[{'type':'text','text':raw}]} if kind=='anthropic' else {'choices':[{'message':{'content':raw}}]}
+        return httpx.Response(200,json=body)
+    monkeypatch.setattr(httpx,'AsyncClient',lambda **kwargs:original(transport=httpx.MockTransport(handler)))
+    spec=ProviderSpec(id='test',kind=kind,base_url='https://models.example/v1',model='configured-model')
+    result=asyncio.run(CompatibleProvider(spec).reply('Persona',[{'role':'user','content':'Pergunta'}]))
+    assert len(calls)==1 and result['topics']==[]
+    if 'Resposta útil' in raw:assert result['reply']=='Resposta útil'
+    else:assert result['reply']=='' and result['tool_calls'][0]['name']=='obsidian_search'

@@ -63,3 +63,11 @@ usuário. Original MARK LV — JARVIS, Copyright (c) 2026 FatihMakes, CC BY-NC 4
 Adaptação: integração de configuração, histórico, formato estruturado, proteção
 de credenciais e memória do Kronos. Licença original preservada em
 `cronos/licenses/ORIGINAL-KRONOS-LICENSE.txt`.
+
+## Recuperação local de formato
+
+A leitura das respostas agora preserva uma resposta válida quando apenas os metadados opcionais de memória falham, aceita objetos JSON cercados por Markdown e pedidos de ferramenta válidos sem narração. Isso também vale para os conectores REST/OpenAI compatível/Anthropic/Ollama. Nenhuma chamada extra é feita para corrigir o formato.
+
+Na rota Live, uma resposta em linguagem natural só é aceita depois de o servidor confirmar o fim do turno. Nesse caso não são criadas ferramentas nem notas de memória. JSON malformado e comandos incompletos continuam recusados. Uma desconexão sem confirmação de fim não é tratada como resposta natural completa. Os últimos erros Live de formato também ficam registrados localmente no diagnóstico, sem guardar o conteúdo da pergunta/resposta.
+
+Essas correções não resolvem erros de cota (429), serviço (503), chave ou modelo indisponível. Não mudam o modelo configurado nem a voz Fish. Testes dessa recuperação usam respostas simuladas; o erro específico do usuário depende da mensagem apresentada na instalação dele.

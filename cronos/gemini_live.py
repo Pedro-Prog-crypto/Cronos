@@ -26,7 +26,7 @@ def make_client(key):
 async def turn(client,model,system,messages,thinking_budget=0):
     from google.genai import types
     started=time.perf_counter();metrics={}
-    delivered=False;intro_delivered=False
+    delivered=False;intro_delivered=False;turn_finished=False
     audio=messages[-1].get('audio_pcm') if messages else None
     config=types.LiveConnectConfig(response_modalities=['AUDIO'],output_audio_transcription={},thinking_config=types.ThinkingConfig(thinking_budget=thinking_budget),system_instruction=system+'\n'+OUTPUT_RULES,**({'input_audio_transcription':{},'realtime_input_config':{'automatic_activity_detection':{'disabled':True}}} if audio is not None else {}))
     async with client.aio.live.connect(model=model,config=config) as session:
@@ -47,7 +47,7 @@ async def turn(client,model,system,messages,thinking_budget=0):
             await session.send_realtime_input(activity_end=types.ActivityEnd())
         sent=time.perf_counter();chunks=[];input_chunks=[];transcript_delivered=False
         async def drain():
-            nonlocal delivered,intro_delivered,transcript_delivered
+            nonlocal delivered,intro_delivered,transcript_delivered,turn_finished
             async for response in session.receive():
                 content=getattr(response,'server_content',None)
                 recognized=getattr(content,'input_transcription',None)
@@ -74,16 +74,18 @@ async def turn(client,model,system,messages,thinking_budget=0):
                         except ProviderError:pass
                         else:
                             if audio is None or input_chunks:return True  # Full payload and actual spoken question are available.
-                if getattr(content,'turn_complete',False):return audio is None or bool(input_chunks)
+                if getattr(content,'turn_complete',False):
+                    turn_finished=True
+                    return audio is None or bool(input_chunks)
             return False
         complete=await drain()
         if not complete:
-            try:await asyncio.wait_for(drain(),1.5)
+            try:complete=await asyncio.wait_for(drain(),1.5)
             except asyncio.TimeoutError:pass
         raw=''.join(chunks).strip()
         # Some Live models wrap valid structured output in markdown fences.
         raw=re.sub(r'^```(?:json)?\s*|\s*```$','',raw,flags=re.I)
-        result,recovered=parse_live_output(raw,complete=True)
+        result,recovered=parse_live_output(raw,complete=complete,allow_plain=turn_finished)
         metrics['format_recovered']=recovered
         if audio is not None:
             recognized=''.join(input_chunks).strip()
@@ -114,7 +116,9 @@ async def reply(settings,system,messages):
             raise ProviderError('Instale a integração Gemini original: execute Instalar-Cronos.bat novamente.') from None
         except ProviderError as exc:
             usage.audit(model,502,characters)
-            raise ProviderError('Gemini Live: '+str(exc),502) from None
+            message='Gemini Live: '+str(exc)
+            record_gemini_error(502,message)
+            raise ProviderError(message,502) from None
         except asyncio.TimeoutError:
             usage.audit(model,504,characters)
             raise ProviderError('Gemini Live: tempo de resposta esgotado.',504) from None

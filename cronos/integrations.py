@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
-from cronos.providers import Gemini, Ollama, OUTPUT_RULES, ProviderError, parse_reply
+from cronos.providers import Gemini, Ollama, OUTPUT_RULES, ProviderError, parse_completed_reply
 
 
 class ProviderSpec(BaseModel):
@@ -84,7 +84,7 @@ class CompatibleProvider:
                     raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip())
                 else:
                     raw = data["choices"][0]["message"]["content"]
-                return parse_reply(raw)
+                return parse_completed_reply(raw)
         except httpx.HTTPStatusError as exc:
             status = exc.response.status_code
             reason = {401: "chave rejeitada", 403: "acesso negado", 404: "modelo ou endpoint indisponível",

@@ -6,7 +6,8 @@ from cronos.providers import parse_reply, ProviderError
 from cronos.reply_stream import ready_reply
 
 
-def parse_live_output(raw, *, complete=False):
+def parse_live_output(raw, *, complete=False, allow_plain=False):
+    if not isinstance(raw,str):raise ProviderError('Resposta do modelo sem conteúdo textual válido.',502)
     text=re.sub(r'^```(?:json)?\s*|\s*```$', '', raw.strip(), flags=re.I)
     try:
         return parse_reply(text), False
@@ -36,4 +37,11 @@ def parse_live_output(raw, *, complete=False):
     if complete:
         reply=ready_reply(text)
         if reply:return {'reply':reply,'tool_calls':[],'topics':[]}, True
+    # Audio-native Live may answer in ordinary language despite JSON instructions.
+    # Only a server-confirmed end of turn permits this fallback. Never reinterpret
+    # malformed JSON or tool fragments as speech, and never create tools/notes.
+    if complete and allow_plain and text and len(text)<=100000:
+        structured=(text.startswith(('{','[','```')) or re.search(r'["\'](?:tool_calls|reply|topics)["\']\s*:',text))
+        if not structured and any(char.isalpha() for char in text):
+            return {'reply':text,'tool_calls':[],'topics':[]}, True
     raise ProviderError('Gemini Live enviou uma resposta incompleta ou inválida. Nenhuma ferramenta foi executada.',502)

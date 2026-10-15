@@ -133,3 +133,21 @@ def test_live_does_not_return_early_for_incomplete_json(settings,monkeypatch):
     client=NS(aio=NS(live=NS(connect=lambda **kwargs:Connection())))
     result=asyncio.run(gemini_live.turn(client,settings.gemini_live_model,'persona',[{'role':'user','content':'Pergunta'}]))
     assert result['reply']=='Texto com } e " aspas'
+
+
+@pytest.mark.parametrize('finished',[True,False])
+def test_live_natural_language_only_after_server_turn_complete(settings,finished):
+    text='Podemos estudar filosofia usando exemplos do cotidiano.'
+    class Session:
+        async def send_client_content(self,**kwargs):pass
+        async def receive(self):
+            yield NS(server_content=NS(output_transcription=NS(text=text),turn_complete=finished))
+    class Connection:
+        async def __aenter__(self):return Session()
+        async def __aexit__(self,*args):pass
+    client=NS(aio=NS(live=NS(connect=lambda **kwargs:Connection())))
+    if finished:
+        result=asyncio.run(gemini_live.turn(client,settings.gemini_live_model,'persona',[{'role':'user','content':'Explique'}]))
+        assert result=={'reply':text,'topics':[],'tool_calls':[]}
+    else:
+        with pytest.raises(ProviderError):asyncio.run(gemini_live.turn(client,settings.gemini_live_model,'persona',[{'role':'user','content':'Explique'}]))

@@ -98,6 +98,18 @@ def parse_reply(raw: str) -> dict:
         raise ProviderError("O modelo retornou uma resposta fora do formato esperado.") from exc
 
 
+def parse_completed_reply(raw: str) -> dict:
+    """Read a finished provider payload; optional memory must not erase a reply.
+
+    Tool calls remain strictly validated. No extra API request or guessed action.
+    """
+    from cronos.live_output import parse_live_output
+    try:
+        return parse_live_output(raw, complete=True)[0]
+    except ProviderError:
+        raise ProviderError('O modelo enviou uma resposta incompleta ou inválida. Nenhuma ferramenta foi executada.',502) from None
+
+
 class Gemini:
     cooldowns = {}
     def __init__(self, settings: Settings):
@@ -152,7 +164,10 @@ class Gemini:
                 if candidate.get("finishReason") == "MAX_TOKENS":
                     raise ProviderError("Gemini atingiu o limite de saída. Reduza a mensagem ou o contexto da conversa.")
                 raw = "".join(p.get("text", "") for p in candidate["content"]["parts"])
-                return parse_reply(raw)
+                try:return parse_completed_reply(raw)
+                except ProviderError as exc:
+                    record_gemini_error(502,str(exc))
+                    raise
         except httpx.HTTPStatusError as exc:
             # Classificar somente códigos/reasons estruturados; não ecoar o corpo,
             # que pode incluir a chave ou conteúdo pessoal.
@@ -221,7 +236,7 @@ class Ollama:
                     "messages": [{"role": "system", "content": system + "\n" + OUTPUT_RULES}, *messages],
                 })
                 response.raise_for_status()
-                return parse_reply(response.json()["message"]["content"])
+                return parse_completed_reply(response.json()["message"]["content"])
         except (httpx.HTTPError, KeyError, ValueError) as exc:
             raise ProviderError("Ollama indisponível; confira o serviço e o modelo instalado.") from exc
 
