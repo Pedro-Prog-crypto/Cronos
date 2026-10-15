@@ -174,6 +174,7 @@ async def main():
   await page.wait_for_timeout(900)
   reply='## Contexto\nTomás de Aquino viveu no século XIII. \n\n## Exemplo\nPodemos comparar caminhos diferentes para chegar a uma conclusão. \n\n## Sua vez\nComo você explicaria a relação entre razão e fé?'
   transcript[0]='Chronos, me explique Santo Tomás de Aquino em cards'
+  await page.wait_for_timeout(900)  # respect the post-playback echo guard before synthetic speech
   await say(.008)
   await expect(page.get_by_role('heading',name='Contexto',exact=True)).to_be_visible(timeout=20000)
   await expect(page.locator('.answer-card-deck .holo-card')).to_have_count(3)
@@ -181,15 +182,18 @@ async def main():
   await page.wait_for_function('()=>document.querySelector(".reference-mic").title==="Microfone ligado"',timeout=20000)
   reply='## Aplicação\nSua resposta distingue os caminhos sem tratar fé como demonstração científica. \n\n## Sua vez\nVocê consegue dar um exemplo diferente?'
   transcript[0]='A razão usa argumentos, a fé parte da revelação'
+  await page.wait_for_timeout(900)  # respect the post-playback echo guard before synthetic speech
   await say(.008)
   await expect(page.get_by_role('heading',name='Aplicação',exact=True)).to_be_visible(timeout=20000)
   assert await page.locator('.spoken-question').count()==0
   await page.wait_for_function('()=>document.querySelector(".reference-mic").title==="Microfone ligado"',timeout=20000)
   transcript[0]='Kronos, ocultar os cards'
+  await page.wait_for_timeout(900)  # respect the post-playback echo guard before synthetic speech
   await say(.008)
   await expect(page.locator('.answer-card-deck')).to_have_count(0,timeout=20000)
   await page.wait_for_function('()=>document.querySelector(".reference-mic").title==="Microfone ligado"',timeout=20000)
   transcript[0]='Cronos, abrir texto na tela'
+  await page.wait_for_timeout(900)  # respect the post-playback echo guard before synthetic speech
   await say(.008)
   await expect(page.get_by_role('heading',name='Aplicação',exact=True)).to_be_visible(timeout=20000)
   assert await page.locator('.spoken-question').count()==0

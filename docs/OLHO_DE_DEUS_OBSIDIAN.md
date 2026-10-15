@@ -1,3 +1,5 @@
+> Atualização: a integração do aplicativo original em tela inteira substitui o visualizador básico descrito abaixo. Consulte [OLHO_DE_DEUS_COMPLETO.md](OLHO_DE_DEUS_COMPLETO.md) para o comportamento atual, F4, serviços e limitações.
+
 # Atualização: configuração original validada
 
 O ZIP original com a configuração real permitiu uma chamada Fish bem-sucedida.

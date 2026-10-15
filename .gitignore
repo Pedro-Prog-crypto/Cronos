@@ -16,3 +16,10 @@ frontend/.env*
 build/
 
 .cronos-local/
+
+vendor/gods-eye/node_modules/
+vendor/gods-eye/.cache/
+vendor/gods-eye/.env*
+
+vendor/gods-eye/runtime/
+!vendor/gods-eye/build/

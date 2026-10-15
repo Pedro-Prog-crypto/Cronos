@@ -59,6 +59,7 @@ class SecurityMiddleware:
         self.app, self.settings = app, settings
         self.failures = deque()
         self.active = 0
+        self.eye_active = 0
 
     async def __call__(self, scope, receive, send):
         if scope['type'] != 'http':
@@ -94,7 +95,7 @@ class SecurityMiddleware:
             denied()
             return await JSONResponse({'detail': 'Origin não autorizada.'}, 403)(scope, receive, send)
         path = scope.get('path', '')
-        public = path in {'/', '/tests', '/world/view', '/music/player', '/connection', '/health', '/docs', '/docs/oauth2-redirect', '/redoc', '/openapi.json'} or path.startswith(('/static/', '/ui/'))
+        public = path in {'/', '/tests', '/world/view', '/music/player', '/connection', '/health', '/docs', '/docs/oauth2-redirect', '/redoc', '/openapi.json'} or path.startswith(('/static/', '/ui/', '/eye/', '/models/', '/events/'))
         preflight = scope.get('method') == 'OPTIONS' and bool(origin)
         if not public and not preflight:
             now = time.monotonic()
@@ -106,7 +107,15 @@ class SecurityMiddleware:
                 return await JSONResponse({'detail': 'Configure CRONOS_API_TOKEN antes de acessar os dados.'}, 503)(scope, receive, send)
             supplied = headers.get('authorization', '').encode('utf-8')
             expected = ('Bearer ' + self.settings.token).encode('utf-8')
-            if not secrets.compare_digest(supplied, expected):
+            cookie_valid=False
+            if path.startswith('/api/'):
+                from http.cookies import SimpleCookie,CookieError
+                try:
+                    cookies=SimpleCookie();cookies.load(headers.get('cookie',''))
+                    ticket=cookies.get('cronos_eye_session');eye=getattr(getattr(scope.get('app'),'state',None),'eye',None)
+                    cookie_valid=bool(ticket and eye and secrets.compare_digest(ticket.value,eye.cookie))
+                except (CookieError,TypeError):pass
+            if not secrets.compare_digest(supplied, expected) and not cookie_valid:
                 self.failures.append(now)
                 denied()
                 return await JSONResponse({'detail': 'Autenticação necessária.'}, 401)(scope, receive, send)
@@ -135,7 +144,7 @@ class SecurityMiddleware:
                     'referrer-policy': 'strict-origin-when-cross-origin' if path=='/music/player' else 'no-referrer', 'cache-control': 'no-store',
                     'permissions-policy': 'microphone=(), camera=(), geolocation=()' if path in {'/world/view','/music/player'} else 'microphone=(self), camera=(self), geolocation=()',
                     'content-security-policy': (
-                        "default-src 'self'; script-src 'self' blob: 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob: https://server.arcgisonline.com; media-src 'none'; connect-src 'self' https://server.arcgisonline.com; worker-src 'self' blob:; object-src 'none'; frame-ancestors 'self'; base-uri 'none'; form-action 'none'"
+                        "default-src 'self'; script-src 'self' 'unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' blob: data: https: wss:; worker-src 'self' blob:; frame-src 'self' blob: https://www.youtube-nocookie.com https://www.youtube.com https://www.facebook.com https://platform.twitter.com; object-src 'none'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'"
                         if path == '/world/view' else
                         "default-src 'self'; script-src 'self' https://www.youtube.com https://s.ytimg.com; style-src 'self'; frame-src https://www.youtube-nocookie.com; connect-src 'self' https://www.youtube.com; img-src 'self' https://i.ytimg.com; object-src 'none'; frame-ancestors " + ' '.join('http://'+name+(':'+str(parsed.port) if parsed.port else '') for name in ('127.0.0.1','localhost','[::1]')) + "; base-uri 'none'; form-action 'none'"
                         if path == '/music/player' else
@@ -146,9 +155,12 @@ class SecurityMiddleware:
                 event['headers'] = [(key, value) for key, value in event.get('headers', []) if key.decode().lower() not in additions]
                 event['headers'] += [(key.encode(), value.encode()) for key, value in additions.items()]
             await send(event)
-        if not public and not preflight and self.active >= 4:
+        eye_request=path.startswith('/api/')
+        regular_request=not public and not preflight and not eye_request and path not in {'/world/close','/world/eye/heartbeat'}
+        if not preflight and ((eye_request and self.eye_active>=12) or (regular_request and self.active>=4)):
             return await JSONResponse({'detail': 'Cronos ocupado. Aguarde as solicitações atuais.'}, 429)(scope, receive, secure_send)
-        self.active += 1
+        if eye_request:self.eye_active+=1
+        elif regular_request:self.active += 1
         try:
             body = bytearray()
             if scope.get('method') in {'POST', 'PUT', 'PATCH'} or length or headers.get('transfer-encoding'):
@@ -179,4 +191,5 @@ class SecurityMiddleware:
                     monitor.response(path, 500)
                 raise
         finally:
-            self.active -= 1
+            if eye_request:self.eye_active-=1
+            elif regular_request:self.active -= 1

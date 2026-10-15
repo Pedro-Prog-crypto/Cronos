@@ -40,8 +40,10 @@ def test_map_context_has_scoped_worker_permissions(settings):
         assert world.status_code==200
         assert "script-src 'self' 'wasm-unsafe-eval';" in root.headers['content-security-policy'] # bundled microphone VAD
         assert "'unsafe-eval'" not in root.headers['content-security-policy'] # arbitrary JS evaluation remains forbidden
-        assert "'wasm-unsafe-eval'" in world.headers['content-security-policy']
-        assert "'unsafe-eval'" not in world.headers['content-security-policy']
+        # Original standalone Cesium uses Knockout evaluation; permission is
+        # confined to its embedded document, never the assistant document.
+        assert "'unsafe-eval'" in world.headers['content-security-policy']
+        assert "frame-ancestors 'self'" in world.headers['content-security-policy']
         assert world.headers['x-frame-options']=='SAMEORIGIN'
         assert 'microphone=()' in world.headers['permissions-policy']
         assert client.get('/ui/cesium/Workers/createGeometry.js').status_code==200

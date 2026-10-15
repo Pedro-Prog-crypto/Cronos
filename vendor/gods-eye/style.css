@@ -1,0 +1,43 @@
+/* Preserve component and responsive rule order in one stylesheet entry. */
+@import './src/ui/styles/foundation.css';
+@import './src/ui/styles/controls.css';
+@import './src/ui/styles/location.css';
+@import './src/ui/styles/status.css';
+@import './src/ui/styles/cockpit.css';
+@import './src/ui/styles/overlays.css';
+@import './src/ui/styles/layers.css';
+@import './src/ui/styles/radio.css';
+@import './src/ui/styles/cctv.css';
+@import './src/ui/styles/street-level.css';
+@import './src/ui/styles/scenes.css';
+@import './src/ui/styles/bhote-koshi.css';
+@import './src/ui/styles/recent-imagery.css';
+@import './src/ui/styles/recording.css';
+@import './src/ui/styles/embed.css';
+@import './src/ui/styles/responsive.css';
+@import './src/ui/styles/command-dock.css';
+@import './src/ui/styles/command-dock-compact.css';
+@import './src/ui/styles/command-dock-trays.css';
+@import './src/ui/styles/command-dock-sliding.css';
+@import './src/ui/styles/voice-cost.css';
+@import './src/ui/styles/voice-card.css';
+@import './src/ui/styles/first-run.css';
+@import './src/ui/styles/provider-settings.css';
+
+@import './src/ui/styles/weather.css';
+@import './src/ui/styles/panel-surfaces.css';
+@import './src/ui/styles/cyber.css';
+
+/* Cronos: package original typography/icons locally; no Google Fonts request. */
+@font-face{font-family:'Inter';font-style:normal;font-weight:400;font-display:swap;src:url('/fonts/inter-400.woff2') format('woff2')}
+@font-face{font-family:'Inter';font-style:normal;font-weight:500;font-display:swap;src:url('/fonts/inter-500.woff2') format('woff2')}
+@font-face{font-family:'Inter';font-style:normal;font-weight:600;font-display:swap;src:url('/fonts/inter-600.woff2') format('woff2')}
+@font-face{font-family:'Inter';font-style:normal;font-weight:700;font-display:swap;src:url('/fonts/inter-700.woff2') format('woff2')}
+@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:300;font-display:swap;src:url('/fonts/jetbrains-300.woff2') format('woff2')}
+@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:400;font-display:swap;src:url('/fonts/jetbrains-400.woff2') format('woff2')}
+@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:500;font-display:swap;src:url('/fonts/jetbrains-500.woff2') format('woff2')}
+@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:600;font-display:swap;src:url('/fonts/jetbrains-600.woff2') format('woff2')}
+@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:700;font-display:swap;src:url('/fonts/jetbrains-700.woff2') format('woff2')}
+@font-face{font-family:'Material Symbols Outlined';font-style:normal;font-weight:400;font-display:swap;src:url('/fonts/material-symbols-outlined.woff2') format('woff2')}
+
+.material-symbols-outlined{font-family:"Material Symbols Outlined";font-weight:normal;font-style:normal;font-size:24px;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;word-wrap:normal;direction:ltr;font-feature-settings:"liga";-webkit-font-smoothing:antialiased}

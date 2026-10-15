@@ -97,6 +97,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
             except ValueError:pass # The transcription endpoint reports configuration errors on use.
         recognition_task=asyncio.create_task(warm_recognition())
         update_task=asyncio.create_task(app.state.updater.maintain())
+        eye_task=asyncio.create_task(app.state.eye.maintain())
         try:
             yield
         finally:
@@ -105,6 +106,9 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
             if app.state.updater.task and not app.state.updater.task.done():
                 app.state.updater.task.cancel()
                 with suppress(asyncio.CancelledError):await app.state.updater.task
+            eye_task.cancel()
+            with suppress(asyncio.CancelledError):await eye_task
+            await app.state.eye.close()
             panel_task.cancel()
             with suppress(asyncio.CancelledError):await panel_task
             recognition_task.cancel()
@@ -132,7 +136,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
 
     @app.get("/world/view", include_in_schema=False)
     async def world_view():
-        return FileResponse(ui / "world.html", headers={"Cache-Control": "no-store"})
+        return FileResponse(Path(__file__).parent/'eye-ui/index.html', headers={'Cache-Control':'no-store'})
 
     @app.get("/tests", include_in_schema=False)
     async def workbench():
@@ -167,6 +171,8 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
     install_music(app, authenticate)
     from cronos.prospects import install_prospects
     install_prospects(app, authenticate)
+    from cronos.eye_runtime import install_eye
+    install_eye(app,authenticate)
 
     @app.middleware('http')
     async def panel_metrics(request, call_next):
