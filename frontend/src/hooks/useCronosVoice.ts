@@ -1,5 +1,6 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {api,getToken} from '../api';
+import {routeVoiceOutput} from '../audio/outputDevice';
 import {playPCM} from '../audio/playPCM';
 import captureWorkletUrl from '../audio/capture.worklet.js?worker&url';
 import vadWasmUrl from '@echogarden/fvad-wasm/fvad.wasm?url';
@@ -41,6 +42,8 @@ export function useCronosVoice({preferences,streaming,onSpeechStart,onSpeechEnd,
   const source=useRef<MediaElementAudioSourceNode|null>(null), analyser=useRef<AnalyserNode|null>(null);
   const outputGain=useRef<GainNode|null>(null),renderedSpeed=useRef(1);
   useEffect(()=>{if(outputGain.current)outputGain.current.gain.value=preferences?.voice_volume??1;if(audio.current)audio.current.playbackRate=2**(((preferences?.voice_pitch??.5)-.5)*.7)*(preferences?.voice_speed??renderedSpeed.current)/renderedSpeed.current;},[preferences?.voice_volume,preferences?.voice_pitch,preferences?.voice_speed]);
+  const outputWarning=useRef('');
+  const configureOutput=async()=>routeVoiceOutput(context.current!,prefs.current?.output_label,message=>{if(outputWarning.current!==message){outputWarning.current=message;callbacks.current.onError?.(message);}});
   const generation=useRef(0);
   const prepare=useCallback(()=>{
     context.current ||= new AudioContext();
@@ -57,6 +60,7 @@ export function useCronosVoice({preferences,streaming,onSpeechStart,onSpeechEnd,
   const speak=useCallback(async(text:string,turn_id?:string,continuation?:Promise<string>,completeFile=false)=>{
     stop();const current=generation.current;setIsGenerating(true);
     try {
+      if((prefs.current?.voice_volume??1)<=0)throw new Error('O volume da voz está em zero. Aumente no painel Síntese de voz e tente novamente.');
       // Web Audio ativado no gesto do usuário; nunca simular fala se houver falha.
       context.current ||= new AudioContext(); await context.current.resume();
       const controller=new AbortController();pending.current=controller;const pcm=Boolean(callbacks.current.streaming&&!completeFile);
@@ -86,8 +90,7 @@ export function useCronosVoice({preferences,streaming,onSpeechStart,onSpeechEnd,
         if(received.error)throw received.error;
         if(index+1<chunks.length)next=fetchChunk(chunks[index+1]);
         if(received.response){
-          const output=prefs.current?.output_label,ctx=context.current as any;
-          if(output){const devices=await navigator.mediaDevices.enumerateDevices(),chosen=devices.find(d=>d.kind==='audiooutput'&&d.label===output);if(!chosen||!ctx.setSinkId)throw new Error('Seleção de saída não disponível neste WebView.');await ctx.setSinkId(chosen.deviceId);}else if(ctx.setSinkId)await ctx.setSinkId('');
+          await configureOutput();
           cancelAnimationFrame(frame.current);audio.current=null;renderedSpeed.current=received.speed??1;
           await playPCM(received.response,context.current,controller.signal,{
             rate:()=>2**(((prefs.current?.voice_pitch??.5)-.5)*.7)*(prefs.current?.voice_speed??renderedSpeed.current)/renderedSpeed.current,volume:()=>prefs.current?.voice_volume??1,
@@ -100,8 +103,7 @@ export function useCronosVoice({preferences,streaming,onSpeechStart,onSpeechEnd,
         source.current?.disconnect();analyser.current?.disconnect();cancelAnimationFrame(frame.current);
         const receivedAt=performance.now();url.current=URL.createObjectURL(received.blob!);const player=new Audio(url.current);audio.current=player;
         renderedSpeed.current=received.speed??1;player.playbackRate=2**(((prefs.current?.voice_pitch??.5)-.5)*.7)*(prefs.current?.voice_speed??renderedSpeed.current)/renderedSpeed.current;player.preservesPitch=false;
-        const output=prefs.current?.output_label;
-        if(output){const devices=await navigator.mediaDevices.enumerateDevices();const chosen=devices.find(d=>d.kind==='audiooutput'&&d.label===output);const ctx=context.current as any;if(!chosen||!ctx.setSinkId)throw new Error('Seleção de saída não disponível neste WebView. Use o dispositivo padrão do Windows.');await ctx.setSinkId(chosen.deviceId);}else if((context.current as any).setSinkId){await (context.current as any).setSinkId('');}
+        await configureOutput();
         const meter=context.current.createAnalyser();meter.fftSize=256;analyser.current=meter;
         source.current=context.current.createMediaElementSource(player);source.current.connect(meter);outputGain.current?.disconnect();const gain=context.current.createGain();outputGain.current=gain;gain.gain.value=prefs.current?.voice_volume??1;meter.connect(gain);gain.connect(context.current.destination);
         const values=new Uint8Array(meter.fftSize);let last=0;

@@ -65,7 +65,7 @@ export default function App(){
   const connectBackend=useCallback(async()=>{
     setConnected(false);
     try{
-      const status=await jsonApi('/status');setConfig(status);try{const panel=await jsonApi('/panels');updatePreferences(panel.preferences);}catch{/* Older backend keeps the existing defaults. */}setConnected(true);setNotice('');
+      const status=await jsonApi('/status');setConfig(status);try{const panel=await jsonApi('/panels');updatePreferences(panel.preferences);}catch{/* Older backend keeps the existing defaults. */}setConnected(true);if(status.privacy_mode!=='local'&&!status.fish_speech_configured)tell('A voz não está configurada nesta instalação. Feche o Cronos, abra Importar-Voz-Original.bat nesta pasta e selecione o .env da versão em que a voz funcionava. Depois reabra o Cronos.',true);else setNotice('');
 
       // Compartilha só com a bancada da própria origem, nunca por URL/storage.
       iframe.current?.contentWindow?.postMessage({type:'cronos:connect',token:getToken()},window.location.origin);

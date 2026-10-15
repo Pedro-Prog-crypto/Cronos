@@ -12,7 +12,16 @@ from cronos.migrate import apply_env
 
 def read_voice(source):
     source=Path(source)
-    if source.suffix.lower()=='.zip':
+    if source.is_dir():
+        source=source/'.env' if (source/'.env').is_file() else source/'config/fish_audio.json'
+    env_source=source.name=='.env' or source.suffix.lower()=='.env'
+    if env_source:
+        if source.stat().st_size>65536:raise ValueError('Configuração de voz muito grande.')
+        from dotenv import dotenv_values
+        values=dotenv_values(source,interpolate=False,encoding='utf-8-sig')
+        data={'api_key':values.get('FISH_API_KEY'),'reference_id':values.get('FISH_REFERENCE_ID'),'model':values.get('FISH_MODEL'),
+              'format':values.get('FISH_FORMAT') or 'mp3','speed':values.get('FISH_SPEED') or 1,'latency':values.get('FISH_LATENCY') or 'balanced'}
+    elif source.suffix.lower()=='.zip':
         with ZipFile(source) as archive:
             files=[name for name in archive.namelist() if name.replace('\\','/').endswith('config/fish_audio.json')]
             if len(files)!=1:raise ValueError('O ZIP precisa conter uma única configuração config/fish_audio.json.')
@@ -36,7 +45,7 @@ def read_voice(source):
     if not .5<=speed<=2:raise ValueError('Velocidade inválida.')
     latency=data.get('latency','balanced')
     if latency not in {'balanced','normal'}:raise ValueError('Latência inválida.')
-    return {'CRONOS_TRANSCRIPTION_PROVIDER':'vosk','FISH_API_KEY':key,'FISH_REFERENCE_ID':reference,'FISH_MODEL':model,
+    return {**({} if env_source else {'CRONOS_TRANSCRIPTION_PROVIDER':'vosk'}),'FISH_API_KEY':key,'FISH_REFERENCE_ID':reference,'FISH_MODEL':model,
             'FISH_FORMAT':fmt,'FISH_SPEED':str(speed),'FISH_LATENCY':latency}
 
 
@@ -60,10 +69,13 @@ def read_original_gemini(source):
 
 
 def import_voice(source,destination):
+    source=Path(source)
+    if source.is_dir():source=source/'.env' if (source/'.env').is_file() else source/'config/fish_audio.json'
     values=read_voice(source);destination=Path(destination)
+    if source.resolve()==destination.resolve():raise ValueError('Selecione a configuração da versão anterior, não o arquivo atual.')
     from dotenv import dotenv_values
     current=dotenv_values(destination) if destination.exists() else {}
-    if not (current.get('GEMINI_API_KEY') or '').strip():values.update(read_original_gemini(source))
+    if source.name!='.env' and source.suffix.lower()!='.env' and not (current.get('GEMINI_API_KEY') or '').strip():values.update(read_original_gemini(source))
     if destination.exists():
         folder=destination.parent/'.cronos-local';folder.mkdir(exist_ok=True)
         backup=folder/('env-before-voice-'+datetime.now().strftime('%Y%m%d-%H%M%S-%f')+'.bak')
@@ -79,13 +91,13 @@ def main():
     import tkinter as tk
     from tkinter import filedialog,messagebox
     root=tk.Tk();root.withdraw()
-    source=filedialog.askopenfilename(title='Selecione o ZIP original ou fish_audio.json',filetypes=[('Configuração original','*.zip *.json')])
+    source=filedialog.askopenfilename(title='Selecione o .env da versão em que a voz funcionava, ou o arquivo original',filetypes=[('Configuração de voz','*.env .env *.zip *.json'),('Todos os arquivos','*.*')])
     if source:
         try:
             import_voice(source,Path.cwd()/'.env')
-            messagebox.showinfo('Kronos','Voz original importada. A chave Gemini já configurada foi preservada; só é recuperada do original quando ausente. Chaves e IDs não foram exibidos. Modelo Gemini, memória e personalidade foram preservados. Feche e reabra o Kronos.')
+            messagebox.showinfo('Kronos','Configuração de voz recuperada. Se havia .env anterior, foi criado um backup local. Chaves e IDs não foram exibidos. Modelo Gemini, memória e personalidade foram preservados. Se escolheu um .env, a configuração do microfone e a chave Gemini também ficaram intactas. Encerre pelo Parar-Cronos-Web.bat e reabra pelo iniciador desta mesma pasta.')
         except Exception:
-            messagebox.showerror('Kronos','Não foi possível importar. Verifique se o arquivo contém config/fish_audio.json válido. Credenciais não serão exibidas.')
+            messagebox.showerror('Kronos','Não foi possível importar. Selecione o .env da versão que falava, ou um fish_audio.json/ZIP original válido. Não selecione o .env da instalação atual. Credenciais não serão exibidas.')
     root.destroy()
 
 

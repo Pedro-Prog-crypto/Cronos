@@ -121,3 +121,31 @@ def test_gemini_retries_only_transient_503_without_switching_model(settings,monk
     result=asyncio.run(Gemini(replace(settings,gemini_key='dummy')).reply('Teste',[{'role':'user','content':'Olá'}]))
     assert result['reply']=='Olá' and len(calls)==2
     assert calls[0].url==calls[1].url and calls[0].content==calls[1].content
+
+
+def test_restore_voice_from_previous_version_env_preserves_ai_and_microphone(tmp_path):
+    from dotenv import dotenv_values
+    previous=tmp_path/'previous';previous.mkdir()
+    old=previous/'.env'
+    old.write_text('FISH_API_KEY="previous-voice-key"\nFISH_REFERENCE_ID="'+'a'*32+'"\nFISH_MODEL="s2.1-pro-free"\nFISH_FORMAT="wav"\nGEMINI_API_KEY="do-not-import"\nCRONOS_TRANSCRIPTION_PROVIDER="fish"\n')
+    destination=tmp_path/'current'/'.env';destination.parent.mkdir()
+    destination.write_text('GEMINI_API_KEY="keep-ai"\nGEMINI_MODEL="keep-model"\nCRONOS_TRANSCRIPTION_PROVIDER="vosk"\nCRONOS_VAULT="keep-vault"\nFISH_API_KEY="old-key"\n')
+    original=old.read_bytes()
+    import_voice(previous,destination)
+    values=dotenv_values(destination)
+    assert values['FISH_API_KEY']=='previous-voice-key'
+    assert values['FISH_REFERENCE_ID']=='a'*32 and values['FISH_MODEL']=='s2.1-pro-free'
+    assert values['GEMINI_API_KEY']=='keep-ai' and values['GEMINI_MODEL']=='keep-model'
+    assert values['CRONOS_TRANSCRIPTION_PROVIDER']=='vosk' and values['CRONOS_VAULT']=='keep-vault'
+    assert old.read_bytes()==original
+    assert len(list((destination.parent/'.cronos-local').glob('env-before-voice-*.bak')))==1
+
+
+def test_env_voice_import_does_not_import_gemini_even_when_missing(tmp_path):
+    from dotenv import dotenv_values
+    old=tmp_path/'old.env'
+    old.write_text('FISH_API_KEY=voice-key\nFISH_REFERENCE_ID='+'a'*32+'\nFISH_MODEL=s2.1-pro-free\nGEMINI_API_KEY=leave-out\n')
+    target=tmp_path/'.env'
+    import_voice(old,target)
+    assert 'GEMINI_API_KEY' not in dotenv_values(target)
+    with pytest.raises(ValueError):import_voice(target,target)
