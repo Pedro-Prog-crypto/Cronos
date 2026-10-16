@@ -61,7 +61,7 @@ def test_complete_zip_has_runtime_and_starts_using_existing_data(tmp_path):
     package=tmp_path/'complete';package.mkdir()
     with zipfile.ZipFile(archive_path) as archive:
         names=set(archive.namelist())
-        assert {'ABRIR-CRONOS.bat','tools/start_bundle.py','tools/launch_bundle.vbs','cronos/app.py','cronos/ui/index.html','cronos/documents.py','cronos/eye-ui/index.html'}<=names
+        assert {'ABRIR-CRONOS.bat','tools/start_bundle.py','tools/launch_bundle.vbs','cronos/app.py','cronos/ui/index.html','cronos/documents.py','cronos/eye-ui/index.html','cronos/studio/service.py','cronos/studio/product-3d.js','cronos/studio/bridge.js'}<=names
         assert not any(p.endswith('.zip') or p=='.env' or p.startswith(('vault/','.venv/','.cronos-local/','config/providers.json')) for p in names)
         archive.extractall(package)
     target=install(tmp_path/'old-with-data');memory=target/'vault/Temas/notas.md';memory.parent.mkdir(parents=True);memory.write_text('saved notes')

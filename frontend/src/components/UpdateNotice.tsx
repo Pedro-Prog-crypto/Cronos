@@ -27,7 +27,7 @@ export function UpdateNotice({connected,enabled,idle,voiceEnabled,onSpeak,onBusy
   const id=available?`release-${revision}`:suggestion?.id;
   if(!id||dismissed.has(id)||dismissed.has(`spoken:${id}`)||spoken.current.has(id))return;
   spoken.current.add(id);void jsonApi('/updates/dismiss',{key:`spoken:${id}`}).catch(()=>{});
-  onSpeak(available?'Pedro, existe uma atualização publicada. Posso preparar a cópia para você avaliar.':`Pedro, tenho uma sugestão de melhoria: ${suggestion.title}`);
+  onSpeak(available?'Senhor, existe uma atualização publicada. Posso preparar a cópia para você avaliar.':`Senhor, tenho uma sugestão de melhoria: ${suggestion.title}`);
  },[report,enabled,idle,voiceEnabled,updating,dismissed]);
  useEffect(()=>()=>{cached.current?.pause();if(announcement.current)URL.revokeObjectURL(announcement.current);},[]);
  const request=async(work:()=>Promise<void>)=>{setWorking(true);setError('');try{await work();try{setReport(await jsonApi('/updates'));}catch{/* A queued installation may already be restarting the server. */}}catch(e){setError(e instanceof Error?e.message:'Não foi possível concluir.');}finally{setWorking(false);}};
@@ -37,7 +37,7 @@ export function UpdateNotice({connected,enabled,idle,voiceEnabled,onSpeak,onBusy
   if(voiceEnabled&&!cached.current){
    // Cache the existing Jarvis voice BEFORE taking the server offline. No fallback voice.
    const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),8000);
-   try{const response=await api('/voice/speech',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:'Pedro, estou instalando uma atualização. Aguarde a verificação. Quando terminar, recarregue a página.'}),signal:controller.signal});announcement.current=URL.createObjectURL(await response.blob());cached.current=new Audio(announcement.current);void cached.current.play().catch(()=>{});}catch{/* Lack of voice must not bypass or block backup checks. */}finally{clearTimeout(timeout);}
+   try{const response=await api('/voice/speech',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:'Senhor, estou instalando uma atualização. Aguarde a verificação. Quando terminar, recarregue a página.'}),signal:controller.signal});announcement.current=URL.createObjectURL(await response.blob());cached.current=new Audio(announcement.current);void cached.current.play().catch(()=>{});}catch{/* Lack of voice must not bypass or block backup checks. */}finally{clearTimeout(timeout);}
   }
   await jsonApi('/updates/install',{id:state.id});
   setReport((r:any)=>({...r,state:{...r.state,phase:'queued',progress:50,message:'Backup concluído. Aguardando instalação pelo supervisor.'}}));onBusy(true);

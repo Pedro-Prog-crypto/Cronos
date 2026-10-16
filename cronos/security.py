@@ -1,6 +1,7 @@
 """Barreiras da aplicação local. Não substituem isolamento e segurança do Windows."""
 import asyncio
 import ipaddress
+import re
 import secrets
 import stat
 import time
@@ -95,7 +96,8 @@ class SecurityMiddleware:
             denied()
             return await JSONResponse({'detail': 'Origin não autorizada.'}, 403)(scope, receive, send)
         path = scope.get('path', '')
-        public = path in {'/', '/tests', '/world/view', '/music/player', '/connection', '/health', '/docs', '/docs/oauth2-redirect', '/redoc', '/openapi.json'} or path.startswith(('/static/', '/ui/', '/eye/', '/models/', '/events/'))
+        studio_preview = bool(re.fullmatch(r'/studio/preview/[A-Za-z0-9_-]{43}', path))
+        public = studio_preview or path in {'/', '/tests', '/world/view', '/music/player', '/connection', '/health', '/docs', '/docs/oauth2-redirect', '/redoc', '/openapi.json'} or path.startswith(('/static/', '/ui/', '/eye/', '/models/', '/events/'))
         preflight = scope.get('method') == 'OPTIONS' and bool(origin)
         if not public and not preflight:
             now = time.monotonic()
@@ -126,7 +128,7 @@ class SecurityMiddleware:
             state=read_json(updater.folder/'status.json',{})
             if state.get('phase') in {'queued','installing','testing'}:
                 return await JSONResponse({'detail':'Atualização em andamento. Aguarde a verificação e recarregue a página.'},503)(scope,receive,send)
-        limit = 10 * 1024 * 1024 if path == '/voice/transcribe' else 2 * 1024 * 1024 if path == '/chat/audio/stream' else 3 * 1024 * 1024 if path in {'/vision/analyze','/documents/preview','/documents/analyze'} else 2 * 1024 * 1024 if path == '/vision/preview' else 256 * 1024
+        limit = 12 * 1024 * 1024 if path.startswith('/studio/projects/') and path.endswith('/assets') else 1024 * 1024 if path.startswith('/studio/projects/') and path.endswith('/files') else 10 * 1024 * 1024 if path == '/voice/transcribe' else 2 * 1024 * 1024 if path == '/chat/audio/stream' else 3 * 1024 * 1024 if path in {'/vision/analyze','/documents/preview','/documents/analyze'} else 2 * 1024 * 1024 if path == '/vision/preview' else 256 * 1024
         try:
             length = int(headers.get('content-length', '0'))
             if length < 0:
@@ -151,6 +153,12 @@ class SecurityMiddleware:
                         "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob: https://*.googlevideo.com; connect-src 'self'; frame-src 'self' http://localhost:* http://127.0.0.1:* https://www.youtube-nocookie.com; object-src 'none'; frame-ancestors " + ("'self'" if path == '/tests' else "'none'") + "; base-uri 'none'; form-action 'self'"
                     ),
                 }
+                if studio_preview:
+                    nonce = next((v.decode() for k,v in event.get('headers',[]) if k.lower()==b'x-studio-nonce'), '')
+                    additions['x-frame-options']='SAMEORIGIN'
+                    additions['permissions-policy']='camera=(), microphone=(), geolocation=(), payment=()'
+                    additions['content-security-policy']="default-src 'none'; script-src 'nonce-"+nonce+"'; style-src 'nonce-"+nonce+"'; img-src data: blob:; font-src data:; connect-src 'none'; object-src 'none'; frame-src 'none'; frame-ancestors 'self'; base-uri 'none'; form-action 'none'; sandbox allow-scripts allow-forms"
+                    additions['x-studio-nonce']=''
                 if path=='/music/player':additions.pop('x-frame-options') # CSP restricts parents to this loopback port.
                 event['headers'] = [(key, value) for key, value in event.get('headers', []) if key.decode().lower() not in additions]
                 event['headers'] += [(key.encode(), value.encode()) for key, value in additions.items()]

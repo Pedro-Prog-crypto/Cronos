@@ -10,7 +10,7 @@ from uuid import uuid4
 
 import httpx
 from fastapi import Depends, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import Literal
 
 CATEGORIES = {
@@ -20,6 +20,16 @@ CATEGORIES = {
     'cafeteria': ('cafe', None, 'cafeterias'),
     'japones': ('restaurant', 'japanese|sushi', 'restaurantes japoneses'),
     'todos': ('restaurant|fast_food|cafe', None, 'restaurantes, lanchonetes e cafeterias'),
+    'hotel': ('hotel|guest_house|hostel|motel', None, 'hotéis e pousadas'),
+    'lava_jato': ('car_wash', None, 'lava-jatos e estética automotiva'),
+    'loja': ('.+', None, 'lojas'),
+    'clinica': ('clinic|dentist|doctors', None, 'clínicas e consultórios'),
+    'barbearia': ('hairdresser|beauty', None, 'barbearias e salões'),
+    'academia': ('fitness_centre|sports_centre', None, 'academias e centros esportivos'),
+    'imobiliaria': ('estate_agent|architect', None, 'imobiliárias e arquitetura'),
+    'educacao': ('school|college|language_school|music_school', None, 'escolas e cursos'),
+    'eventos': ('events_venue|conference_centre', None, 'espaços de eventos'),
+    'servicos': ('lawyer|accountant|insurance|consulting', None, 'serviços profissionais'),
 }
 DIRECTORIES = {'google.com', 'google.com.br', 'maps.google.com', 'instagram.com', 'facebook.com', 'tiktok.com', 'ifood.com.br', 'tripadvisor.com', 'tripadvisor.com.br', 'restaurantguru.com', 'restaurantguru.com.br', 'linktr.ee', 'wa.me', 'whatsapp.com', 'youtube.com', 'waze.com', 'foursquare.com', 'apontador.com.br', 'solutudo.com.br', 'econodata.com.br', 'cnpj.biz', '99food.com.br', 'yelp.com', 'reclameaqui.com.br'}
 
@@ -27,7 +37,12 @@ DIRECTORIES = {'google.com', 'google.com.br', 'maps.google.com', 'instagram.com'
 class ProspectSearch(BaseModel):
     model_config = ConfigDict(extra='forbid')
     city: str = Field(min_length=2, max_length=140)
-    category: Literal['restaurante', 'pizzaria', 'lanchonete', 'cafeteria', 'japones', 'todos'] = 'restaurante'
+    category: str = 'restaurante'
+    @field_validator('category')
+    @classmethod
+    def known_category(cls, value):
+        if value not in CATEGORIES: raise ValueError('Categoria desconhecida.')
+        return value
     limit: int = Field(default=20, ge=1, le=40)
     source: Literal['osm', 'google'] = 'osm'
 
@@ -81,20 +96,27 @@ def recommendation(lead):
         'avoid_initially':['Pagamento online','Integração com caixa/estoque','Aplicativo próprio e múltiplas unidades'],
         'reasons':reasons,'steps':['Confirmar interesse e necessidades com o responsável','Definir conteúdo, orçamento e o que fica fora do escopo','Criar um protótipo em HTML/CSS antes de escolher frameworks','Testar celular, teclado, links e atualização do cardápio','Publicar com HTTPS e documentar a manutenção'],
     }
+    from cronos.studio.catalog import quote
+    category=lead.get('category','')
+    if category not in {'restaurant','restaurante','fast_food','cafe','pizzaria','lanchonete','cafeteria','japones','todos'}:
+        lead['project']['scope']=['Apresentação e catálogo de serviços adaptados ao celular','Contato comercial confirmado, horários e endereço','Solicitação de horário, com confirmação manual da equipe']
+        lead['project']['opinion']='Senhor, eu começaria por um protótipo com os serviços confirmados e validaria o interesse do responsável antes de ampliar o escopo.'
+    lead['project']['quote']=quote(category, '')
+    lead['project']['financial_status']='Não informado; aparência e avaliações não comprovam orçamento.'
     return lead
 
 
 def osm_lead(item,city):
     tags=item.get('tags',{});name=tags.get('name')
     if not name:return None
-    capacity=str(tags.get('capacity:seats',tags.get('capacity','')))
+    capacity=str(tags.get('capacity:seats',tags.get('capacity','') if tags.get('amenity') in {'restaurant','fast_food','cafe'} else ''))
     seats=int(capacity) if capacity.isdigit() and 0<int(capacity)<=10000 else None
     url=website(tags.get('website') or tags.get('contact:website'))
     official=url if url and not directory(url) else None
     ident=f"osm:{item['type']}:{item['id']}"
     source=f"https://www.openstreetmap.org/{item['type']}/{item['id']}"
     address=', '.join(v for v in [tags.get('addr:street'),tags.get('addr:housenumber'),tags.get('addr:suburb'),city] if v)
-    return recommendation({'id':ident,'name':name[:200],'city':city,'address':address,'category':tags.get('amenity'),'cuisine':tags.get('cuisine'),'brand':tags.get('brand'),'seats':seats,
+    return recommendation({'id':ident,'name':name[:200],'city':city,'address':address,'category':tags.get('amenity') or tags.get('tourism') or tags.get('shop') or tags.get('office') or tags.get('leisure'),'cuisine':tags.get('cuisine'),'brand':tags.get('brand'),'seats':seats,
       'phone':tags.get('contact:phone') or tags.get('phone'),'rating':None,'rating_count':None,'website':official,'site_status':'listed' if official else 'unverified','evidence':[{'source':'OpenStreetMap','url':source,'note':'Site informado no cadastro público.' if official else 'O campo de site próprio não está preenchido; isso não comprova ausência de site.'}], 'social_or_directory':url if url and not official else None,'checked_at':None})
 
 
@@ -151,8 +173,9 @@ class Prospector:
                         elif osm_type=='way':region=f'area({2400000000+osm_id})->.city;';area='(area.city)'
                         else:
                             region='';area=f'(around:15000,{float(place["lat"])},{float(place["lon"])})'
+                        tag={'hotel':'tourism','loja':'shop','barbearia':'shop','academia':'leisure','imobiliaria':'office','servicos':'office'}.get(args.category,'amenity')
                         cuisine_filter=f'["cuisine"~"{cuisine}"]' if cuisine else ''
-                        query=f'[out:json][timeout:20];{region}nwr["amenity"~"^({amenity})$"]["name"]{cuisine_filter}{area};out tags center 100;'
+                        query=f'[out:json][timeout:20];{region}nwr["{tag}"~"^({amenity})$"]["name"]{cuisine_filter}{area};out tags center 100;'
                         raw=None
                         for endpoint in ('https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://overpass.private.coffee/api/interpreter'):
                             try:
@@ -161,7 +184,7 @@ class Prospector:
                                 if data.get('remark'):continue
                                 raw=data;break
                             except (httpx.HTTPError,HTTPException,TimeoutError):continue
-                        if raw is None:raise HTTPException(502,'As fontes de restaurantes não responderam. Tente mais tarde. Os servidores alternativos também foram consultados; nenhum resultado foi inventado.')
+                        if raw is None:raise HTTPException(502,'As fontes de negócios não responderam. Tente mais tarde. Os servidores alternativos também foram consultados; nenhum resultado foi inventado.')
                         if raw.get('remark'):raise HTTPException(502,'A pesquisa do mapa foi interrompida. Tente uma categoria mais específica.')
                         leads=[lead for item in raw.get('elements',[]) if item.get('type') in {'node','way','relation'} and (lead:=osm_lead(item,city))]
                         attribution='© colaboradores do OpenStreetMap (ODbL). A cobertura varia por cidade; não é uma lista de todos os negócios.'

@@ -85,3 +85,6 @@
 .reference-mic.recording{background:#063a50;border-color:#77f6ff;color:white;box-shadow:0 0 18px #00eaffcc,inset 0 0 8px #00dfff55}
 .reference-mic.speaking{border-color:#73f2ff;background:#062337}
 @keyframes mic-wait{to{box-shadow:0 0 20px #ffbe6899}}
+
+/* Keep the Studio entry styled before the lazy module is requested. */
+.studio-entry{position:absolute;left:25px;bottom:23px;z-index:21;display:flex;align-items:center;gap:9px;background:#032031c9;border:1px solid #3286a384;border-radius:5px;color:#87e4f3;padding:10px 13px;font:11px 'Rajdhani',sans-serif;letter-spacing:.08em;cursor:pointer}.studio-entry:hover{border-color:#3bd4f1;box-shadow:0 0 20px #15b7dc30}.studio-entry:focus-visible{outline:2px solid #75f1ff;outline-offset:4px}

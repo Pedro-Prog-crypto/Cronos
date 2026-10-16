@@ -6,7 +6,7 @@ import subprocess
 import zipfile
 
 ROOT=Path(__file__).resolve().parents[1]
-EXTRA=['ABRIR-CRONOS.bat','LEIA-PRIMEIRO.txt','tools/start_bundle.py','tools/launch_bundle.vbs','tools/apply_interface_update.py','tools/interface_update_manifest.json']
+EXTRA=['docs/STUDIO_DE_SITES.md','ABRIR-CRONOS.bat','LEIA-PRIMEIRO.txt','tools/start_bundle.py','tools/launch_bundle.vbs','tools/apply_interface_update.py','tools/interface_update_manifest.json']
 
 
 def build_patch():

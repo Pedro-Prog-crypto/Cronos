@@ -11,3 +11,5 @@ A entrada funciona por Windows Script Host e pelo Python já instalado. Ela usa 
 A busca, seleção sem adivinhação, preservação, recuperação da aplicação e comando de abertura foram testados em diretórios isolados. A janela Tk e o iniciador Windows não foram executados nesta máquina Linux. Os testes funcionais anteriores da aplicação continuam descritos em ANALISE_E_ANIMACOES.md.
 
 O construtor tools/build_complete_bundle.py usa uma lista explícita de código rastreado e arquivos de inicialização. Exclui `.env`, `.venv`, cofre, banco e dados locais, e verifica CRC e os hashes dos arquivos de atualização. O ZIP completo não contém outro ZIP de atualização aninhado.
+
+O pacote também inclui o [Estúdio de Sites](STUDIO_DE_SITES.md), sem dependência adicional de Python: projetos, código gerado, prévia isolada, versões, formulários locais, 3D fornecido, testes e exportação. Os dados ficam no cofre existente, em `.cronos/studio`, fora do manifesto de atualização.

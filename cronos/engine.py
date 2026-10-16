@@ -55,7 +55,7 @@ class Engine:
         personality = self.settings.personality.read_text(encoding="utf-8")
         recall = '' if audio is not None or social_or_control(message) or prefetch_news else await asyncio.to_thread(self.memory.recall, message, self.settings.memory_results, self.settings.memory_chars)
         recall_done=time.perf_counter()
-        system = personality + "\nData/hora local: " + datetime.now().astimezone().isoformat()
+        system = personality + "\nPreferência explícita de tratamento: dirija-se ao usuário como senhor, inclusive se a personalidade antiga usar Pedro. Mantenha a personalidade e a franqueza.\nEstúdio de Sites: a interface abre pelo comando abrir estúdio de sites ou faça um site. Consulte studio_status para saber projetos e etapas reais. Há projetos versionados, geração HTML/CSS/JS pela integração escolhida, prévia isolada, edição por conversa, contato e solicitação de horário locais, exportação e testes. Não diga que criou ou publicou um site sem resultado real; pagamentos, estoque e login não são implementados automaticamente.\nData/hora local: " + datetime.now().astimezone().isoformat()
         prefs = getattr(self, 'panel_preferences', None)
         if prefs:
             if prefs.language != 'pt-BR':system += '\nIdioma da resposta solicitado pelo usuário: ' + prefs.language

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node scripts/licenses.mjs",
+    "build": "node scripts/build-studio-3d.mjs && vite build && node scripts/licenses.mjs",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
@@ -26,6 +26,7 @@
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.2",
     "tailwindcss": "4.3.3",
+    "three": "0.180.0",
     "typescript": "7.0.2",
     "vite": "8.3.4"
   }

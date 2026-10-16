@@ -87,6 +87,14 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         app.state.vision_provider = vision_provider
         app.state.features = Features(app)
         app.state.panels = PanelState(app)
+        from cronos.studio.service import Studio
+        import sqlite3
+        app.state.studio = None
+        try:
+            app.state.studio = Studio(app)
+        except (OSError, ValueError, sqlite3.Error):
+            app.state.studio_error = 'Não foi possível abrir a base local do Estúdio. Os dados foram mantidos; confira acesso e cópia de segurança. A conversa continua disponível.'
+            app.state.registry.load_errors.append(app.state.studio_error)
         panel_task = asyncio.create_task(app.state.panels.maintain())
         await asyncio.to_thread(app.state.monitor.collect)
         task = asyncio.create_task(app.state.monitor.run())
@@ -101,6 +109,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         try:
             yield
         finally:
+            if app.state.studio is not None: await app.state.studio.close()
             update_task.cancel()
             with suppress(asyncio.CancelledError):await update_task
             if app.state.updater.task and not app.state.updater.task.done():
@@ -510,6 +519,8 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         except Exception as exc:
             raise HTTPException(502, fish_error(exc, "transcrição do microfone")) from exc
 
+    from cronos.studio.routes import install_studio
+    install_studio(app, authenticate)
     from cronos.documents import install_documents
     install_documents(app, authenticate)
     install_routes(app, authenticate)

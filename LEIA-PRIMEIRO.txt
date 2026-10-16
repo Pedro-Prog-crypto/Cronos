@@ -13,3 +13,8 @@ Este pacote contem o codigo completo, mas nao inventa nem inclui suas chaves pri
 
 CARDS E PAINEIS MOVEIS
 Arraste pelo titulo para colocar cada card ou painel onde quiser. Textos longos podem ser percorridos com o scroll do mouse ou arrastando o proprio texto, sem barras visiveis. Se houver seis cards, eles aparecem com tres de cada lado do holograma. Abrir uma imagem ou ZIP nao corta a fala; a analise espera a explicacao terminar para falar. ESC continua interrompendo quando voce quiser.
+
+ESTUDIO DE SITES
+Abra o botao ESTUDIO DE SITES ou diga: Cronos, abrir estudio de sites.
+Escolha uma categoria, nomeie o projeto e decida: planejar sozinho ou seguir referencia. A demonstracao abre sem IA. A criacao personalizada usa uma integracao ja cadastrada, com etapas reais, tempo decorrido, versoes, edicao, testes e exportacao.
+Os projetos ficam no cofre atual, em .cronos/studio. APIs, integracoes e memorias existentes nao sao substituidas.

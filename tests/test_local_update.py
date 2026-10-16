@@ -19,7 +19,7 @@ def fixture(tmp_path):
     (source/'cronos/app.py').write_text('new=True\n')
     (source/'cronos/documents.py').write_text('new_document=True\n')
     (source/'cronos/ui/index.html').write_text('new interface')
-    personal={'.env':b'PRIVATE_KEY=unchanged','config/providers.json':b'{"private":"kept"}','vault/.cronos/memory.sqlite3':b'private-memory','vault/Temas/math.md':b'Notas do usuario','cronos/unknown-personal-data.txt':b'keep even data inside code folder','.cronos-local/preferences.json':b'{"custom":true}'}
+    personal={'.env':b'PRIVATE_KEY=unchanged','config/providers.json':b'{"private":"kept"}','vault/.cronos/memory.sqlite3':b'private-memory','vault/Temas/math.md':b'Notas do usuario','cronos/unknown-personal-data.txt':b'keep even data inside code folder','.cronos-local/preferences.json':b'{"custom":true}', 'vault/.cronos/studio/projects.sqlite3':b'private-studio-projects', 'modelos/personalidades/cronos.md':b'personalidade personalizada'}
     for name,data in personal.items():
         dest=target/name;dest.parent.mkdir(parents=True,exist_ok=True);dest.write_bytes(data)
     files={p.relative_to(source).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in (source/'cronos').rglob('*') if p.is_file()}
@@ -78,7 +78,9 @@ def test_wrong_installation_or_same_folder_is_rejected(tmp_path):
 
 def test_shipped_manifest_verifies_real_payload():
     root=Path(__file__).resolve().parents[1]
-    assert len(updater.entries(root))==10
+    payload=updater.entries(root)
+    assert {'cronos/app.py','cronos/documents.py','cronos/security.py','cronos/engine.py','cronos/prospects.py','cronos/studio/__init__.py','cronos/studio/service.py','cronos/studio/routes.py','cronos/studio/runtime.py','cronos/studio/catalog.py','cronos/studio/store.py','cronos/studio/validation.py','cronos/studio/network.py','cronos/studio/images.py','cronos/studio/bridge.js','cronos/studio/product-3d.js','cronos/ui/index.html'} <= payload.keys()
+    assert any(name.startswith('cronos/ui/assets/SiteStudio-') for name in payload)
 
 
 def test_downloadable_package_runs_as_a_standalone_updater(tmp_path):
