@@ -150,7 +150,7 @@ class SecurityMiddleware:
                         if path == '/world/view' else
                         "default-src 'self'; script-src 'self' https://www.youtube.com https://s.ytimg.com; style-src 'self'; frame-src https://www.youtube-nocookie.com; connect-src 'self' https://www.youtube.com; img-src 'self' https://i.ytimg.com; object-src 'none'; frame-ancestors " + ' '.join('http://'+name+(':'+str(parsed.port) if parsed.port else '') for name in ('127.0.0.1','localhost','[::1]')) + "; base-uri 'none'; form-action 'none'"
                         if path == '/music/player' else
-                        "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob: https://*.googlevideo.com; connect-src 'self'; frame-src 'self' http://localhost:* http://127.0.0.1:* https://www.youtube-nocookie.com; object-src 'none'; frame-ancestors " + ("'self'" if path == '/tests' else "'none'") + "; base-uri 'none'; form-action 'self'"
+                        "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob: https://images.unsplash.com; media-src 'self' blob: https://*.googlevideo.com; connect-src 'self'; frame-src 'self' http://localhost:* http://127.0.0.1:* https://www.youtube-nocookie.com; object-src 'none'; frame-ancestors " + ("'self'" if path == '/tests' else "'none'") + "; base-uri 'none'; form-action 'self'"
                     ),
                 }
                 if studio_preview:
@@ -160,6 +160,8 @@ class SecurityMiddleware:
                     additions['content-security-policy']="default-src 'none'; script-src 'nonce-"+nonce+"'; style-src 'nonce-"+nonce+"'; img-src data: blob:; font-src data:; connect-src 'none'; object-src 'none'; frame-src 'none'; frame-ancestors 'self'; base-uri 'none'; form-action 'none'; sandbox allow-scripts allow-forms"
                     additions['x-studio-nonce']=''
                 if path=='/music/player':additions.pop('x-frame-options') # CSP restricts parents to this loopback port.
+                if self.settings.privacy_mode != 'online':
+                    additions['content-security-policy'] = additions['content-security-policy'].replace(' https://images.unsplash.com', '')
                 event['headers'] = [(key, value) for key, value in event.get('headers', []) if key.decode().lower() not in additions]
                 event['headers'] += [(key.encode(), value.encode()) for key, value in additions.items()]
             await send(event)

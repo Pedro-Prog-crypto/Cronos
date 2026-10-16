@@ -24,3 +24,11 @@ def isolate_gemini_cooldown_and_error_log(monkeypatch,tmp_path):
     monkeypatch.setattr(providers, 'record_gemini_error', lambda *args: None)
     yield
     providers.Gemini.cooldowns.clear()
+
+
+@pytest.fixture(autouse=True)
+def no_live_studio_reference_downloads(monkeypatch):
+    import cronos.studio.threed.reference_images as photos
+    async def unavailable(url):
+        raise ValueError('No external photo traffic in the test suite.')
+    monkeypatch.setattr(photos, 'download', unavailable)

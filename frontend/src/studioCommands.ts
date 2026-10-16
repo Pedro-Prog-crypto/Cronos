@@ -1,4 +1,11 @@
 export type StudioIntent={brief:string};
+export function studioTemplateCommand(text:string):{category:string;three:boolean}|null{
+ const value=text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().replace(/^(?:cronos|kronos|chronos)[,\s:]*/,'').replace(/[.!?]+$/,'');
+ const match=value.match(/^(?:crie|criar|faca|monte)\s+(?:um\s+)?(?:site|website)(?:\s+(?:em\s+)?(3d))?\s+(?:para|de)\s+(?:(?:um|uma|o|a)\s+)?(.+)$/);
+ if(!match)return null;
+ const aliases:Record<string,string>={restaurante:'restaurante',restaurantes:'restaurante',hotel:'hotel',hoteis:'hotel',pousada:'hotel','lava-jato':'lava_jato','lava jato':'lava_jato',loja:'loja',clinica:'clinica',barbearia:'barbearia',academia:'academia',imobiliaria:'imobiliaria',imoveis:'imobiliaria',educacao:'educacao',cursos:'educacao',eventos:'eventos',portfolio:'portfolio',servicos:'servicos',personalizado:'personalizado'};
+ return aliases[match[2]]?{category:aliases[match[2]],three:!!match[1]}:null;
+}
 export function studioCommand(text:string):StudioIntent|null{
  let value=text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
  value=value.replace(/^(?:cronos|kronos|chronos)[,\s:]*/,'').replace(/^por favor[,\s]*/,'');

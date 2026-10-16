@@ -19,7 +19,7 @@ wake = ["vosk==0.3.45; sys_platform == 'win32'", "sounddevice==0.5.6; sys_platfo
 include = ["cronos*"]
 
 [tool.setuptools.package-data]
-cronos = ["studio/*.js", "studio/*.txt", "studio/media/*.jpg", "eye-ui/**/*", "eye-ui/*", "eye-server/**/*", "eye-server/*", "revision.txt", "static/*", "ui/*", "ui/assets/*", "ui/licenses/*", "licenses/*", "ui/cesium/**/*", "ui/cesium/*"]
+cronos = ["studio/*.js", "studio/*.txt", "studio/media/*.jpg", "studio/threed/templates/*.html", "studio/threed/vendor/*", "studio/mistral_original/*", "eye-ui/**/*", "eye-ui/*", "eye-server/**/*", "eye-server/*", "revision.txt", "static/*", "ui/*", "ui/assets/*", "ui/licenses/*", "licenses/*", "ui/cesium/**/*", "ui/cesium/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

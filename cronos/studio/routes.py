@@ -27,6 +27,11 @@ class NewProject(Strict):
     category: str = 'restaurante'
     brief: str = Field(default='', max_length=6000)
     contact: str = Field(default='', max_length=2000)
+    reference_id: str = Field(default='', max_length=64)
+    tier: Literal['reference', 'economy', 'standard', 'premium_2d', 'premium_3d'] = 'reference'
+    model_type: Literal['auto', 'earbuds', 'airplane', 'hotel'] = 'auto'
+    template: Literal['basic', 'standard', 'premium'] = 'premium'
+    create_from_template: bool = False
     @field_validator('category')
     @classmethod
     def category_allowed(cls, value):
@@ -136,11 +141,17 @@ def install_studio(app, authenticate):
     @app.get('/studio/catalog', dependencies=auth)
     async def get_catalog():
         from .image_generation import image_providers
+        from .threed.integration import pricing_options, MODEL_NAMES
+        from .threed.config import FREE_3D_MODEL_SOURCES
         settings = app.state.engine.settings
         entries = provider_catalog(settings)
         for entry in entries:
             if entry['id'] == 'gemini': entry['model'] = settings.gemini_model
-        return {'categories': catalog(), 'providers': entries, 'selected': settings.provider,
+        photos = settings.privacy_mode == 'online' and app.state.panels.preferences.web_enabled
+        categories = [{**entry, 'remote_images': photos, 'references': [{**ref, 'remote_images': photos} for ref in entry['references']]} for entry in catalog()]
+        return {'categories': categories, 'providers': entries, 'selected': settings.provider,
+                'pricing_tiers': pricing_options(), 'procedural_models': MODEL_NAMES,
+                'model_sources': FREE_3D_MODEL_SOURCES,
                 'image_providers': image_providers(app.state.engine.settings),
                 'storage': str(service().store.root), 'capabilities': ['HTML/CSS/JavaScript', 'Contato e solicitação de horário em SQLite', 'Prévia isolada', 'Edição por conversa', 'GLB autocontido', 'Exportação e versões'],
                 'limits': ['Sem geração de credenciais ou acesso a código proprietário de outras IAs.', 'Pagamentos, login de clientes e estoque precisam de implementação específica antes de publicar.']}
@@ -224,9 +235,17 @@ def install_studio(app, authenticate):
     @app.post('/studio/projects/{identifier}/settings', dependencies=auth)
     async def project_settings(identifier: str, body: NewProject):
         from .catalog import quote
+        from .threed.integration import reference_id
         item = mutable(identifier)
-        item.update(body.model_dump())
-        item['quote'] = quote(item['category'], item['brief'])
+        changes = body.model_dump(exclude_unset=True)
+        if changes.get('category', item['category']) != item['category'] and 'reference_id' not in changes:
+            changes['reference_id'] = ''
+        candidate = {**item, **changes}
+        try:
+            candidate['reference_id'] = reference_id(candidate['category'], candidate['brief'], candidate.get('reference_id', ''))
+            candidate['quote'] = quote(candidate['category'], candidate['brief'], candidate.get('tier', 'reference'), candidate['reference_id'])
+        except ValueError as exc: raise HTTPException(422, str(exc)) from None
+        item = candidate
         service().store.event(item, 'brief', 'Dados do negócio atualizados. Gere uma revisão para aplicar as mudanças ao site.')
         return service().detail(identifier)
 
@@ -293,7 +312,11 @@ def install_studio(app, authenticate):
     # Only this short-lived ticket endpoint is public, not any project or asset API.
     @app.get('/studio/preview/{ticket}')
     async def preview_document(ticket: str):
-        try: html, nonce = service().render(ticket)
+        try:
+            data = service().tickets.get(ticket)
+            if not data or data['expires'] <= time.time(): raise KeyError(ticket)
+            await service().prepare_reference_photos(service().store.get(data['project']), data['revision'])
+            html, nonce = service().render(ticket)
         except KeyError: raise HTTPException(404, 'Prévia expirada. Reabra o projeto no estúdio.') from None
         return Response(html, media_type='text/html', headers={'X-Studio-Nonce': nonce})
 
@@ -347,6 +370,7 @@ def install_studio(app, authenticate):
         if item['status'] == 'running': raise HTTPException(409, 'Aguarde ou cancele a criação antes de exportar.')
         if detail['code_origin'] == 'starter' and not draft:
             raise HTTPException(409, 'Este projeto ainda contém apenas o exemplo inicial. Crie uma versão com IA ou escolha explicitamente exportar o rascunho.')
+        await service().prepare_reference_photos(item)
         package = await asyncio.to_thread(service().export, item)
         return Response(package, media_type='application/zip', headers={'Content-Disposition': 'attachment; filename="Cronos-Site-' + identifier[:8] + '.zip"'})
 

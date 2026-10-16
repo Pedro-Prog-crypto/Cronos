@@ -1,0 +1,1548 @@
+"""
+Gerador de sites 3D para o Cronos Studio
+"""
+
+from typing import Dict, Any, List, Optional
+from pathlib import Path
+import json
+
+# =============================================================================
+# 🎨 TEMPLATES DE HTML PARA SITES 3D
+# =============================================================================
+
+class Site3DGenerator:
+    """
+    Classe para gerar sites 3D completos com Three.js.
+    """
+
+    def __init__(self):
+        self.templates_dir = Path(__file__).parent / "templates"
+        self.three_cdn = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"
+        self.orbit_controls_cdn = "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"
+        self.gsap_cdn = "https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.4/gsap.min.js"
+
+    def generate_3d_site(
+        self,
+        category: str,
+        business_name: str,
+        model_type: str = "earbuds",
+        template_type: str = "premium",
+        color_scheme: Optional[Dict[str, str]] = None,
+        sample_texts: Optional[Dict[str, str]] = None,
+        features: Optional[List[str]] = None
+    ) -> Dict[str, str]:
+        """
+        Gera um site 3D completo para uma categoria específica.
+
+        Args:
+            category: Categoria do site
+            business_name: Nome do negócio
+            model_type: Tipo de modelo 3D ('earbuds', 'airplane', 'hotel')
+            template_type: Tipo de template ('basic', 'standard', 'premium')
+            color_scheme: Esquema de cores
+            sample_texts: Textos de exemplo
+            features: Recursos do site
+
+        Returns:
+            Dicionário com HTML, CSS e JS
+        """
+        from .models import get_model
+        from .config import DEFAULT_3D_SETTINGS, DEFAULT_3D_COLORS
+        from ..references import get_reference
+
+        # Obter referência da categoria
+        ref_site = get_reference(category)
+
+        # Usar valores padrão se não fornecidos
+        if color_scheme is None:
+            color_scheme = ref_site.color_scheme
+        if sample_texts is None:
+            sample_texts = ref_site.sample_texts
+        if features is None:
+            features = ref_site.features[:3]
+
+        # Obter modelo 3D
+        model = get_model(model_type)
+        if model is None:
+            model = get_model("earbuds")
+
+        # Gerar HTML
+        html = self._generate_html(
+            business_name=business_name,
+            category=category,
+            ref_site=ref_site,
+            color_scheme=color_scheme,
+            sample_texts=sample_texts,
+            features=features,
+            model=model
+        )
+
+        # Gerar CSS
+        css = self._generate_css(
+            color_scheme=color_scheme,
+            template_type=template_type
+        )
+
+        # Gerar JS
+        js = self._generate_js(
+            model=model,
+            color_scheme=color_scheme
+        )
+
+        return {
+            "index.html": html,
+            "styles.css": css,
+            "app.js": js
+        }
+
+    def _generate_html(
+        self,
+        business_name: str,
+        category: str,
+        ref_site: Any,
+        color_scheme: Dict[str, str],
+        sample_texts: Dict[str, str],
+        features: List[str],
+        model: Any
+    ) -> str:
+        """Gera o HTML do site 3D."""
+        bg_color = color_scheme.get("background", "#0f172a")
+        text_color = color_scheme.get("text", "#f8fafc")
+        primary_color = color_scheme.get("primary", "#3b82f6")
+        secondary_color = color_scheme.get("secondary", "#1e40af")
+        accent_color = color_scheme.get("accent", "#60a5fa")
+
+        hero_title = sample_texts.get("hero_title", f"Bem-vindo à {business_name}")
+        hero_description = sample_texts.get("hero_description", f"Descubra o melhor de {category}")
+        cta_button = sample_texts.get("cta_button", "Explorar em 3D")
+
+        # Gerar cards de recursos
+        features_html = ""
+        for i, feature in enumerate(features):
+            features_html += f"""
+            <div class="feature-card" style="--delay: {i * 0.1}s;">
+                <div class="feature-icon">🎯</div>
+                <h3>{feature}</h3>
+                <p>Serviço de qualidade para seu negócio.</p>
+            </div>
+            """
+
+        html = f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="{hero_description}">
+    <title>{business_name} | {hero_title}</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="{self.three_cdn}" defer></script>
+    <script src="{self.orbit_controls_cdn}" defer></script>
+    <script src="{self.gsap_cdn}" defer></script>
+    <script src="app.js" defer></script>
+</head>
+<body style="--bg-color: {bg_color}; --text-color: {text_color}; --primary: {primary_color}; --secondary: {secondary_color}; --accent: {accent_color};">
+    <!-- Loader -->
+    <div id="loader">
+        <div class="loader-content">
+            <div class="spinner"></div>
+            <p>Carregando experiência 3D...</p>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header class="header">
+        <div class="logo">
+            <h1>{business_name}</h1>
+            <span class="tagline">{sample_texts.get('hero_subtitle', '')}</span>
+        </div>
+        <nav class="nav">
+            <a href="#inicio">Início</a>
+            <a href="#recursos">Recursos</a>
+            <a href="#contato">Contato</a>
+        </nav>
+    </header>
+
+    <!-- Hero Section -->
+    <section id="inicio" class="hero">
+        <div class="hero-content">
+            <h1 class="hero-title">{hero_title}</h1>
+            <p class="hero-description">{hero_description}</p>
+            <button id="cta-button" class="cta-button">{cta_button}</button>
+        </div>
+        <div id="canvas-container"></div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="recursos" class="features">
+        <h2>Nossos Recursos</h2>
+        <div class="features-grid">
+            {features_html}
+        </div>
+    </section>
+
+    <!-- Contact Section -->
+    <section id="contato" class="contact">
+        <h2>Entre em Contato</h2>
+        <form id="contact-form" class="contact-form">
+            <input type="text" name="name" placeholder="Seu nome" required>
+            <input type="email" name="email" placeholder="Seu e-mail" required>
+            <textarea name="message" placeholder="Sua mensagem" required></textarea>
+            <button type="submit">Enviar Mensagem</button>
+        </form>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p>© 2024 {business_name}. Todos os direitos reservados.</p>
+        <p>Site gerado por Cronos Studio - Tecnologia 3D</p>
+    </footer>
+
+    <!-- 3D Model Info (Hidden) -->
+    <div id="model-info" style="display: none;"
+         data-model-name="{model.name}"
+         data-model-description="{model.description}">
+    </div>
+</body>
+</html>
+"""
+        return html
+
+    def _generate_css(self, color_scheme: Dict[str, str], template_type: str) -> str:
+        """Gera o CSS do site 3D."""
+        bg_color = color_scheme.get("background", "#0f172a")
+        text_color = color_scheme.get("text", "#f8fafc")
+        primary_color = color_scheme.get("primary", "#3b82f6")
+        secondary_color = color_scheme.get("secondary", "#1e40af")
+        accent_color = color_scheme.get("accent", "#60a5fa")
+
+        css = f"""/* ========================================================================= */
+/* Cronos Studio - Template 3D Premium */
+/* Gerado automaticamente - Não edite diretamente */
+/* ========================================================================= */
+
+:root {{
+    --bg-color: {bg_color};
+    --text-color: {text_color};
+    --primary: {primary_color};
+    --secondary: {secondary_color};
+    --accent: {accent_color};
+    --bg-light: color-mix(in srgb, var(--bg-color), white 10%);
+    --bg-dark: color-mix(in srgb, var(--bg-color), black 10%);
+    --glass: rgba(255, 255, 255, 0.1);
+    --glass-border: rgba(255, 255, 255, 0.2);
+}}
+
+* {{
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}}
+
+html {{
+    scroll-behavior: smooth;
+}}
+
+body {{
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: var(--bg-color);
+    color: var(--text-color);
+    min-height: 100vh;
+    overflow-x: hidden;
+    line-height: 1.6;
+}}
+
+/* ========================================================================= */
+/* Loader */
+/* ========================================================================= */
+
+#loader {{
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--bg-color);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    transition: opacity 0.5s ease;
+}}
+
+#loader.hidden {{
+    opacity: 0;
+    pointer-events: none;
+}}
+
+.loader-content {{
+    text-align: center;
+}}
+
+.spinner {{
+    width: 60px;
+    height: 60px;
+    border: 4px solid var(--glass-border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 20px;
+}}
+
+@keyframes spin {{
+    to {{ transform: rotate(360deg); }}
+}}
+
+.loader-content p {{
+    color: var(--text-color);
+    font-size: 1.1rem;
+    opacity: 0.8;
+}}
+
+/* ========================================================================= */
+/* Header */
+/* ========================================================================= */
+
+.header {{
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: 1rem 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 100;
+    background: var(--glass);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--glass-border);
+    transition: all 0.3s ease;
+}}
+
+.header.scrolled {{
+    background: rgba(0, 0, 0, 0.8);
+    padding: 0.8rem 2rem;
+}}
+
+.logo h1 {{
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--primary);
+    letter-spacing: 0.1em;
+}}
+
+.logo .tagline {{
+    display: block;
+    font-size: 0.8rem;
+    color: var(--accent);
+    opacity: 0.8;
+    margin-top: 0.25rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+}}
+
+.nav {{
+    display: flex;
+    gap: 2rem;
+}}
+
+.nav a {{
+    color: var(--text-color);
+    text-decoration: none;
+    font-size: 1rem;
+    font-weight: 500;
+    position: relative;
+    padding: 0.5rem 0;
+    transition: color 0.3s ease;
+}}
+
+.nav a::after {{
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background: var(--accent);
+    transition: width 0.3s ease;
+}}
+
+.nav a:hover {{
+    color: var(--accent);
+}}
+
+.nav a:hover::after {{
+    width: 100%;
+}}
+
+/* ========================================================================= */
+/* Hero Section */
+/* ========================================================================= */
+
+.hero {{
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    padding: 6rem 2rem 2rem;
+    gap: 4rem;
+    position: relative;
+    overflow: hidden;
+}}
+
+.hero-content {{
+    flex: 1;
+    max-width: 500px;
+    z-index: 1;
+}}
+
+.hero-title {{
+    font-size: clamp(2.5rem, 8vw, 4rem);
+    font-weight: 800;
+    color: var(--text-color);
+    margin-bottom: 1.5rem;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+}}
+
+.hero-description {{
+    font-size: 1.2rem;
+    color: var(--text-color);
+    opacity: 0.8;
+    margin-bottom: 2rem;
+    line-height: 1.8;
+}}
+
+.cta-button {{
+    padding: 1rem 2rem;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 0.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}}
+
+.cta-button:hover {{
+    background: var(--secondary);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 25px rgba(0, 0, 0, 0.4);
+}}
+
+#canvas-container {{
+    flex: 2;
+    height: 80vh;
+    min-height: 500px;
+    position: relative;
+}}
+
+#canvas-container canvas {{
+    display: block;
+    width: 100%;
+    height: 100%;
+}}
+
+/* ========================================================================= */
+/* Features Section */
+/* ========================================================================= */
+
+.features {{
+    padding: 6rem 2rem;
+    background: var(--bg-light);
+    text-align: center;
+}}
+
+.features h2 {{
+    font-size: 2.5rem;
+    margin-bottom: 3rem;
+    color: var(--text-color);
+    position: relative;
+}}
+
+.features h2::after {{
+    content: '';
+    position: absolute;
+    bottom: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 80px;
+    height: 4px;
+    background: var(--accent);
+    border-radius: 2px;
+}}
+
+.features-grid {{
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+}}
+
+.feature-card {{
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: 1rem;
+    padding: 2rem;
+    text-align: center;
+    transition: all 0.3s ease;
+    opacity: 0;
+    transform: translateY(20px);
+    animation: fadeInUp 0.6s ease forwards;
+    animation-delay: var(--delay);
+}}
+
+@keyframes fadeInUp {{
+    to {{
+        opacity: 1;
+        transform: translateY(0);
+    }}
+}}
+
+.feature-card:hover {{
+    background: var(--bg-dark);
+    transform: translateY(-5px);
+    border-color: var(--accent);
+}}
+
+.feature-icon {{
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    color: var(--accent);
+}}
+
+.feature-card h3 {{
+    font-size: 1.2rem;
+    margin-bottom: 0.5rem;
+    color: var(--text-color);
+}}
+
+.feature-card p {{
+    color: var(--text-color);
+    opacity: 0.7;
+    font-size: 0.95rem;
+}}
+
+/* ========================================================================= */
+/* Contact Section */
+/* ========================================================================= */
+
+.contact {{
+    padding: 6rem 2rem;
+    text-align: center;
+}}
+
+.contact h2 {{
+    font-size: 2.5rem;
+    margin-bottom: 3rem;
+    color: var(--text-color);
+}}
+
+.contact-form {{
+    max-width: 600px;
+    margin: 0 auto;
+    display: grid;
+    gap: 1rem;
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: 1rem;
+    padding: 2rem;
+}}
+
+.contact-form input,
+.contact-form textarea {{
+    width: 100%;
+    padding: 1rem;
+    background: var(--bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: 0.5rem;
+    color: var(--text-color);
+    font-size: 1rem;
+    transition: all 0.3s ease;
+}}
+
+.contact-form input:focus,
+.contact-form textarea:focus {{
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2);
+}}
+
+.contact-form textarea {{
+    min-height: 150px;
+    resize: vertical;
+}}
+
+.contact-form button {{
+    padding: 1rem 2rem;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 0.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    grid-column: 1 / -1;
+    margin-top: 0.5rem;
+}}
+
+.contact-form button:hover {{
+    background: var(--secondary);
+    transform: translateY(-2px);
+}}
+
+/* ========================================================================= */
+/* Footer */
+/* ========================================================================= */
+
+.footer {{
+    padding: 3rem 2rem;
+    text-align: center;
+    background: var(--bg-dark);
+    border-top: 1px solid var(--glass-border);
+}}
+
+.footer p {{
+    margin: 0.5rem 0;
+    color: var(--text-color);
+    opacity: 0.7;
+    font-size: 0.9rem;
+}}
+
+/* ========================================================================= */
+/* Responsive Design */
+/* ========================================================================= */
+
+@media (max-width: 768px) {{
+    .hero {{
+        flex-direction: column;
+        text-align: center;
+        padding-top: 8rem;
+    }}
+
+    .hero-content {{
+        max-width: 100%;
+    }}
+
+    #canvas-container {{
+        height: 50vh;
+        min-height: 300px;
+    }}
+
+    .header {{
+        flex-direction: column;
+        gap: 1rem;
+        padding: 1rem;
+    }}
+
+    .nav {{
+        gap: 1rem;
+    }}
+
+    .features-grid {{
+        grid-template-columns: 1fr;
+    }}
+}}
+
+/* ========================================================================= */
+/* Animations */
+/* ========================================================================= */
+
+@media (prefers-reduced-motion: reduce) {{
+    * {{
+        animation: none !important;
+        transition: none !important;
+    }}
+}}
+"""
+        return css
+
+    def _generate_js(
+        self,
+        model: Any,
+        color_scheme: Dict[str, str]
+    ) -> str:
+        """Gera o JavaScript do site 3D."""
+        primary_color = color_scheme.get("primary", "#3b82f6")
+        secondary_color = color_scheme.get("secondary", "#1e40af")
+        accent_color = color_scheme.get("accent", "#60a5fa")
+        bg_color = color_scheme.get("background", "#0f172a")
+
+        js = f"""// =========================================================================
+// Cronos Studio - 3D Site Generator
+// Gerado automaticamente - Não edite diretamente
+// =========================================================================
+
+// Variáveis globais
+let scene, camera, renderer, orbitControls;
+let modelGroup, modelLoaded = false;
+let mouse = new THREE.Vector2();
+let raycaster = new THREE.Raycaster();
+let clock = new THREE.Clock();
+
+// Configurações
+const CONFIG = {{
+    canvasContainer: 'canvas-container',
+    loader: 'loader',
+    modelName: '{model.name}',
+    modelDescription: '{model.description}',
+    colors: {{
+        primary: '{primary_color}',
+        secondary: '{secondary_color}',
+        accent: '{accent_color}',
+        background: '{bg_color}'
+    }}
+}};
+
+// =========================================================================
+// INICIALIZAÇÃO
+// =========================================================================
+
+function init() {{
+    // Criar cena
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(CONFIG.colors.background);
+
+    // Criar câmera
+    camera = new THREE.PerspectiveCamera(
+        75,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        1000
+    );
+    camera.position.set(0, 0, 5);
+
+    // Criar renderer
+    renderer = new THREE.WebGLRenderer({{
+        antialias: true,
+        alpha: true
+    }});
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+
+    // Adicionar canvas ao container
+    const container = document.getElementById(CONFIG.canvasContainer);
+    container.appendChild(renderer.domElement);
+
+    // Adicionar controles orbitais
+    orbitControls = new THREE.OrbitControls(camera, renderer.domElement);
+    orbitControls.enableDamping = true;
+    orbitControls.dampingFactor = 0.05;
+
+    // Adicionar luzes
+    setupLights();
+
+    // Carregar modelo 3D
+    loadModel();
+
+    // Event listeners
+    window.addEventListener('resize', onWindowResize);
+    container.addEventListener('click', onCanvasClick, false);
+    container.addEventListener('mousemove', onMouseMove, false);
+
+    // Animação
+    animate();
+}}
+
+// =========================================================================
+// CONFIGURAÇÃO DE LUZES
+// =========================================================================
+
+function setupLights() {{
+    // Luz ambiente
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+    scene.add(ambientLight);
+
+    // Luz direcional (sol)
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+    directionalLight.position.set(5, 10, 7);
+    directionalLight.castShadow = true;
+    directionalLight.shadow.mapSize.width = 1024;
+    directionalLight.shadow.mapSize.height = 1024;
+    scene.add(directionalLight);
+
+    // Luz hemisphérica
+    const hemisphereLight = new THREE.HemisphereLight(
+        0xffffbb, 0x080820, 0.6
+    );
+    scene.add(hemisphereLight);
+
+    // Luz pontual (para realçar detalhes)
+    const pointLight = new THREE.PointLight(0xffffff, 0.5);
+    pointLight.position.set(-5, 5, -5);
+    scene.add(pointLight);
+}}
+
+// =========================================================================
+// CARREGAMENTO DO MODELO 3D
+// =========================================================================
+
+function loadModel() {{
+    // Criar grupo para o modelo
+    modelGroup = new THREE.Group();
+    scene.add(modelGroup);
+
+    // Criar modelo com base no tipo
+    create{model.name.replace('_', '').replace('3d', '').title()}Model();
+
+    // Centralizar câmera
+    centerCamera();
+
+    // Esconder loader
+    setTimeout(() => {{
+        document.getElementById(CONFIG.loader).classList.add('hidden');
+        modelLoaded = true;
+    }}, 1000);
+}}
+
+// =========================================================================
+// CRIAÇÃO DE MODELOS 3D (Geometria Procedural)
+// =========================================================================
+
+function createEarbudsModel() {{
+    const earbudGroup = new THREE.Group();
+
+    // Material principal
+    const mainMaterial = new THREE.MeshStandardMaterial({{
+        color: 0xffffff,
+        roughness: 0.3,
+        metalness: 0.7
+    }});
+
+    // Material do case
+    const caseMaterial = new THREE.MeshStandardMaterial({{
+        color: 0x2a2a2a,
+        roughness: 0.8,
+        metalness: 0.2
+    }});
+
+    // Material das almofadas
+    const padMaterial = new THREE.MeshStandardMaterial({{
+        color: 0x000000,
+        roughness: 0.9,
+        metalness: 0.1
+    }});
+
+    // Case
+    const caseGeometry = new THREE.BoxGeometry(3, 1.5, 2);
+    const caseMesh = new THREE.Mesh(caseGeometry, caseMaterial);
+    caseMesh.position.set(0, -1, 0);
+    caseMesh.castShadow = true;
+    caseMesh.receiveShadow = true;
+    earbudGroup.add(caseMesh);
+
+    // Tampa do case
+    const caseLidGeometry = new THREE.BoxGeometry(3.2, 0.2, 2.2);
+    const caseLid = new THREE.Mesh(caseLidGeometry, caseMaterial);
+    caseLid.position.set(0, -0.85, 0);
+    caseLid.userData = {{ originalPosition: new THREE.Vector3(0, -0.85, 0) }};
+    earbudGroup.add(caseLid);
+
+    // Fone esquerdo
+    const earbudLeft = createEarbud(-1.5, 0.5, 0);
+    earbudLeft.userData = {{ originalPosition: new THREE.Vector3(-1.5, 0.5, 0) }};
+    earbudGroup.add(earbudLeft);
+
+    // Fone direito
+    const earbudRight = createEarbud(1.5, 0.5, 0);
+    earbudRight.userData = {{ originalPosition: new THREE.Vector3(1.5, 0.5, 0) }};
+    earbudGroup.add(earbudRight);
+
+    // Adicionar interatividade
+    earbudGroup.userData = {{
+        type: 'earbuds',
+        lid: caseLid,
+        leftEarbud: earbudLeft,
+        rightEarbud: earbudRight
+    }};
+
+    modelGroup.add(earbudGroup);
+}}
+
+function createEarbud(x, y, z) {{
+    const group = new THREE.Group();
+
+    // Corpo
+    const bodyGeometry = new THREE.CylinderGeometry(0.5, 0.5, 0.3, 32);
+    const body = new THREE.Mesh(bodyGeometry, new THREE.MeshStandardMaterial({{
+        color: 0xffffff,
+        roughness: 0.3,
+        metalness: 0.7
+    }}));
+    body.rotation.x = Math.PI / 2;
+    group.add(body);
+
+    // Almofada
+    const padGeometry = new THREE.TorusGeometry(0.6, 0.2, 16, 48);
+    const pad = new THREE.Mesh(padGeometry, new THREE.MeshStandardMaterial({{
+        color: 0x000000,
+        roughness: 0.9,
+        metalness: 0.1
+    }}));
+    pad.rotation.x = Math.PI / 2;
+    pad.position.z = 0.35;
+    group.add(pad);
+
+    // Haste
+    const stemGeometry = new THREE.CylinderGeometry(0.1, 0.1, 1, 32);
+    const stem = new THREE.Mesh(stemGeometry, new THREE.MeshStandardMaterial({{
+        color: 0xffffff,
+        roughness: 0.3,
+        metalness: 0.7
+    }}));
+    stem.rotation.x = Math.PI / 4;
+    stem.position.set(0, -0.5, 0.5);
+    group.add(stem);
+
+    group.position.set(x, y, z);
+    return group;
+}}
+
+function createAirplaneModel() {{
+    const airplaneGroup = new THREE.Group();
+
+    // Fuselagem
+    const fuselageGeometry = new THREE.CylinderGeometry(1, 1, 10, 32);
+    const fuselage = new THREE.Mesh(fuselagemGeometry, new THREE.MeshStandardMaterial({{
+        color: 0xffffff,
+        roughness: 0.4,
+        metalness: 0.6
+    }}));
+    fuselage.rotation.x = Math.PI / 2;
+    airplaneGroup.add(fuselagem);
+
+    // Nariz
+    const noseGeometry = new THREE.ConeGeometry(1, 2, 32);
+    const nose = new THREE.Mesh(noseGeometry, new THREE.MeshStandardMaterial({{
+        color: 0xffffff,
+        roughness: 0.4,
+        metalness: 0.6
+    }}));
+    nose.position.set(5, 0, 0);
+    nose.rotation.x = Math.PI / 2;
+    airplaneGroup.add(nose);
+
+    // Cauda
+    const tailGeometry = new THREE.BoxGeometry(1, 3, 0.5);
+    const tail = new THREE.Mesh(tailGeometry, new THREE.MeshStandardMaterial({{
+        color: 0x3b82f6,
+        roughness: 0.3,
+        metalness: 0.8
+    }}));
+    tail.position.set(-5, 0, 0);
+    airplaneGroup.add(tail);
+
+    // Asas
+    const wingGeometry = new THREE.BoxGeometry(8, 0.3, 2);
+    const leftWing = new THREE.Mesh(wingGeometry, new THREE.MeshStandardMaterial({{
+        color: 0xcccccc,
+        roughness: 0.5,
+        metalness: 0.7
+    }}));
+    leftWing.position.set(0, 0, 1);
+    airplaneGroup.add(leftWing);
+
+    const rightWing = new THREE.Mesh(wingGeometry, new THREE.MeshStandardMaterial({{
+        color: 0xcccccc,
+        roughness: 0.5,
+        metalness: 0.7
+    }}));
+    rightWing.position.set(0, 0, -1);
+    airplaneGroup.add(rightWing);
+
+    // Motores
+    const engineGeometry = new THREE.CylinderGeometry(0.4, 0.4, 1.5, 32);
+    const engineMaterial = new THREE.MeshStandardMaterial({{
+        color: 0x333333,
+        roughness: 0.3,
+        metalness: 0.9
+    }});
+
+    const leftEngine = new THREE.Mesh(engineGeometry, engineMaterial);
+    leftEngine.position.set(2, 0, 0.8);
+    leftEngine.rotation.x = Math.PI / 2;
+    airplaneGroup.add(leftEngine);
+
+    const rightEngine = new THREE.Mesh(engineGeometry, engineMaterial);
+    rightEngine.position.set(2, 0, -0.8);
+    rightEngine.rotation.x = Math.PI / 2;
+    airplaneGroup.add(rightEngine);
+
+    airplaneGroup.userData = {{ type: 'airplane' }};
+    modelGroup.add(airplaneGroup);
+}}
+
+function createHotelModel() {{
+    const hotelGroup = new THREE.Group();
+
+    // Material principal
+    const buildingMaterial = new THREE.MeshStandardMaterial({{
+        color: 0xf5f5f5,
+        roughness: 0.7,
+        metalness: 0.1
+    }});
+
+    // Base do prédio
+    const baseGeometry = new THREE.BoxGeometry(8, 1, 6);
+    const base = new THREE.Mesh(baseGeometry, buildingMaterial);
+    base.position.y = 0.5;
+    hotelGroup.add(base);
+
+    // Andares
+    const floorHeight = 1;
+    for (let i = 0; i < 10; i++) {{
+        const floorGroup = new THREE.Group();
+
+        // Paredes
+        const wallGeometry = new THREE.BoxGeometry(7.5, floorHeight, 0.2);
+        const frontWall = new THREE.Mesh(wallGeometry, buildingMaterial);
+        frontWall.position.set(0, floorHeight/2, 2.75);
+        floorGroup.add(frontWall);
+
+        const backWall = new THREE.Mesh(wallGeometry, buildingMaterial);
+        backWall.position.set(0, floorHeight/2, -2.75);
+        floorGroup.add(backWall);
+
+        const leftWall = new THREE.Mesh(wallGeometry, buildingMaterial);
+        leftWall.rotation.y = Math.PI / 2;
+        leftWall.position.set(-3.75, floorHeight/2, 0);
+        floorGroup.add(leftWall);
+
+        const rightWall = new THREE.Mesh(wallGeometry, buildingMaterial);
+        rightWall.rotation.y = Math.PI / 2;
+        rightWall.position.set(3.75, floorHeight/2, 0);
+        floorGroup.add(rightWall);
+
+        // Janelas
+        const windowMaterial = new THREE.MeshStandardMaterial({{
+            color: 0x3b82f6,
+            transparent: true,
+            opacity: 0.4
+        }});
+        const windowGeometry = new THREE.BoxGeometry(1, 0.6, 0.1);
+
+        for (let j = 0; j < 4; j++) {{
+            const window = new THREE.Mesh(windowGeometry, windowMaterial);
+            window.position.set(-3 + j * 2, floorHeight/2, 2.7);
+            floorGroup.add(window);
+        }}
+
+        floorGroup.position.y = 1 + i * floorHeight;
+        floorGroup.userData = {{ floor: i, originalPosition: new THREE.Vector3(0, 1 + i * floorHeight, 0) }};
+        hotelGroup.add(floorGroup);
+    }}
+
+    hotelGroup.userData = {{ type: 'hotel', floors: [] }};
+    hotelGroup.children.forEach((child, index) => {{
+        if (index > 0) hotelGroup.userData.floors.push(child);
+    }});
+
+    modelGroup.add(hotelGroup);
+}}
+
+// =========================================================================
+// CENTRALIZAR CÂMERA NO MODELO
+// =========================================================================
+
+function centerCamera() {{
+    // Calcular bounding box
+    const box = new THREE.Box3().setFromObject(modelGroup);
+    const center = box.getCenter(new THREE.Vector3());
+
+    // Ajustar câmera
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const fov = camera.fov * (Math.PI / 180);
+    let distance = maxDim / (2 * Math.tan(fov / 2));
+
+    // Adicionar margem
+    distance *= 1.5;
+
+    // Posicionar câmera
+    camera.position.copy(center);
+    camera.position.z += distance;
+    camera.position.y += size.y * 0.5;
+    camera.lookAt(center);
+
+    // Ajustar controles
+    orbitControls.target.copy(center);
+    orbitControls.update();
+}}
+
+// =========================================================================
+// ANIMAÇÃO
+// =========================================================================
+
+function animate() {{
+    requestAnimationFrame(animate);
+
+    if (modelLoaded) {{
+        // Atualizar controles
+        orbitControls.update();
+
+        // Animações específicas do modelo
+        animateModel();
+    }}
+
+    renderer.render(scene, camera);
+}}
+
+function animateModel() {{
+    const delta = clock.getDelta();
+
+    if (modelGroup.userData.type === 'earbuds') {{
+        // Animação suave dos fones
+        const time = Date.now() * 0.001;
+        const earbudLeft = modelGroup.children[0].userData.leftEarbud;
+        const earbudRight = modelGroup.children[0].userData.rightEarbud;
+
+        if (earbudLeft && earbudRight) {{
+            earbudLeft.rotation.y = Math.sin(time * 0.5) * 0.1;
+            earbudRight.rotation.y = Math.sin(time * 0.5 + Math.PI) * 0.1;
+        }}
+    }}
+}}
+
+// =========================================================================
+// EVENTOS
+// =========================================================================
+
+function onWindowResize() {{
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+}}
+
+function onMouseMove(event) {{
+    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+}}
+
+function onCanvasClick(event) {{
+    if (!modelLoaded) return;
+
+    // Atualizar raycaster
+    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObjects(modelGroup.children, true);
+
+    if (intersects.length > 0) {{
+        const object = intersects[0].object;
+        const modelType = modelGroup.userData.type;
+
+        // Lógica de interação com base no tipo de modelo
+        switch(modelType) {{
+            case 'earbuds':
+                handleEarbudsClick(object);
+                break;
+            case 'airplane':
+                handleAirplaneClick(object);
+                break;
+            case 'hotel':
+                handleHotelClick(object);
+                break;
+        }}
+    }}
+}}
+
+function handleEarbudsClick(object) {{
+    const model = modelGroup.children[0];
+
+    // Verificar se clicou na tampa do case
+    if (object === model.userData.lid) {{
+        const isOpen = object.rotation.x === -Math.PI / 2;
+
+        gsap.to(object.rotation, {{
+            x: isOpen ? 0 : -Math.PI / 2,
+            duration: 1,
+            ease: isOpen ? "power2.in" : "power2.out"
+        }});
+
+        // Mover fones para fora/in do case
+        const targetY = isOpen ? 0.5 : 1.5;
+        const targetZ = isOpen ? 0 : (object === model.userData.leftEarbud ? -1 : 1);
+
+        if (!isOpen) {{
+            gsap.to(model.userData.leftEarbud.position, {{
+                y: targetY,
+                z: -1,
+                duration: 1,
+                ease: "back.out(1.7)"
+            }});
+            gsap.to(model.userData.rightEarbud.position, {{
+                y: targetY,
+                z: 1,
+                duration: 1,
+                ease: "back.out(1.7)"
+            }});
+        }} else {{
+            gsap.to(model.userData.leftEarbud.position, {{
+                y: targetY,
+                z: 0,
+                duration: 1,
+                ease: "back.inOut(1.7)"
+            }});
+            gsap.to(model.userData.rightEarbud.position, {{
+                y: targetY,
+                z: 0,
+                duration: 1,
+                ease: "back.inOut(1.7)"
+            }});
+        }}
+    }}
+}}
+
+function handleAirplaneClick(object) {{
+    // Destaque do objeto clicado
+    object.material.emissive.setHex(0xff0000);
+    object.material.emissiveIntensity = 0.5;
+
+    setTimeout(() => {{
+        object.material.emissive.setHex(0x000000);
+        object.material.emissiveIntensity = 0;
+    }}, 1000);
+}}
+
+function handleHotelClick(object) {{
+    // Verificar se clicou em um andar
+    const floor = object.parent;
+
+    if (floor && floor.userData.floor !== undefined) {{
+        // Resetar todas as cores
+        modelGroup.traverse(child => {{
+            if (child.isMesh && child.material && child.material.color) {{
+                child.material.color.set(0xf5f5f5);
+            }}
+        }});
+
+        // Destacar o andar clicado
+        floor.traverse(child => {{
+            if (child.isMesh && child.material) {{
+                child.material.color.set(0xff0000);
+            }}
+        }});
+    }}
+}
+
+// =========================================================================
+// FUNÇÕES DE CONTROLE
+// =========================================================================
+
+function openCase() {{
+    const model = modelGroup.children[0];
+    if (model && model.userData.lid) {{
+        gsap.to(model.userData.lid.rotation, {{
+            x: -Math.PI / 2,
+            duration: 1,
+            ease: "power2.out"
+        }});
+    }}
+}
+
+function closeCase() {{
+    const model = modelGroup.children[0];
+    if (model && model.userData.lid) {{
+        gsap.to(model.userData.lid.rotation, {{
+            x: 0,
+            duration: 1,
+            ease: "power2.in"
+        }});
+    }}
+}
+
+function explodeModel() {{
+    if (modelGroup.userData.type === 'earbuds') {{
+        const model = modelGroup.children[0];
+        gsap.to(model.userData.leftEarbud.position, {{
+            y: 1.5,
+            z: -2,
+            duration: 1,
+            ease: "back.out(1.7)"
+        }});
+        gsap.to(model.userData.rightEarbud.position, {{
+            y: 1.5,
+            z: 2,
+            duration: 1,
+            ease: "back.out(1.7)"
+        }});
+    }} else if (modelGroup.userData.type === 'hotel') {{
+        modelGroup.userData.floors.forEach((floor, index) => {{
+            const direction = index % 2 === 0 ? 1 : -1;
+            gsap.to(floor.position, {{
+                x: direction * 5,
+                z: direction * 2,
+                duration: 1,
+                delay: index * 0.1,
+                ease: "back.out(1.7)"
+            }});
+        }});
+    }}
+}
+
+function resetModel() {{
+    if (modelGroup.userData.type === 'earbuds') {{
+        const model = modelGroup.children[0];
+        gsap.to(model.userData.leftEarbud.position, {{
+            x: model.userData.leftEarbud.userData.originalPosition.x,
+            y: model.userData.leftEarbud.userData.originalPosition.y,
+            z: model.userData.leftEarbud.userData.originalPosition.z,
+            duration: 1,
+            ease: "back.inOut(1.7)"
+        }});
+        gsap.to(model.userData.rightEarbud.position, {{
+            x: model.userData.rightEarbud.userData.originalPosition.x,
+            y: model.userData.rightEarbud.userData.originalPosition.y,
+            z: model.userData.rightEarbud.userData.originalPosition.z,
+            duration: 1,
+            ease: "back.inOut(1.7)"
+        }});
+    }} else if (modelGroup.userData.type === 'hotel') {{
+        modelGroup.userData.floors.forEach((floor, index) => {{
+            gsap.to(floor.position, {{
+                x: floor.userData.originalPosition.x,
+                y: floor.userData.originalPosition.y,
+                z: floor.userData.originalPosition.z,
+                duration: 1,
+                delay: index * 0.1,
+                ease: "back.inOut(1.7)"
+            }});
+        }});
+    }}
+}
+
+function toggleTransparent() {{
+    const transparent = !modelGroup.children[0].children[0].material.transparent;
+    modelGroup.traverse(child => {{
+        if (child.isMesh && child.material) {{
+            child.material.transparent = transparent;
+            child.material.opacity = transparent ? 0.3 : 1;
+            child.material.needsUpdate = true;
+        }}
+    }});
+}
+
+// =========================================================================
+// INICIALIZAR AO CARREGAR A PÁGINA
+// =========================================================================
+
+window.addEventListener('DOMContentLoaded', () => {{
+    // Verificar se o Three.js foi carregado
+    if (typeof THREE !== 'undefined') {{
+        init();
+    }} else {{
+        console.error('Three.js não foi carregado. Verifique o CDN.');
+    }}
+
+    // Adicionar event listeners para botões
+    document.getElementById('cta-button')?.addEventListener('click', () => {{
+        explodeModel();
+    }});
+
+    // Formulário de contato
+    document.getElementById('contact-form')?.addEventListener('submit', (e) => {{
+        e.preventDefault();
+        alert('Mensagem enviada! (Demo - formulário não funcional)');
+    }});
+
+    // Scroll effect para header
+    window.addEventListener('scroll', () => {{
+        const header = document.querySelector('.header');
+        if (window.scrollY > 50) {{
+            header.classList.add('scrolled');
+        }} else {{
+            header.classList.remove('scrolled');
+        }}
+    }});
+}});
+
+// Expor funções para console (debug)
+window.openCase = openCase;
+window.closeCase = closeCase;
+window.explodeModel = explodeModel;
+window.resetModel = resetModel;
+window.toggleTransparent = toggleTransparent;
+"""
+
+        return js
+
+# =============================================================================
+# 📄 TEMPLATES PRÉ-DEFINIDOS
+# =============================================================================
+
+    def generate_3d_template(
+        self,
+        template_name: str,
+        business_name: str,
+        category: str,
+        **kwargs
+    ) -> Dict[str, str]:
+        """
+        Gera um site 3D com base em um template pré-definido.
+        """
+        templates = {
+            "basic": self._generate_basic_3d_template,
+            "standard": self._generate_standard_3d_template,
+            "premium": self._generate_premium_3d_template
+        }
+
+        if template_name not in templates:
+            template_name = "premium"
+
+        return templates[template_name](business_name, category, **kwargs)
+
+    def _generate_basic_3d_template(
+        self,
+        business_name: str,
+        category: str,
+        **kwargs
+    ) -> Dict[str, str]:
+        """Template básico 3D."""
+        from ..references import get_reference
+        ref_site = get_reference(category)
+
+        html = f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{business_name} | {ref_site.name}</title>
+    <script src="{self.three_cdn}" defer></script>
+    <script src="{self.orbit_controls_cdn}" defer></script>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ font-family: Arial, sans-serif; background: #0f172a; color: #f8fafc; min-height: 100vh; }}
+        #canvas-container {{ width: 100%; height: 100vh; }}
+        canvas {{ display: block; width: 100%; height: 100%; }}
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+    <script>
+        let scene, camera, renderer, controls;
+        let cube;
+
+        function init() {{
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0f172a);
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+            camera.position.z = 5;
+
+            renderer = new THREE.WebGLRenderer({{ antialias: true }});
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+
+            // Criar um cubo de teste
+            const geometry = new THREE.BoxGeometry();
+            const material = new THREE.MeshBasicMaterial({{ color: 0x3b82f6 }});
+            cube = new THREE.Mesh(geometry, material);
+            scene.add(cube);
+
+            // Luz
+            const light = new THREE.DirectionalLight(0xffffff, 1);
+            light.position.set(5, 10, 7);
+            scene.add(light);
+
+            animate();
+        }}
+
+        function animate() {{
+            requestAnimationFrame(animate);
+            cube.rotation.x += 0.01;
+            cube.rotation.y += 0.01;
+            controls.update();
+            renderer.render(scene, camera);
+        }}
+
+        window.addEventListener('resize', () => {{
+            camera.aspect = window.innerWidth/window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }});
+
+        init();
+    </script>
+</body>
+</html>
+"""
+        return {"index.html": html}
+
+    def _generate_standard_3d_template(
+        self,
+        business_name: str,
+        category: str,
+        **kwargs
+    ) -> Dict[str, str]:
+        """Template standard 3D."""
+        # Usar o gerador principal com modelo padrão
+        return self.generate_3d_site(
+            category=category,
+            business_name=business_name,
+            model_type="earbuds",
+            template_type="standard"
+        )
+
+    def _generate_premium_3d_template(
+        self,
+        business_name: str,
+        category: str,
+        **kwargs
+    ) -> Dict[str, str]:
+        """Template premium 3D."""
+        # Usar o gerador principal com modelo premium
+        return self.generate_3d_site(
+            category=category,
+            business_name=business_name,
+            model_type=kwargs.get("model_type", "earbuds"),
+            template_type="premium"
+        )
+
+# =============================================================================
+# 🎯 FUNÇÃO PRINCIPAL PARA GERAR SITES 3D
+# =============================================================================
+
+def generate_3d_site(
+    category: str,
+    business_name: str,
+    model_type: str = "earbuds",
+    template_type: str = "premium",
+    **kwargs
+) -> Dict[str, str]:
+    """
+    Função principal para gerar sites 3D.
+    """
+    generator = Site3DGenerator()
+    return generator.generate_3d_site(
+        category=category,
+        business_name=business_name,
+        model_type=model_type,
+        template_type=template_type,
+        **kwargs
+    )
+
+def generate_3d_template(
+    template_name: str,
+    business_name: str,
+    category: str,
+    **kwargs
+) -> Dict[str, str]:
+    """
+    Gera um template 3D específico.
+    """
+    generator = Site3DGenerator()
+    return generator.generate_3d_template(
+        template_name=template_name,
+        business_name=business_name,
+        category=category,
+        **kwargs
+    )

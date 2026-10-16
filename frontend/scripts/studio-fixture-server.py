@@ -18,6 +18,11 @@ calls={'plans':0,'site':0,'image':0}
 async def fake_photo(category,orientation='any'):
  return (Path(__file__).resolve().parents[2]/'cronos/studio/media/restaurant-fire.jpg').read_bytes(),'File:Fixture photograph.jpg',{'url':'https://commons.wikimedia.org/wiki/File:Fixture.jpg','author':'Autor de teste','license':'CC0'}
 image_search.suggest_image=fake_photo
+import base64
+import cronos.studio.threed.reference_images as reference_photos
+async def fake_reference_photo(url):
+ return 'data:image/jpeg;base64,'+base64.b64encode((await fake_photo('restaurante'))[0]).decode()
+reference_photos.download=fake_reference_photo
 async def fake_image(settings,provider,prompt,orientation,model):
  calls['image']+=1
  await asyncio.sleep(.3)

@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Site Premium 3D - Cronos Studio</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.4/gsap.min.js" defer></script>
+    <style>
+        :root {
+            --primary: #3b82f6;
+            --secondary: #1e40af;
+            --accent: #60a5fa;
+            --bg: #0f172a;
+            --text: #f8fafc;
+            --card-bg: rgba(255, 255, 255, 0.05);
+            --glass: rgba(255, 255, 255, 0.1);
+            --glass-border: rgba(255, 255, 255, 0.2);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+            line-height: 1.6;
+        }
+        #loader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--bg);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            transition: opacity 0.5s ease;
+        }
+        #loader.hidden { opacity: 0; pointer-events: none; }
+        .loader-content { text-align: center; }
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid var(--glass-border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 100;
+            background: var(--glass);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--glass-border);
+            transition: all 0.3s ease;
+        }
+        header.scrolled {
+            background: rgba(15, 23, 42, 0.95);
+            padding: 0.8rem 2rem;
+        }
+        .logo h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary);
+            letter-spacing: 0.1em;
+        }
+        .logo .tagline {
+            display: block;
+            font-size: 0.8rem;
+            color: var(--accent);
+            opacity: 0.8;
+            margin-top: 0.25rem;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+        }
+        nav { display: flex; gap: 2rem; }
+        nav a {
+            color: var(--text);
+            text-decoration: none;
+            font-size: 1rem;
+            font-weight: 500;
+            position: relative;
+            padding: 0.5rem 0;
+            transition: color 0.3s ease;
+        }
+        nav a::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background: var(--accent);
+            transition: width 0.3s ease;
+        }
+        nav a:hover { color: var(--accent); }
+        nav a:hover::after { width: 100%; }
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            padding: 6rem 2rem 2rem;
+            gap: 4rem;
+            position: relative;
+            overflow: hidden;
+        }
+        .hero-content {
+            flex: 1;
+            max-width: 500px;
+            z-index: 1;
+        }
+        .hero-title {
+            font-size: clamp(2.5rem, 8vw, 4rem);
+            font-weight: 800;
+            color: var(--text);
+            margin-bottom: 1.5rem;
+            line-height: 1.1;
+            letter-spacing: -0.02em;
+        }
+        .hero-description {
+            font-size: 1.2rem;
+            color: var(--text);
+            opacity: 0.8;
+            margin-bottom: 2rem;
+            line-height: 1.8;
+        }
+        .cta-button {
+            padding: 1rem 2rem;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+        .cta-button:hover {
+            background: var(--secondary);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 25px rgba(0, 0, 0, 0.4);
+        }
+        #canvas-container {
+            flex: 2;
+            height: 80vh;
+            min-height: 500px;
+            position: relative;
+        }
+        #canvas-container canvas { display: block; width: 100%; height: 100%; }
+        .features {
+            padding: 6rem 2rem;
+            background: var(--glass);
+            border-top: 1px solid var(--glass-border);
+        }
+        .features h2 {
+            font-size: 2.5rem;
+            margin-bottom: 3rem;
+            color: var(--text);
+            text-align: center;
+            position: relative;
+        }
+        .features h2::after {
+            content: '';
+            position: absolute;
+            bottom: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80px;
+            height: 4px;
+            background: var(--accent);
+            border-radius: 2px;
+        }
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .feature-card {
+            background: var(--card-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 1rem;
+            padding: 2rem;
+            text-align: center;
+            transition: all 0.3s ease;
+            opacity: 0;
+            transform: translateY(20px);
+            animation: fadeInUp 0.6s ease forwards;
+        }
+        @keyframes fadeInUp { to { opacity: 1; transform: translateY(0); } }
+        .feature-card:nth-child(1) { --delay: 0.1s; }
+        .feature-card:nth-child(2) { --delay: 0.2s; }
+        .feature-card:nth-child(3) { --delay: 0.3s; }
+        .feature-card:hover {
+            background: var(--glass);
+            transform: translateY(-5px);
+            border-color: var(--accent);
+        }
+        .feature-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            color: var(--accent);
+        }
+        .feature-card h3 { font-size: 1.2rem; margin-bottom: 0.5rem; color: var(--text); }
+        .feature-card p { color: var(--text); opacity: 0.7; font-size: 0.95rem; }
+        .contact {
+            padding: 6rem 2rem;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4rem;
+            background: var(--glass);
+            border-top: 1px solid var(--glass-border);
+        }
+        .contact h2 {
+            font-size: 2.5rem;
+            margin-bottom: 2rem;
+            color: var(--text);
+        }
+        .contact p { color: var(--text); opacity: 0.7; line-height: 1.8; }
+        .contact-form { display: grid; gap: 1.5rem; }
+        .contact-form label {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            font-size: 1rem;
+            color: var(--text);
+        }
+        .contact-form input,
+        .contact-form textarea {
+            width: 100%;
+            padding: 1rem;
+            background: var(--glass);
+            color: var(--text);
+            border: 1px solid var(--glass-border);
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+        .contact-form input:focus,
+        .contact-form textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2);
+        }
+        .contact-form textarea { min-height: 150px; resize: vertical; }
+        .contact-form button {
+            padding: 1rem 2rem;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            grid-column: 1 / -1;
+        }
+        .contact-form button:hover { background: var(--secondary); transform: translateY(-2px); }
+        footer {
+            border-top: 1px solid var(--glass-border);
+            padding: 3rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 2rem;
+            background: var(--glass);
+        }
+        footer p { color: var(--text); opacity: 0.7; font-size: 0.9rem; }
+        footer a { color: var(--accent); text-decoration: none; }
+        .controls {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            display: flex;
+            gap: 1rem;
+            z-index: 100;
+        }
+        .controls button {
+            padding: 0.75rem 1.5rem;
+            background: var(--glass);
+            color: var(--text);
+            border: 1px solid var(--glass-border);
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9rem;
+        }
+        .controls button:hover {
+            background: var(--primary);
+            border-color: var(--primary);
+        }
+        @media (max-width: 768px) {
+            .hero { flex-direction: column; text-align: center; padding-top: 8rem; }
+            .hero-content { max-width: 100%; }
+            #canvas-container { height: 50vh; min-height: 300px; }
+            .header { flex-direction: column; gap: 1rem; padding: 1rem; }
+            .nav { gap: 1rem; }
+            .features-grid { grid-template-columns: 1fr; }
+            .contact { grid-template-columns: 1fr; gap: 2rem; }
+            footer { flex-direction: column; text-align: center; gap: 1rem; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            * { animation: none !important; transition: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <div id="loader">
+        <div class="loader-content">
+            <div class="spinner"></div>
+            <p>Carregando experiência 3D...</p>
+        </div>
+    </div>
+
+    <header>
+        <div class="logo">
+            <h1>[NOME]</h1>
+            <span class="tagline">[SUBTÍTULO]</span>
+        </div>
+        <nav>
+            <a href="#inicio">Início</a>
+            <a href="#recursos">Recursos</a>
+            <a href="#contato">Contato</a>
+        </nav>
+    </header>
+
+    <main>
+        <section id="inicio" class="hero">
+            <div class="hero-content">
+                <h1 class="hero-title">[TÍTULO PRINCIPAL]</h1>
+                <p class="hero-description">[DESCRIÇÃO ATRAENTE]</p>
+                <button id="cta-button" class="cta-button">Explorar em 3D <span>↑</span></button>
+            </div>
+            <div id="canvas-container"></div>
+        </section>
+
+        <section class="features">
+            <h2>Nossos Recursos</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🎯</div>
+                    <h3>Recurso 1</h3>
+                    <p>Descrição detalhada do primeiro recurso premium.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">⭐</div>
+                    <h3>Recurso 2</h3>
+                    <p>Descrição detalhada do segundo recurso premium.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">💡</div>
+                    <h3>Recurso 3</h3>
+                    <p>Descrição detalhada do terceiro recurso premium.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="contact">
+            <div>
+                <h2>Entre em Contato</h2>
+                <p>Estamos prontos para ajudar você a criar a melhor experiência digital.</p>
+            </div>
+            <form id="contact-form" class="contact-form">
+                <label>
+                    Nome
+                    <input type="text" name="name" required>
+                </label>
+                <label>
+                    E-mail
+                    <input type="email" name="email" required>
+                </label>
+                <label>
+                    Mensagem
+                    <textarea name="message" required></textarea>
+                </label>
+                <button type="submit">Enviar Mensagem</button>
+            </form>
+        </section>
+    </main>
+
+    <footer>
+        <div>
+            <p>&copy; 2024 [NOME]. Todos os direitos reservados.</p>
+            <p>Site Premium 3D - Cronos Studio</p>
+        </div>
+        <a href="#inicio">Voltar ao topo ↑</a>
+    </footer>
+
+    <div class="controls">
+        <button id="reset-btn">Resetar</button>
+        <button id="explode-btn">Explodir</button>
+        <button id="transparent-btn">Transparência</button>
+    </div>
+
+    <script>
+        // =========================================================================
+        // Configuração 3D
+        // =========================================================================
+
+        let scene, camera, renderer, controls, modelGroup;
+        let loader = document.getElementById('loader');
+        let canvasContainer = document.getElementById('canvas-container');
+
+        // Inicializar quando a página carregar
+        window.addEventListener('DOMContentLoaded', () => {
+            if (typeof THREE !== 'undefined') {
+                init();
+            } else {
+                console.error('Three.js não carregou. Verifique o CDN.');
+                loader.innerHTML = '<p>Erro: Three.js não carregou. Verifique sua conexão.</p>';
+            }
+
+            // Scroll effect para header
+            window.addEventListener('scroll', () => {
+                const header = document.querySelector('header');
+                if (window.scrollY > 50) {
+                    header.classList.add('scrolled');
+                } else {
+                    header.classList.remove('scrolled');
+                }
+            });
+
+            // Botões de controle
+            document.getElementById('cta-button')?.addEventListener('click', explodeModel);
+            document.getElementById('reset-btn')?.addEventListener('click', resetModel);
+            document.getElementById('explode-btn')?.addEventListener('click', explodeModel);
+            document.getElementById('transparent-btn')?.addEventListener('click', toggleTransparent);
+
+            // Formulário
+            document.getElementById('contact-form')?.addEventListener('submit', (e) => {
+                e.preventDefault();
+                alert('Mensagem enviada! (Demo - formulário não funcional)');
+            });
+        });
+
+        // =========================================================================
+        // Funções 3D
+        // =========================================================================
+
+        function init() {
+            // Cena
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0f172a);
+
+            // Câmera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 0, 5);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            canvasContainer.appendChild(renderer.domElement);
+
+            // Controles
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+
+            // Luzes
+            setupLights();
+
+            // Carregar modelo
+            loadModel();
+
+            // Event listeners
+            window.addEventListener('resize', onWindowResize);
+
+            // Animação
+            animate();
+        }
+
+        function setupLights() {
+            // Luz ambiente
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+            scene.add(ambientLight);
+
+            // Luz direcional
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+            directionalLight.position.set(5, 10, 7);
+            directionalLight.castShadow = true;
+            scene.add(directionalLight);
+
+            // Luz hemisphérica
+            const hemisphereLight = new THREE.HemisphereLight(0xffffbb, 0x080820, 0.6);
+            scene.add(hemisphereLight);
+        }
+
+        function loadModel() {
+            modelGroup = new THREE.Group();
+            scene.add(modelGroup);
+
+            // Criar modelo de fone de ouvido (simplificado)
+            createEarbudsModel();
+
+            // Centralizar câmera
+            centerCamera();
+
+            // Esconder loader
+            setTimeout(() => {
+                loader.classList.add('hidden');
+            }, 1000);
+        }
+
+        function createEarbudsModel() {
+            const group = new THREE.Group();
+
+            // Material principal
+            const mainMaterial = new THREE.MeshStandardMaterial({
+                color: 0xffffff,
+                roughness: 0.3,
+                metalness: 0.7
+            });
+
+            // Case
+            const caseGeometry = new THREE.BoxGeometry(3, 1.5, 2);
+            const caseMesh = new THREE.Mesh(caseGeometry, new THREE.MeshStandardMaterial({
+                color: 0x2a2a2a,
+                roughness: 0.8
+            }));
+            caseMesh.position.set(0, -1, 0);
+            caseMesh.castShadow = true;
+            group.add(caseMesh);
+
+            // Tampa do case
+            const lidGeometry = new THREE.BoxGeometry(3.2, 0.2, 2.2);
+            const lid = new THREE.Mesh(lidGeometry, new THREE.MeshStandardMaterial({
+                color: 0x2a2a2a,
+                roughness: 0.8
+            }));
+            lid.position.set(0, -0.85, 0);
+            lid.userData = { originalPosition: new THREE.Vector3(0, -0.85, 0) };
+            group.add(lid);
+
+            // Fone esquerdo
+            const leftEarbud = createEarbud(-1.5, 0.5, 0);
+            leftEarbud.userData = { originalPosition: new THREE.Vector3(-1.5, 0.5, 0) };
+            group.add(leftEarbud);
+
+            // Fone direito
+            const rightEarbud = createEarbud(1.5, 0.5, 0);
+            rightEarbud.userData = { originalPosition: new THREE.Vector3(1.5, 0.5, 0) };
+            group.add(rightEarbud);
+
+            // Guardar referências
+            group.userData = {
+                type: 'earbuds',
+                lid: lid,
+                leftEarbud: leftEarbud,
+                rightEarbud: rightEarbud
+            };
+
+            modelGroup.add(group);
+        }
+
+        function createEarbud(x, y, z) {
+            const group = new THREE.Group();
+
+            // Corpo
+            const bodyGeometry = new THREE.CylinderGeometry(0.5, 0.5, 0.3, 32);
+            const body = new THREE.Mesh(bodyGeometry, new THREE.MeshStandardMaterial({
+                color: 0xffffff,
+                roughness: 0.3,
+                metalness: 0.7
+            }));
+            body.rotation.x = Math.PI / 2;
+            group.add(body);
+
+            // Almofada
+            const padGeometry = new THREE.TorusGeometry(0.6, 0.2, 16, 48);
+            const pad = new THREE.Mesh(padGeometry, new THREE.MeshStandardMaterial({
+                color: 0x000000,
+                roughness: 0.9
+            }));
+            pad.rotation.x = Math.PI / 2;
+            pad.position.z = 0.35;
+            group.add(pad);
+
+            group.position.set(x, y, z);
+            return group;
+        }
+
+        function centerCamera() {
+            const box = new THREE.Box3().setFromObject(modelGroup);
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const fov = camera.fov * (Math.PI / 180);
+            let distance = maxDim / (2 * Math.tan(fov / 2));
+            distance *= 1.5;
+
+            camera.position.copy(center);
+            camera.position.z += distance;
+            camera.position.y += size.y * 0.5;
+            camera.lookAt(center);
+
+            controls.target.copy(center);
+            controls.update();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // =========================================================================
+        // Funções de Controle do Modelo
+        // =========================================================================
+
+        function explodeModel() {
+            if (!modelGroup || !modelGroup.userData) return;
+
+            const model = modelGroup.children[0];
+            if (model.userData.type === 'earbuds') {
+                gsap.to(model.userData.leftEarbud.position, {
+                    y: 1.5,
+                    z: -2,
+                    duration: 1,
+                    ease: "back.out(1.7)"
+                });
+                gsap.to(model.userData.rightEarbud.position, {
+                    y: 1.5,
+                    z: 2,
+                    duration: 1,
+                    ease: "back.out(1.7)"
+                });
+            }
+        }
+
+        function resetModel() {
+            if (!modelGroup || !modelGroup.userData) return;
+
+            const model = modelGroup.children[0];
+            if (model.userData.type === 'earbuds') {
+                gsap.to(model.userData.leftEarbud.position, {
+                    x: model.userData.leftEarbud.userData.originalPosition.x,
+                    y: model.userData.leftEarbud.userData.originalPosition.y,
+                    z: model.userData.leftEarbud.userData.originalPosition.z,
+                    duration: 1,
+                    ease: "back.inOut(1.7)"
+                });
+                gsap.to(model.userData.rightEarbud.position, {
+                    x: model.userData.rightEarbud.userData.originalPosition.x,
+                    y: model.userData.rightEarbud.userData.originalPosition.y,
+                    z: model.userData.rightEarbud.userData.originalPosition.z,
+                    duration: 1,
+                    ease: "back.inOut(1.7)"
+                });
+            }
+        }
+
+        function toggleTransparent() {
+            if (!modelGroup) return;
+
+            const transparent = !modelGroup.children[0].children[0].material.transparent;
+            modelGroup.traverse(child => {
+                if (child.isMesh && child.material) {
+                    child.material.transparent = transparent;
+                    child.material.opacity = transparent ? 0.3 : 1;
+                    child.material.needsUpdate = true;
+                }
+            });
+        }
+    </script>
+</body>
+</html>

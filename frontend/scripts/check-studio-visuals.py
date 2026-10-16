@@ -19,20 +19,19 @@ async def main():
             page=await browser.new_page(viewport={'width':1672,'height':1000})
             errors=[];page.on('pageerror',lambda error:errors.append(str(error)))
             page.on('dialog',lambda dialog:dialog.dismiss()) # No native browser dialog is needed for generation.
+            await page.route('https://images.unsplash.com/**',lambda route:route.fulfill(body=(Path(__file__).resolve().parents[2]/'cronos/studio/media/restaurant-fire.jpg').read_bytes(),content_type='image/jpeg'))
+            draft=(await client.post('/studio/projects',json={'name':'Referência do senhor','category':'restaurante','brief':'Planejar uma cozinha autoral'})).json()
             await page.goto(BASE+'/#cronos-session=studio-test-only')
             await page.get_by_role('button',name='ESTÚDIO DE SITES',exact=True).click()
-            await expect(page.locator('.ss-restaurant-direction')).not_to_have_count(0)
-            await page.get_by_role('button',name='Explorar demonstração funcional',exact=True).click()
+            await expect(page.locator('.ss-reference-art')).not_to_have_count(0)
+            # Plan a saved draft to keep testing the draft export guard separately
+            # from the new local automatic-template delivery.
+            await page.get_by_role('button',name='Meus projetos',exact=False).first.click()
+            await page.locator('.ss-saved-card').filter(has_text=draft['name']).first.click()
             await expect(page.get_by_role('button',name='Testar esta prévia',exact=True)).to_be_enabled()
             website=page.frame_locator('.ss-frame-container iframe')
-            await expect(website.locator('h1')).to_contain_text('O mar decide.')
-            await expect(website.locator('.opening-photo img')).to_be_visible()
-            await website.get_by_role('button',name='Para terminar',exact=True).click()
-            assert await website.locator('.menu-items article:visible').count()==1
-            await website.get_by_role('button',name='Detalhes').click()
-            await expect(website.get_by_role('dialog')).to_be_visible()
-            await expect(website.get_by_role('dialog').get_by_role('heading',name='Cocada de forno',exact=True)).to_be_visible()
-            await website.get_by_role('button',name='Fechar detalhes do prato').click()
+            await expect(website.locator('h1')).to_contain_text('Sabores que Encantam')
+            await expect(website.locator('.hero-visual img')).to_be_visible()
             await page.screenshot(path='/tmp/cronos-studio-restaurant-editor.png')
             projects=(await client.get('/studio/projects')).json()['projects'];project=projects[0];pid=project['id']
             ticket=(await client.post('/studio/projects/'+pid+'/preview',json={})).json()
@@ -69,7 +68,7 @@ async def main():
             await page.get_by_role('button',name='CONFIRMAR SOLICITAÇÃO').click()
             await expect(page.locator('.ss-assets')).to_contain_text('Proposta visual vertical.jpg',timeout=15000)
             await expect(page.locator('.ss-assets')).to_contain_text('1024 × 1536 · VERTICAL')
-            await expect(page.locator('.ss-assets img')).to_have_count(2) # Example photo + image API fixture.
+            await expect(page.locator('.ss-assets img')).to_have_count(1) # Image API fixture; reference URLs are not copied as private assets.
             assert (await client.get('/fixture/calls')).json()['image']==initial_calls['image']+1
             search=[]
             async def image_search(route):
@@ -121,7 +120,7 @@ async def main():
             await expect(page.locator('.ss-idea')).to_have_count(3,timeout=15000)
             assert not errors,errors
             await browser.close()
-            print('PASS: restaurant imagery, filters and details; draft export warning; in-app authorization and ESC preserve requests; three proposals, explicit choice, vertical image, source orientation search, approved-direction build, failed-generation request persistence, responsive layout. Provider calls are fixtures, not live APIs.')
+            print('PASS: supplied restaurant reference, category image fixture and responsive preview; draft export warning; in-app authorization and ESC preserve requests; three proposals, explicit choice, vertical image, source orientation search, approved-direction build, failed-generation request persistence, responsive layout. Provider calls are fixtures, not live APIs.')
 
 
 asyncio.run(main())

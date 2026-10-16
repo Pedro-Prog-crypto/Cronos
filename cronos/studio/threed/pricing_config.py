@@ -1,0 +1,243 @@
+"""
+Configurações de preços e níveis de qualidade para sites 3D
+"""
+
+from typing import Dict, Any, List, Tuple
+
+# =============================================================================
+# 💰 NÍVEIS DE PREÇO COM BASE NO TIPO DE SITE
+# =============================================================================
+
+PRICING_TIERS = {
+
+    "economy": {
+        "name": "Econômico",
+        "price_range": (200, 500),
+        "type": "2d",
+        "quality": "basic",
+        "features": [
+            "Site estático com imagens",
+            "Design responsivo",
+            "1-3 páginas",
+            "Formulário de contato",
+            "Galeria de imagens",
+            "SEO básico"
+        ],
+        "3d": False,
+        "animations": [],
+        "delivery_time": "3-5 dias",
+        "revisions": 1,
+        "best_for": ["Pequenos negócios", "Portfólio simples", "Landing pages"]
+    },
+
+    "standard": {
+        "name": "Padrão",
+        "price_range": (1000, 4000),
+        "type": "2d_enhanced",
+        "quality": "medium",
+        "features": [
+            "Site dinâmico com interatividade",
+            "Design personalizado",
+            "3-5 páginas",
+            "Animações 2D",
+            "Galeria avançada",
+            "Formulários inteligentes",
+            "SEO otimizado",
+            "Integração com redes sociais"
+        ],
+        "3d": False,
+        "animations": ["scroll", "hover", "fade"],
+        "delivery_time": "7-10 dias",
+        "revisions": 3,
+        "best_for": ["Restaurantes", "Lojas", "Serviços profissionais", "Eventos"]
+    },
+
+    "premium_2d": {
+        "name": "Premium 2D",
+        "price_range": (4000, 5000),
+        "type": "2d_premium",
+        "quality": "high",
+        "features": [
+            "Site ultra-moderno com animações avançadas",
+            "Design exclusivo",
+            "5-10 páginas",
+            "Animações complexas 2D",
+            "Efeitos visuais premium",
+            "Integração com APIs",
+            "SEO avançado",
+            "Otimizado para velocidade"
+        ],
+        "3d": False,
+        "animations": ["scroll", "hover", "fade", "parallax", "micro_interactions"],
+        "delivery_time": "10-14 dias",
+        "revisions": 5,
+        "best_for": ["Marcas estabelecidas", "E-commerce", "Plataformas"]
+    },
+
+    "premium_3d": {
+        "name": "Premium 3D",
+        "price_range": (5000, 15000),
+        "type": "3d",
+        "quality": "ultra",
+        "features": [
+            "Site 3D interativo ultra-realista",
+            "Modelos 3D detalhados",
+            "Animações 3D avançadas",
+            "Design futurista",
+            "Efeitos de luz e sombra",
+            "Navegação imersiva",
+            "Transparência e explodir",
+            "Câmera interativa",
+            "Otimizado para performance",
+            "SEO completo"
+        ],
+        "3d": True,
+        "animations": ["rotate", "zoom", "explode", "transparency", "open", "camera_path"],
+        "delivery_time": "14-21 dias",
+        "revisions": 5,
+        "best_for": ["Produtos premium", "Imóveis", "Automóveis", "Tecnologia"]
+    }
+}
+
+# =============================================================================
+# 📊 CONFIGURAÇÃO DE PREÇOS POR CATEGORIA
+# =============================================================================
+
+CATEGORY_PRICING = {
+    # Sites 2D
+    "restaurante": {"tier": "standard", "base_price": 1200, "multiplier": 1.0},
+    "barbearia": {"tier": "standard", "base_price": 1000, "multiplier": 0.9},
+    "clinica": {"tier": "standard", "base_price": 1500, "multiplier": 1.1},
+    "academia": {"tier": "standard", "base_price": 1300, "multiplier": 1.0},
+    "loja": {"tier": "standard", "base_price": 1400, "multiplier": 1.1},
+    "lava_jato": {"tier": "standard", "base_price": 1100, "multiplier": 0.9},
+    "servicos": {"tier": "economy", "base_price": 400, "multiplier": 1.0},
+    "educacao": {"tier": "standard", "base_price": 1200, "multiplier": 1.0},
+    "portfolio": {"tier": "economy", "base_price": 300, "multiplier": 0.8},
+    "eventos": {"tier": "standard", "base_price": 1500, "multiplier": 1.2},
+
+    # Sites 3D
+    "imobiliaria": {"tier": "premium_3d", "base_price": 7000, "multiplier": 1.2},
+    "hotel": {"tier": "premium_3d", "base_price": 8000, "multiplier": 1.0},
+    "personalizado": {"tier": "premium_3d", "base_price": 8000, "multiplier": 1.5},
+}
+
+# =============================================================================
+# 📈 CONFIGURAÇÃO DE PREÇOS POR COMPLEXIDADE
+# =============================================================================
+
+COMPLEXITY_PRICING = {
+    "basic": {"multiplier": 1.0, "features": []},
+    "medium": {"multiplier": 1.5, "features": ["animations", "interactivity"]},
+    "high": {"multiplier": 2.0, "features": ["api_integration", "advanced_animations"]},
+    "ultra": {"multiplier": 3.0, "features": ["3d_models", "interactive_3d", "advanced_effects"]}
+}
+
+# =============================================================================
+# 🎯 CONFIGURAÇÃO DE PREÇOS POR RECURSOS
+# =============================================================================
+
+FEATURE_PRICING = {
+    "3d_model": 2000,
+    "advanced_animations": 1500,
+    "api_integration": 1000,
+    "ecommerce": 2000,
+    "custom_design": 1500,
+    "seo_optimization": 800,
+    "responsive_design": 500,
+    "content_management": 1200,
+    "social_media_integration": 600,
+    "analytics": 700
+}
+
+# =============================================================================
+# 🔧 FUNÇÕES PARA CÁLCULO DE PREÇOS
+# =============================================================================
+
+def get_price_for_site(
+    category: str,
+    quality: str = "standard",
+    has_3d: bool = False,
+    custom_features: List[str] = None
+) -> Dict[str, Any]:
+    """
+    Calcula o preço para um site com base na categoria, qualidade e recursos.
+
+    Args:
+        category: Categoria do site (e.g., 'restaurante', 'hotel')
+        quality: Nível de qualidade ('basic', 'standard', 'premium', 'ultra')
+        has_3d: Se o site tem recursos 3D
+        custom_features: Lista de recursos adicionais
+
+    Returns:
+        Dicionário com informações de preço e tier
+    """
+    if custom_features is None:
+        custom_features = []
+
+    # Determinar o tier base
+    if has_3d or quality in {'ultra', 'premium_3d'}:
+        has_3d = True
+        tier = "premium_3d"
+    elif quality in {'basic', 'economy'}:
+        tier = 'economy'
+    elif quality in {'premium', 'premium_2d', 'high'}:
+        tier = 'premium_2d'
+    else:
+        tier = 'standard'
+
+    tier_info = PRICING_TIERS[tier]
+
+    # Ajustar com base em recursos customizados
+    additional_cost = 0
+    for feature in custom_features:
+        additional_cost += FEATURE_PRICING.get(feature, 0)
+
+    # Calcular preço final
+    base_price = tier_info["price_range"][0]
+    max_price = tier_info["price_range"][1]
+
+    # Se for 3D, usar preço base da categoria
+    if has_3d and category in CATEGORY_PRICING:
+        base_price = max(tier_info['price_range'][0], CATEGORY_PRICING[category]["base_price"])
+        max_price = PRICING_TIERS["premium_3d"]["price_range"][1]
+
+    final_price = base_price + additional_cost
+
+    # Garantir que o preço está dentro da faixa do tier
+    final_price = max(tier_info["price_range"][0], min(final_price, tier_info["price_range"][1]))
+
+    return {
+        "tier": tier,
+        "tier_name": tier_info["name"],
+        "base_price": base_price,
+        "final_price": final_price,
+        "min_price": tier_info["price_range"][0],
+        "max_price": tier_info["price_range"][1],
+        "features": tier_info["features"],
+        "has_3d": has_3d,
+        "animations": tier_info["animations"],
+        "delivery_time": tier_info["delivery_time"],
+        "revisions": tier_info["revisions"],
+        "additional_cost": additional_cost,
+        "custom_features": custom_features
+    }
+
+def get_reference_site(category: str) -> Dict[str, Any]:
+    """
+    Retorna um site de referência completo para uma categoria.
+    """
+    from .references import get_reference
+    ref_site = get_reference(category)
+    price_info = get_price_for_site(category, has_3d=(ref_site.template_type == "3d"))
+
+    return {
+        **ref_site.to_dict(),
+        "pricing": price_info,
+        "recommendations": [
+            f"Template do tipo: {ref_site.template_type}",
+            f"Faixa de preço: R${price_info['min_price']:,.2f} - R${price_info['max_price']:,.2f}",
+            f"Tier: {price_info['tier_name']}",
+            f"Recursos incluídos: {', '.join(price_info['features'])}"
+        ]
+    }

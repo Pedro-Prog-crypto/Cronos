@@ -110,7 +110,9 @@ def test_bad_generation_is_bounded_and_never_replaces_previous(settings, reply):
 def test_repair_and_service_errors_are_not_unbounded_retries(settings):
     builder = Builder([{'reply': 'incomplete'}, Builder()])
     # Use a valid second package, not an implementation-shaped fake state transition.
-    builder.outputs[1] = {'reply': json.dumps({'summary': 'Senhor, pacote corrigido.', 'files': starter()})}
+    corrected = starter()
+    corrected['index.html'] = corrected['index.html'].replace('O que faz sentido para você faz parte de cada escolha.', 'Uma proposta corrigida para o briefing de teste.')
+    builder.outputs[1] = {'reply': json.dumps({'summary': 'Senhor, pacote corrigido.', 'files': corrected})}
     with TestClient(create_app(settings, builder)) as c:
         p = new(c); done = generate(c, p)
         assert done['status'] == 'ready' and len(builder.calls) == 2
@@ -225,7 +227,9 @@ def test_public_reader_blocks_mixed_dns_and_redirect_to_private(monkeypatch):
 def test_catalog_all_and_backend_adversarial_checks():
     for category in catalog(): assert validate(starter(category['id']))['passed']
     assert all(item['status'] == 'passed' for item in backend_checks())
-    assert quote('hotel', 'pagamento e estoque')['max'] == 15000
+    estimate = quote('hotel', 'pagamento e estoque')
+    assert estimate['max'] == 5000 and estimate['complex_features'] == ['pagamento','estoque']
+    assert estimate['not_included']  # Backend comercial is still a separate requirement.
     assert quote('restaurante', '')['min'] == 400
 
 

@@ -4,7 +4,7 @@ Abra pelo botão **ESTÚDIO DE SITES** ou diga **“Cronos, abrir estúdio de si
 
 ## Criar e revisar
 
-A galeria reúne 13 categorias de demonstração. O exemplo de restaurante LASTRO foi refeito com composição editorial, fotografia ilustrativa gerada por IA, cardápio filtrável, detalhes dos pratos e solicitação de mesa. Outros exemplos continuam disponíveis como pontos de partida; não são trabalhos criados para um cliente nem comprovam a capacidade do modelo selecionado.
+A galeria reúne as 13 categorias e 17 referências do material enviado, com textos, imagens, paletas, recursos previstos e preços. Os três templates Basic/Standard/Premium e os modelos procedurais completos de fones, avião e edifício estão integrados. GERAR SITE AUTOMATICAMENTE cria o template localmente, sem IA; PERSONALIZAR COM IA mantém o fluxo de propostas e revisões. Consulte INTEGRACAO-MISTRAL-3D.md para a correspondência dos arquivos, as correções de execução e as faixas de preço. O restaurante LASTRO anterior permanece no código de legado e nas versões que já estiverem salvas; não substitui o novo material.
 
 **Ideias e direção** prepara três propostas pela integração de texto escolhida, sem alterar o código. Cada proposta descreve composição, tipografia, paleta, seções, interação e imagens horizontais/verticais. As miniaturas são esquemas de composição — não são screenshots geradas. Escolha uma direção e clique em **Construir direção aprovada**. As propostas consideram composições já aprovadas no estúdio para variar o trabalho, sem enviar contatos ou nomes de outros clientes. Isso não garante exclusividade mundial. A primeira criação recebe o briefing e a direção, sem o código do exemplo inicial como molde. Revisões posteriores recebem o código salvo e as observações dos testes de navegador.
 
@@ -12,7 +12,7 @@ A confirmação acontece dentro do próprio estúdio, sem depender de um diálog
 
 Há verificações observáveis de conteúdo: rejeitam a cópia integral da versão anterior, blocos provisórios do antigo exemplo e a omissão de todas as fotografias disponíveis. Isso não certifica beleza, exclusividade ou adequação ao cliente; a avaliação visual continua necessária.
 
-“Explorar demonstração funcional” salva um rascunho sem consultar a IA. “Personalizar com IA” pede nome, briefing e a escolha entre planejamento autônomo e referência. A integração é escolhida entre as já cadastradas; nenhum modelo proprietário ou API nova é inventado. Não é preciso recadastrar credenciais.
+“GERAR SITE AUTOMATICAMENTE” salva uma versão identificada como template, sem consultar a IA. Salvar rascunho no briefing continua preservando um exemplo inicial que exige confirmação para exportar. “Personalizar com IA” pede nome, briefing e a escolha entre planejamento autônomo e referência. A integração é escolhida entre as já cadastradas; nenhum modelo proprietário ou API nova é inventado. Não é preciso recadastrar credenciais.
 
 O gerador começa pela integração escolhida e prepara os adaptadores de **todas as demais integrações configuradas e permitidas no modo atual**. Não faz sondagens pagas, não roda modelos em paralelo nem instala IAs. Se houver limite de uso (429), indisponibilidade (503), timeout, erro de conexão ou formato incompatível, a próxima integração assume **a etapa atual**, recebendo o mesmo briefing, direção, referência e recursos. Não há transferência de um rascunho oculto dentro do modelo: a etapa é solicitada novamente e só uma versão completa e validada é salva. O provedor padrão da conversa não é alterado. Ollama fica no fim da reserva, a menos que tenha sido escolhido inicialmente; depende de serviço e modelo instalados.
 
@@ -50,7 +50,7 @@ Isso não equivale a auditoria de segurança, certificação de acessibilidade o
 
 ## 3D e desempenho
 
-O visualizador é carregado só em projetos com um **GLB 2.0 autocontido**, até 8 MiB, sem extensões obrigatórias, URIs externas ou geometria acima do limite leve. Há rotação, zoom, teclado, restauração da câmera e separação dos objetos existentes. Ele não cria um modelo fiel de um Buds nem inventa componentes internos: um modelo adequado e seus direitos de uso precisam ser fornecidos. Há um modelo ativo por projeto para preservar versões anteriores.
+O visualizador é carregado só em projetos com um **GLB 2.0 autocontido**, até 8 MiB, sem extensões obrigatórias, URIs externas ou geometria acima do limite leve. Há rotação, zoom, teclado, restauração da câmera e separação dos objetos existentes. Ele não cria um modelo fiel de um Buds nem inventa componentes internos: um modelo adequado e seus direitos de uso precisam ser fornecidos. Há um modelo ativo por projeto para preservar versões anteriores. Além do GLB, os três modelos procedurais enviados funcionam sem arquivo externo, com bibliotecas locais e controles próprios. Os dois modos não são ativados simultaneamente.
 
 Three.js fica no recurso do visualizador, fora do carregamento inicial da aplicação. A renderização ocorre por interação/redimensionamento, sem loop contínuo; a densidade de pixels é limitada. A prévia usa tamanho real disponível para manter cliques e leitura. Os testes ajustam a largura do documento para observar celular e desktop. A cena principal pausa durante o estúdio.
 
@@ -60,7 +60,7 @@ A pesquisa aceita cidades brasileiras e categorias como restaurantes, hotéis/po
 
 A avaliação pública lê HTML com conexão presa a IP público validado, TLS verificado, limites de tamanho/tempo e nova validação a cada redirecionamento. Relata status HTTP, HTTPS, título, viewport, headings, formulários e imagens sem alt. Não executa scripts do site alheio nem comprova ausência de falhas. Aparência do negócio não permite deduzir capacidade financeira ou interesse em contratar.
 
-As faixas de R$400 a R$15.000 representam sugestões por complexidade do escopo. Conteúdo, hospedagem, licenças, manutenção, requisitos e orçamento devem ser combinados com o responsável. A IA pode recomendar reduzir ou ampliar o escopo com justificativa, sem inventar demanda ou dinheiro disponível.
+As quatro faixas gerais de R$200 a R$15.000 e os valores específicos de cada referência representam sugestões por complexidade do escopo. Conteúdo, hospedagem, licenças, manutenção, requisitos e orçamento devem ser combinados com o responsável. A IA pode recomendar reduzir ou ampliar o escopo com justificativa, sem inventar demanda ou dinheiro disponível.
 
 ## Arquivos e entrega
 
@@ -97,6 +97,6 @@ Os testes automatizados usam provedores locais de teste: não consomem chaves ne
 
 Referências técnicas para conferência: https://platform.openai.com/docs/guides/image-generation ; https://www.mediawiki.org/wiki/API:Imageinfo ; https://developer.mozilla.org/en-US/docs/Web/CSS/aspect-ratio . O acesso externo a essas fontes não estava disponível nesta execução; a validação de transporte foi feita com respostas de teste, sem afirmar consulta online concluída.
 
-## Pacote enviado como Studio do Mistral
+## Material integrado do Mistral
 
-O `studio.zip` enviado nesta revisão contém 15 arquivos de runtime. A comparação byte a byte com a versão publicada `3e354a3` encontrou todos idênticos. Esse conteúdo já está integrado; nenhuma implementação adicional de geração de sites ou novo modelo veio nesse ZIP. A troca automática entre provedores foi implementada nesta atualização do Cronos.
+A integração completa está documentada em **INTEGRACAO-MISTRAL-3D.md**. As cópias sem alteração dos oito anexos ficam em `cronos/studio/mistral_original/`. O catálogo inclui todas as categorias e variantes fornecidas, os três templates, as quatro faixas de preço e os três modelos procedurais completos.

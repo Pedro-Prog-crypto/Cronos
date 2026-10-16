@@ -1,0 +1,739 @@
+"""
+Definição de modelos 3D e cenas para o Cronos Studio
+"""
+
+from dataclasses import dataclass
+from typing import List, Dict, Any, Optional
+import json
+from .config import DEFAULT_3D_SETTINGS
+
+@dataclass
+class Scene3D:
+    """
+    Representa uma cena 3D completa com modelos, luzes e câmera.
+    """
+    name: str
+    description: str
+    models: List[Dict[str, Any]]
+    camera: Dict[str, Any]
+    lighting: Dict[str, Any]
+    background: Dict[str, Any]
+    animations: List[Dict[str, Any]]
+    interactions: List[Dict[str, Any]]
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "description": self.description,
+            "models": self.models,
+            "camera": self.camera,
+            "lighting": self.lighting,
+            "background": self.background,
+            "animations": self.animations,
+            "interactions": self.interactions
+        }
+
+# =============================================================================
+# 🎯 MODELO 1: FONE DE OUVIDO (Buds 3 Pro Style)
+# =============================================================================
+
+def create_earbuds_model():
+    """
+    Cria um modelo 3D de fone de ouvido (inspirado no Buds 3 Pro).
+    Usa geometria primária do Three.js para não depender de arquivos externos.
+    """
+    model = {
+        "name": "earbuds_3d",
+        "type": "group",
+        "description": "Modelo 3D interativo de fone de ouvido com case",
+        "geometry": {
+            "type": "custom",
+            "code": """
+                // Criação do modelo de fone de ouvido
+                const earbudGroup = new THREE.Group();
+
+                // Material principal
+                const mainMaterial = new THREE.MeshStandardMaterial({
+                    color: 0xffffff,
+                    roughness: 0.3,
+                    metalness: 0.7
+                });
+
+                // Material do case
+                const caseMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x2a2a2a,
+                    roughness: 0.8,
+                    metalness: 0.2
+                });
+
+                // Material das almofadas
+                const padMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x000000,
+                    roughness: 0.9,
+                    metalness: 0.1
+                });
+
+                // Criar o case (estojo)
+                const caseGeometry = new THREE.BoxGeometry(3, 1.5, 2);
+                const caseMesh = new THREE.Mesh(caseGeometry, caseMaterial);
+                caseMesh.position.set(0, -1, 0);
+                caseMesh.castShadow = true;
+                caseMesh.receiveShadow = true;
+                earbudGroup.add(caseMesh);
+
+                // Criar a tampa do case
+                const caseLidGeometry = new THREE.BoxGeometry(3.2, 0.2, 2.2);
+                const caseLid = new THREE.Mesh(caseLidGeometry, caseMaterial);
+                caseLid.position.set(0, -0.85, 0);
+                caseLid.castShadow = true;
+                earbudGroup.add(caseLid);
+
+                // Criar fone esquerdo
+                const earbudLeftGroup = new THREE.Group();
+
+                // Corpo do fone
+                const earbudBodyGeometry = new THREE.CylinderGeometry(0.5, 0.5, 0.3, 32);
+                const earbudBody = new THREE.Mesh(earbudBodyGeometry, mainMaterial);
+                earbudBody.rotation.x = Math.PI / 2;
+                earbudLeftGroup.add(earbudBody);
+
+                // Almofada do fone
+                const earbudPadGeometry = new THREE.TorusGeometry(0.6, 0.2, 16, 48);
+                const earbudPad = new THREE.Mesh(earbudPadGeometry, padMaterial);
+                earbudPad.rotation.x = Math.PI / 2;
+                earbudPad.position.z = 0.35;
+                earbudLeftGroup.add(earbudPad);
+
+                // Haste do fone
+                const earbudStemGeometry = new THREE.CylinderGeometry(0.1, 0.1, 1, 32);
+                const earbudStem = new THREE.Mesh(earbudStemGeometry, mainMaterial);
+                earbudStem.rotation.x = Math.PI / 4;
+                earbudStem.position.set(0, -0.5, 0.5);
+                earbudLeftGroup.add(earbudStem);
+
+                earbudLeftGroup.position.set(-1.5, 0.5, 0);
+                earbudGroup.add(earbudLeftGroup);
+
+                // Criar fone direito (espelho do esquerdo)
+                const earbudRightGroup = earbudLeftGroup.clone();
+                earbudRightGroup.position.set(1.5, 0.5, 0);
+                earbudRightGroup.children[2].rotation.x = -Math.PI / 4; // Ajustar haste
+                earbudGroup.add(earbudRightGroup);
+
+                // Adicionar detalhes (botões)
+                const buttonGeometry = new THREE.CylinderGeometry(0.08, 0.08, 0.1, 16);
+                const buttonMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x333333,
+                    roughness: 0.5,
+                    metalness: 0.8
+                });
+
+                const button1 = new THREE.Mesh(buttonGeometry, buttonMaterial);
+                button1.position.set(-1.5, 0.5, 0.2);
+                button1.rotation.x = Math.PI / 2;
+                earbudGroup.add(button1);
+
+                const button2 = new THREE.Mesh(buttonGeometry, buttonMaterial);
+                button2.position.set(1.5, 0.5, 0.2);
+                button2.rotation.x = Math.PI / 2;
+                earbudGroup.add(button2);
+
+                // Adicionar luzes pontuais nos fones
+                const light1 = new THREE.PointLight(0x3b82f6, 0.5);
+                light1.position.set(-1.5, 0.5, 0);
+                earbudGroup.add(light1);
+
+                const light2 = new THREE.PointLight(0x3b82f6, 0.5);
+                light2.position.set(1.5, 0.5, 0);
+                earbudGroup.add(light2);
+
+                return earbudGroup;
+            """
+        },
+        "animations": [
+            {
+                "name": "open_case",
+                "description": "Abre o case do fone",
+                "code": """
+                    // Animação para abrir o case
+                    const caseLid = earbudGroup.children.find(child => child.position.y === -0.85);
+                    if (caseLid) {
+                        gsap.to(caseLid.rotation, {
+                            x: -Math.PI / 2,
+                            duration: 1,
+                            ease: "power2.out"
+                        });
+                    }
+                """
+            },
+            {
+                "name": "close_case",
+                "description": "Fecha o case do fone",
+                "code": """
+                    const caseLid = earbudGroup.children.find(child => child.position.y === -0.85);
+                    if (caseLid) {
+                        gsap.to(caseLid.rotation, {
+                            x: 0,
+                            duration: 1,
+                            ease: "power2.in"
+                        });
+                    }
+                """
+            },
+            {
+                "name": "explode",
+                "description": "Separar os fones do case",
+                "code": """
+                    // Animação explode
+                    const earbudLeft = earbudGroup.children.find(child => child.position.x === -1.5);
+                    const earbudRight = earbudGroup.children.find(child => child.position.x === 1.5);
+
+                    if (earbudLeft && earbudRight) {
+                        gsap.to(earbudLeft.position, {
+                            y: 1.5,
+                            z: -1,
+                            duration: 1,
+                            ease: "back.out(1.7)"
+                        });
+                        gsap.to(earbudRight.position, {
+                            y: 1.5,
+                            z: 1,
+                            duration: 1,
+                            ease: "back.out(1.7)"
+                        });
+                    }
+                """
+            },
+            {
+                "name": "reset",
+                "description": "Retorna à posição inicial",
+                "code": """
+                    // Resetar todas as posições
+                    earbudGroup.children.forEach(child => {
+                        if (child instanceof THREE.Group) {
+                            child.position.copy(child.userData.originalPosition || new THREE.Vector3());
+                            child.rotation.copy(child.userData.originalRotation || new THREE.Euler());
+                        }
+                    });
+                """
+            }
+        ],
+        "interactions": [
+            {
+                "name": "rotate",
+                "description": "Rotacionar o modelo",
+                "enabled": True,
+                "controls": "orbit"
+            },
+            {
+                "name": "zoom",
+                "description": "Aproximar/afastar",
+                "enabled": True,
+                "controls": "orbit"
+            },
+            {
+                "name": "click_open",
+                "description": "Clique para abrir o case",
+                "code": """
+                    raycaster.setFromCamera(mouse, camera);
+                    const intersects = raycaster.intersectObjects(scene.children, true);
+
+                    if (intersects.length > 0) {
+                        const caseLid = earbudGroup.children.find(child => child.position.y === -0.85);
+                        if (caseLid && intersects[0].object === caseLid) {
+                            // Alternar entre abrir/fechar
+                            if (caseLid.rotation.x === 0) {
+                                // Abrir
+                                gsap.to(caseLid.rotation, {x: -Math.PI / 2, duration: 1});
+                            } else {
+                                // Fechar
+                                gsap.to(caseLid.rotation, {x: 0, duration: 1});
+                            }
+                        }
+                    }
+                """
+            }
+        ]
+    }
+
+    return Scene3D(
+        name="earbuds_3d",
+        description="Fone de ouvido 3D interativo com case",
+        models=[model],
+        camera=DEFAULT_3D_SETTINGS["camera"],
+        lighting=DEFAULT_3D_SETTINGS["lighting"],
+        background=DEFAULT_3D_SETTINGS["background"],
+        animations=model["animations"],
+        interactions=model["interactions"]
+    )
+
+# =============================================================================
+# 🎯 MODELO 2: AVIÃO (Para sites de viagens/imobiliárias premium)
+# =============================================================================
+
+def create_airplane_model():
+    """
+    Cria um modelo 3D de avião comercial.
+    """
+    model = {
+        "name": "airplane_3d",
+        "type": "group",
+        "description": "Modelo 3D de avião comercial para visualização",
+        "geometry": {
+            "type": "custom",
+            "code": """
+                const airplaneGroup = new THREE.Group();
+
+                // Material principal (fuselagem)
+                const fuselageMaterial = new THREE.MeshStandardMaterial({
+                    color: 0xffffff,
+                    roughness: 0.4,
+                    metalness: 0.6
+                });
+
+                // Material das janelas
+                const windowMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x3b82f6,
+                    transparent: true,
+                    opacity: 0.3,
+                    roughness: 0.1,
+                    metalness: 0.1
+                });
+
+                // Material das asas
+                const wingMaterial = new THREE.MeshStandardMaterial({
+                    color: 0xcccccc,
+                    roughness: 0.5,
+                    metalness: 0.7
+                });
+
+                // Material da cauda
+                const tailMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x3b82f6,
+                    roughness: 0.3,
+                    metalness: 0.8
+                });
+
+                // Fuselagem (corpo principal)
+                const fuselageGeometry = new THREE.CylinderGeometry(1, 1, 10, 32);
+                const fuselage = new THREE.Mesh(fuselageGeometry, fuselageMaterial);
+                fuselage.rotation.x = Math.PI / 2;
+                airplaneGroup.add(fuselage);
+
+                // Nariz do avião
+                const noseGeometry = new THREE.ConeGeometry(1, 2, 32);
+                const nose = new THREE.Mesh(noseGeometry, fuselageMaterial);
+                nose.position.set(5, 0, 0);
+                nose.rotation.x = Math.PI / 2;
+                airplaneGroup.add(nose);
+
+                // Cauda
+                const tailGeometry = new THREE.BoxGeometry(1, 3, 0.5);
+                const tail = new THREE.Mesh(tailGeometry, tailMaterial);
+                tail.position.set(-5, 0, 0);
+                airplaneGroup.add(tail);
+
+                // Asas
+                const wingGeometry = new THREE.BoxGeometry(8, 0.3, 2);
+                const leftWing = new THREE.Mesh(wingGeometry, wingMaterial);
+                leftWing.position.set(0, 0, 1);
+                airplaneGroup.add(leftWing);
+
+                const rightWing = new THREE.Mesh(wingGeometry, wingMaterial);
+                rightWing.position.set(0, 0, -1);
+                airplaneGroup.add(rightWing);
+
+                // Janelas (simplificado)
+                for (let i = 0; i < 5; i++) {
+                    const windowGeometry = new THREE.BoxGeometry(0.5, 0.3, 0.1);
+                    const window = new THREE.Mesh(windowGeometry, windowMaterial);
+                    window.position.set(3 - i * 1.5, 0, 0.5);
+                    airplaneGroup.add(window);
+                }
+
+                // Motores
+                const engineGeometry = new THREE.CylinderGeometry(0.4, 0.4, 1.5, 32);
+                const engineMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x333333,
+                    roughness: 0.3,
+                    metalness: 0.9
+                });
+
+                const leftEngine = new THREE.Mesh(engineGeometry, engineMaterial);
+                leftEngine.position.set(2, 0, 0.8);
+                leftEngine.rotation.x = Math.PI / 2;
+                airplaneGroup.add(leftEngine);
+
+                const rightEngine = new THREE.Mesh(engineGeometry, engineMaterial);
+                rightEngine.position.set(2, 0, -0.8);
+                rightEngine.rotation.x = Math.PI / 2;
+                airplaneGroup.add(rightEngine);
+
+                return airplaneGroup;
+            """
+        },
+        "animations": [
+            {
+                "name": "takeoff",
+                "description": "Animação de decolagem",
+                "code": """
+                    gsap.to(airplaneGroup.position, {
+                        y: 5,
+                        z: -10,
+                        duration: 3,
+                        ease: "power2.out"
+                    });
+                    gsap.to(airplaneGroup.rotation, {
+                        x: -0.2,
+                        duration: 3
+                    });
+                """
+            },
+            {
+                "name": "landing",
+                "description": "Animação de pouso",
+                "code": """
+                    gsap.to(airplaneGroup.position, {
+                        y: 0,
+                        z: 0,
+                        duration: 3,
+                        ease: "power2.in"
+                    });
+                    gsap.to(airplaneGroup.rotation, {
+                        x: 0,
+                        duration: 3
+                    });
+                """
+            },
+            {
+                "name": "fly",
+                "description": "Voar em círculo",
+                "code": """
+                    const radius = 8;
+                    let angle = 0;
+
+                    function animateFly() {
+                        angle += 0.01;
+                        airplaneGroup.position.x = Math.cos(angle) * radius;
+                        airplaneGroup.position.z = Math.sin(angle) * radius;
+                        airplaneGroup.position.y = Math.sin(angle * 2) * 2;
+                        airplaneGroup.rotation.z = angle;
+
+                        if (animateFly.animationId) {
+                            cancelAnimationFrame(animateFly.animationId);
+                        }
+                        animateFly.animationId = requestAnimationFrame(animateFly);
+                    }
+
+                    animateFly();
+                """
+            }
+        ],
+        "interactions": [
+            {
+                "name": "rotate",
+                "description": "Rotacionar o avião",
+                "enabled": True,
+                "controls": "orbit"
+            },
+            {
+                "name": "zoom",
+                "description": "Aproximar/afastar",
+                "enabled": True,
+                "controls": "orbit"
+            },
+            {
+                "name": "click_engine",
+                "description": "Clique nos motores para detalhes",
+                "code": """
+                    raycaster.setFromCamera(mouse, camera);
+                    const intersects = raycaster.intersectObjects(airplaneGroup.children, true);
+
+                    if (intersects.length > 0) {
+                        const engineMaterial = new THREE.MeshStandardMaterial({
+                            color: 0xff0000,
+                            emissive: 0xff0000,
+                            emissiveIntensity: 0.5
+                        });
+
+                        intersects[0].object.material = engineMaterial;
+
+                        setTimeout(() => {
+                            intersects[0].object.material = new THREE.MeshStandardMaterial({
+                                color: 0x333333,
+                                roughness: 0.3,
+                                metalness: 0.9
+                            });
+                        }, 1000);
+                    }
+                """
+            }
+        ]
+    }
+
+    return Scene3D(
+        name="airplane_3d",
+        description="Avião comercial 3D para visualização",
+        models=[model],
+        camera={
+            **DEFAULT_3D_SETTINGS["camera"],
+            "position": [0, 2, 15]
+        },
+        lighting={
+            **DEFAULT_3D_SETTINGS["lighting"],
+            "directional": {"color": 0xffffff, "intensity": 1.5, "position": [10, 20, 10]}
+        },
+        background={
+            **DEFAULT_3D_SETTINGS["background"],
+            "gradient": ["0x87CEEB", "0xE0F7FF"]
+        },
+        animations=model["animations"],
+        interactions=model["interactions"]
+    )
+
+# =============================================================================
+# 🎯 MODELO 3: HOTEL/EDIFÍCIO (Para imobiliárias)
+# =============================================================================
+
+def create_hotel_model():
+    """
+    Cria um modelo 3D de prédio/hotel.
+    """
+    model = {
+        "name": "hotel_3d",
+        "type": "group",
+        "description": "Modelo 3D de prédio/hotel com vários andares",
+        "geometry": {
+            "type": "custom",
+            "code": """
+                const hotelGroup = new THREE.Group();
+
+                // Material principal
+                const buildingMaterial = new THREE.MeshStandardMaterial({
+                    color: 0xf5f5f5,
+                    roughness: 0.7,
+                    metalness: 0.1
+                });
+
+                // Material das janelas
+                const windowMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x3b82f6,
+                    transparent: true,
+                    opacity: 0.4,
+                    roughness: 0.1
+                });
+
+                // Material do telhado
+                const roofMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x8B4513,
+                    roughness: 0.8,
+                    metalness: 0.1
+                });
+
+                // Base do prédio
+                const baseGeometry = new THREE.BoxGeometry(8, 1, 6);
+                const base = new THREE.Mesh(baseGeometry, buildingMaterial);
+                base.position.y = 0.5;
+                hotelGroup.add(base);
+
+                // Andares (10 andares)
+                const floorHeight = 1;
+                const floorWidth = 7.5;
+                const floorDepth = 5.5;
+
+                for (let i = 0; i < 10; i++) {
+                    const floorGroup = new THREE.Group();
+
+                    // Paredes do andar
+                    const wallGeometry = new THREE.BoxGeometry(floorWidth, floorHeight, 0.2);
+                    const frontWall = new THREE.Mesh(wallGeometry, buildingMaterial);
+                    frontWall.position.set(0, floorHeight/2, floorDepth/2 + 0.1);
+                    floorGroup.add(frontWall);
+
+                    const backWall = new THREE.Mesh(wallGeometry, buildingMaterial);
+                    backWall.position.set(0, floorHeight/2, -floorDepth/2 - 0.1);
+                    floorGroup.add(backWall);
+
+                    const leftWall = new THREE.Mesh(wallGeometry, buildingMaterial);
+                    leftWall.rotation.y = Math.PI / 2;
+                    leftWall.position.set(-floorWidth/2 - 0.1, floorHeight/2, 0);
+                    floorGroup.add(leftWall);
+
+                    const rightWall = new THREE.Mesh(wallGeometry, buildingMaterial);
+                    rightWall.rotation.y = Math.PI / 2;
+                    rightWall.position.set(floorWidth/2 + 0.1, floorHeight/2, 0);
+                    floorGroup.add(rightWall);
+
+                    // Janelas (4 por parede)
+                    const windowGeometry = new THREE.BoxGeometry(1, 0.6, 0.1);
+
+                    for (let j = 0; j < 4; j++) {
+                        const window1 = new THREE.Mesh(windowGeometry, windowMaterial);
+                        window1.position.set(-floorWidth/2 + 0.5 + j * 2, floorHeight/2, floorDepth/2 + 0.15);
+                        floorGroup.add(window1);
+
+                        const window2 = new THREE.Mesh(windowGeometry, windowMaterial);
+                        window2.position.set(-floorWidth/2 + 0.5 + j * 2, floorHeight/2, -floorDepth/2 - 0.15);
+                        floorGroup.add(window2);
+                    }
+
+                    floorGroup.position.y = 1 + i * floorHeight;
+                    hotelGroup.add(floorGroup);
+                }
+
+                // Telhado
+                const roofGeometry = new THREE.ConeGeometry(4, 1, 4);
+                const roof = new THREE.Mesh(roofGeometry, roofMaterial);
+                roof.position.y = 1 + 10 * floorHeight + 0.5;
+                roof.rotation.y = Math.PI / 4;
+                hotelGroup.add(roof);
+
+                // Antena
+                const antennaGeometry = new THREE.CylinderGeometry(0.05, 0.05, 2, 16);
+                const antenna = new THREE.Mesh(antennaGeometry, new THREE.MeshStandardMaterial({color: 0x333333}));
+                antenna.position.y = 1 + 10 * floorHeight + 2;
+                hotelGroup.add(antenna);
+
+                // Entrada principal
+                const entranceGeometry = new THREE.BoxGeometry(2, 2, 0.5);
+                const entrance = new THREE.Mesh(entranceGeometry, new THREE.MeshStandardMaterial({
+                    color: 0x1a1a1a,
+                    roughness: 0.5
+                }));
+                entrance.position.set(0, 1, floorDepth/2 + 0.3);
+                hotelGroup.add(entrance);
+
+                return hotelGroup;
+            """
+        },
+        "animations": [
+            {
+                "name": "explode_floors",
+                "description": "Separar os andares",
+                "code": """
+                    const floors = hotelGroup.children.filter(child => child.position.y > 1 && child.position.y < 11);
+
+                    floors.forEach((floor, index) => {
+                        const direction = index % 2 === 0 ? 1 : -1;
+                        gsap.to(floor.position, {
+                            x: direction * 5,
+                            z: direction * 2,
+                            duration: 1,
+                            delay: index * 0.1,
+                            ease: "back.out(1.7)"
+                        });
+                    });
+                """
+            },
+            {
+                "name": "reset_floors",
+                "description": "Retornar andares à posição original",
+                "code": """
+                    const floors = hotelGroup.children.filter(child => child.position.y > 1 && child.position.y < 11);
+
+                    floors.forEach((floor, index) => {
+                        gsap.to(floor.position, {
+                            x: 0,
+                            z: 0,
+                            duration: 1,
+                            delay: index * 0.1,
+                            ease: "back.inOut(1.7)"
+                        });
+                    });
+                """
+            },
+            {
+                "name": "transparent",
+                "description": "Tornar o prédio transparente",
+                "code": """
+                    const toggleTransparent = (transparent) => {
+                        hotelGroup.traverse(child => {
+                            if (child.isMesh) {
+                                child.material.transparent = transparent;
+                                child.material.opacity = transparent ? 0.3 : 1;
+                            }
+                        });
+                    };
+
+                    // Alternar transparência
+                    const currentOpacity = hotelGroup.children[0].material.opacity || 1;
+                    toggleTransparent(currentOpacity === 1);
+                """
+            }
+        ],
+        "interactions": [
+            {
+                "name": "rotate",
+                "description": "Rotacionar o prédio",
+                "enabled": True,
+                "controls": "orbit"
+            },
+            {
+                "name": "zoom",
+                "description": "Aproximar/afastar",
+                "enabled": True,
+                "controls": "orbit"
+            },
+            {
+                "name": "click_floor",
+                "description": "Clique em um andar para destacar",
+                "code": """
+                    raycaster.setFromCamera(mouse, camera);
+                    const intersects = raycaster.intersectObjects(hotelGroup.children, true);
+
+                    if (intersects.length > 0) {
+                        const floor = intersects[0].object.parent;
+
+                        // Resetar todas as cores
+                        hotelGroup.traverse(child => {
+                            if (child.isMesh && child.material && child.material.color) {
+                                child.material.color.set(0xf5f5f5);
+                            }
+                        });
+
+                        // Destacar o andar clicado
+                        floor.traverse(child => {
+                            if (child.isMesh && child.material) {
+                                child.material.color.set(0xff0000);
+                            }
+                        });
+                    }
+                """
+            }
+        ]
+    }
+
+    return Scene3D(
+        name="hotel_3d",
+        description="Prédio/hotel 3D com andares interativos",
+        models=[model],
+        camera={
+            **DEFAULT_3D_SETTINGS["camera"],
+            "position": [0, 8, 20]
+        },
+        lighting={
+            **DEFAULT_3D_SETTINGS["lighting"],
+            "directional": {"color": 0xffffff, "intensity": 2.0, "position": [20, 30, 20]}
+        },
+        background=DEFAULT_3D_SETTINGS["background"],
+        animations=model["animations"],
+        interactions=model["interactions"]
+    )
+
+# =============================================================================
+# 📚 CATÁLOGO DE MODELOS 3D DISPONÍVEIS
+# =============================================================================
+
+MODEL_CATALOG = {
+    "earbuds": create_earbuds_model(),
+    "airplane": create_airplane_model(),
+    "hotel": create_hotel_model()
+}
+
+def get_model(model_name: str) -> Optional[Scene3D]:
+    """Retorna um modelo 3D pelo nome."""
+    return MODEL_CATALOG.get(model_name)
+
+def list_models() -> List[str]:
+    """Retorna uma lista de todos os modelos disponíveis."""
+    return list(MODEL_CATALOG.keys())

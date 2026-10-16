@@ -109,14 +109,14 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.respond(403, {'error': 'Origem não autorizada.'})
             token = self.server.csrf
             return self.respond(200, {'csrf': token})
-        if not re.fullmatch(r'/(?:index\.html|styles\.css|app\.js|studio-runtime\.js|assets/[a-f0-9]{32}\.(?:jpg|png|glb)|product-3d\.js)?', path):
+        if not re.fullmatch(r'/(?:index\.html|styles\.css|app\.js|studio-runtime\.js|assets/[a-f0-9]{32}\.(?:jpg|png|glb)|product-3d\.js|procedural-3d\.js)?', path):
             return self.respond(404, {'error': 'Arquivo não encontrado.'})
         if path == '/': self.path = '/index.html'
         super().do_GET()
 
     def do_HEAD(self):
         if not self.allowed_host(): return self.respond(403, {'error': 'Host não autorizado.'})
-        if not re.fullmatch(r'/(?:index\.html|styles\.css|app\.js|studio-runtime\.js|assets/[a-f0-9]{32}\.(?:jpg|png|glb)|product-3d\.js)?', urlsplit(self.path).path):
+        if not re.fullmatch(r'/(?:index\.html|styles\.css|app\.js|studio-runtime\.js|assets/[a-f0-9]{32}\.(?:jpg|png|glb)|product-3d\.js|procedural-3d\.js)?', urlsplit(self.path).path):
             return self.respond(404, {'error': 'Arquivo não encontrado.'})
         super().do_HEAD()
 

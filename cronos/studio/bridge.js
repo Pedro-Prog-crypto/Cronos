@@ -30,12 +30,17 @@
   if(config)parent.postMessage({studio:config.channel,type:'ready'},'*');
  }
  async function test(id){
+  if(document.querySelector('[data-studio-procedural]')){
+   const deadline=Date.now()+8000;
+   while(window.__studioProceduralState==='loading'&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,50));
+  }
   if(window.__studioModel){
    const deadline=Date.now()+8000;
    while(window.__studioModelState==='loading'&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,50));
   }
   const checks=[];const add=(name,ok,detail)=>checks.push({name,status:ok?'passed':'failed',detail});
   const w=document.documentElement.clientWidth;
+  if(document.querySelector('[data-studio-procedural]'))add('Modelo procedural no navegador',window.__studioProceduralState==='ready'&&Boolean(document.querySelector('[data-studio-procedural] canvas')),'Three.js iniciou a cena procedural no WebGL deste navegador.');
   add('Sem rolagem horizontal em '+w+' px',document.documentElement.scrollWidth<=w+2,'Viewport '+w+' px; largura do documento '+document.documentElement.scrollWidth+' px.');
   add('Imagens carregadas',[...document.images].every(image=>image.complete&&image.naturalWidth>0),document.images.length+' imagem(ns) observada(s).');
   add('Navegação interna',[...document.querySelectorAll('a[href^="#"]')].every(a=>a.hash.length>1&&document.getElementById(decodeURIComponent(a.hash.slice(1)))),'Destinos dos links verificados no DOM real.');

@@ -1,0 +1,13 @@
+{
+  "template-c.html": "d36cfde34ef7c539b0fbc0e2e09f2580e118e48a07443379225f86d86b71dfa2",
+  "template-b.html": "33a5009b45def191f96eaa5a248bd64bc2a7f82c34eac659a28b6d7a0146ba73",
+  "template-a.html": "8420d4aacf8ea78d74a208945381d5fc41283c0733a0f7f8bb9bec3acb9f6091",
+  "catalog.py": "38d038035c9170905033996bbf59fca22f9218c28f84ffeccfd47b043e794678",
+  "generator.py": "c6defb459f4531a302b9d5329f30bb3953001bdc75cb88cbe0aff60cccd1df3e",
+  "models.py": "b31a9c88295e97e23e5f97cbc18798ccdce39d7d674d1cdb70f63a145b94a917",
+  "pricing_config.py": "289caccc255ab405a4e03914ca90dc48e094eb2e7920b6125776e3942e4fc5e7",
+  "references.py": "5bb6e73a2d0e127a7eca3e346d57b71c04560a5238d82576d1f24aa0d2d5135a",
+  "config-from-message.py.txt": "f452ecfd751ee1d19c5d93bb8dfb6d020009136af844bcd7fec76118f808d883",
+  "module-init-from-message.py.txt": "1901eec20561407916b99932cd0fd2f76f3935dd57157076de2ef978a1f8982a",
+  "basic-from-message.html.txt": "b6d08ebba2bafaae5eb7a6be6783224c0804a918936444f20912fb46924e343c"
+}

@@ -16,7 +16,7 @@ from PIL import Image, ImageOps
 from cronos.integrations import provider_catalog
 from cronos.providers import ProviderError, make_provider
 from cronos.usage import request_scope
-from .catalog import starter, quote
+from .catalog import starter, quote, catalog
 from .runtime import validated, submit, FormError
 from .store import Store
 from .validation import validate, parse_bundle, InvalidProject, InlinePreview
@@ -46,8 +46,13 @@ O runtime confiável já liga esses formulários ao banco. NÃO implemente fetch
 WebSocket, eval, Function, Worker, import, referência parent/top/opener, navegação location ou envio próprio.
 Pode usar DOM seguro (textContent, createElement, event listeners), filtros, carrosséis, abas e interação local.
 Backend de pagamento, contas de clientes, estoque e integrações não existe neste gerador: descreva essa pendência, não simule sucesso.
-Se há 3D: o visualizador confiável usa o GLB fornecido pelo usuário. Use <div data-studio-model></div> (altura e largura via CSS).
-Sem GLB, não finja um modelo real do produto nem componentes internos. Explique o recurso necessário.
+Se há 3D: pode usar um GLB fornecido com <div data-studio-model></div>, OU um dos modelos procedurais do usuário:
+<div data-studio-procedural="earbuds"></div>, "airplane" ou "hotel". Somente um visualizador por página.
+Os modelos procedurais têm rotação, zoom, separação de peças, transparência e controles próprios injetados pelo runtime.
+Não copie Three.js ou GSAP para app.js. Não use CDN ou scripts externos; as bibliotecas do template são fornecidas pelo runtime.
+Use procedural_model quando fornecido. Declare o modelo como conceitual; não invente fidelidade a um Buds ou imóvel real.
+template_reference contém a referência completa enviada pelo senhor: siga seus textos, cores e composição quando solicitada.
+As imagens sample_images dessa referência são autorizadas como demonstração, mas os direitos e os dados precisam ser conferidos.
 Imagens próprias e composição CSS/SVG são preferíveis a elementos sem função. Não diga que testou: o estúdio verifica depois.
 Se current_files estiver vazio, comece uma composição nova: não reproduza o exemplo do catálogo.
 Siga approved_direction quando presente. Use a proposta como critério para composição, ritmo e conteúdo.
@@ -73,6 +78,8 @@ class Studio:
         self.forms = []
         self.provider_cooldowns = {}
         self.vision_cooldowns = {}
+        from .threed.reference_images import ReferencePhotos
+        self.reference_photos = ReferencePhotos()
         from cronos.tools import Tool, Arguments
         from uuid import UUID
         class StatusArgs(Arguments):
@@ -91,7 +98,7 @@ class Studio:
                 if args.technical: result.update(checks=report, browser_observations=item.get('browser_reports', []))
                 return result
             return {'projects': [{k: p.get(k) for k in ('id', 'name', 'category', 'status', 'revision')} for p in self.store.list()[:20]],
-                    'note': 'Dados reais salvos no estúdio. A interface abre com abrir estúdio de sites; criação e edição precisam do briefing e da direção escolhida pelo senhor.'}
+                    'note': 'Dados reais salvos no estúdio. A interface abre com abrir estúdio de sites; criação e edição precisam do briefing e da direção escolhida pelo senhor.', 'catalog': catalog()}
         app.state.registry.register(Tool('studio_status', 'Consulta projetos e etapas reais do Estúdio de Sites. Use technical=true somente para uma solicitação explícita de detalhes dos testes. Não gera, altera ou publica código.', StatusArgs, status))
 
     async def close(self):
@@ -106,21 +113,17 @@ class Studio:
 
     def new(self, body):
         data = body.model_dump()
-        data['quote'] = quote(data['category'], data['brief'])
+        from .threed.integration import template_site, reference_id, selected_model
+        data['reference_id'] = reference_id(data['category'], data['brief'], data.get('reference_id', ''))
+        data['quote'] = quote(data['category'], data['brief'], data.get('tier', 'reference'), data['reference_id'])
+        files = template_site(data['category'], data['name'], reference=data['reference_id'], tier=data.get('tier', 'reference'), model=data.get('model_type', 'auto'), template=data.get('template', 'premium'), brief=data['brief'])
+        automatic = data.get('create_from_template', False)
+        data['status'] = 'ready' if automatic else 'draft'
         project = self.store.new(data)
-        demo_names = []
-        if project['category'] == 'restaurante':
-            photo = Path(__file__).with_name('media') / 'restaurant-fire.jpg'
-            if photo.is_file():
-                raw = photo.read_bytes(); asset_name = uuid4().hex + '.jpg'
-                self.store.asset_path(project, asset_name).write_bytes(raw)
-                project['assets'].append({'name': asset_name, 'purpose': 'image', 'original_name': 'Fotografia ilustrativa do exemplo LASTRO.jpg', 'mime': 'image/jpeg',
-                    'bytes': len(raw), 'width': 1536, 'height': 1024, 'orientation': 'horizontal',
-                    'source': {'kind': 'demo', 'author': 'Gerada por IA para o Cronos Studio', 'license': 'Ilustrativa. Não representa um estabelecimento real.', 'url': None}})
-                demo_names.append(asset_name)
-        files = starter(project['category'], project['name'], demo_names)
-        self.store.commit(project, files, 'Exemplo de estrutura. Ainda não é uma criação da IA para este briefing.', {**validate(files), 'origin': 'starter'})
-        self.store.event(project, 'draft', 'Senhor, escolha planejar sozinho ou fornecer uma referência e depois inicie a criação.')
+        project['status'] = 'ready' if automatic else 'draft'
+        summary = 'Site criado automaticamente com a referência e o template enviados pelo senhor. Revise os dados demonstrativos antes de publicar.' if automatic else 'Exemplo de estrutura. Ainda não é uma criação da IA para este briefing.'
+        self.store.commit(project, files, summary, {**validate(files), 'origin': 'template' if automatic else 'starter'})
+        self.store.event(project, 'template' if automatic else 'draft', summary if automatic else 'Senhor, escolha planejar sozinho ou fornecer uma referência e depois inicie a criação.')
         return self.detail(project['id'])
 
     def code_provider(self, settings, *, use_injected=True):
@@ -208,7 +211,7 @@ class Studio:
         chosen = body.provider or settings.provider
         self.check_provider(chosen)
         project.update(status='running', job_kind='site', research_images=body.research_images, mode=body.mode, reference=body.reference if body.mode == 'reference' else '', reference_asset=body.reference_asset if body.mode == 'reference' else '', provider=chosen, started=time.time(), finished=None, error=None, last_request=body.prompt)
-        project['quote'] = quote(project['category'], project['brief'] + ' ' + body.prompt)
+        project['quote'] = quote(project['category'], project['brief'] + ' ' + body.prompt, project.get('tier', 'reference'), project.get('reference_id', ''))
         self.store.event(project, 'request', 'Pedido do senhor: ' + body.prompt)
         self.store.event(project, 'planning', 'Lendo o briefing, a referência e a última versão. A integração escolhida é ' + chosen + '.')
         self.task = asyncio.create_task(self.generate(project, body))
@@ -245,6 +248,9 @@ class Studio:
                        'current_summary': '' if origin == 'starter' else current['summary'],
                        'approved_direction': selected_direction(project),
                        'browser_observations': project.get('browser_reports', [])}
+            from .threed.integration import reference_payload, reference_id, selected_model
+            payload['template_reference'] = reference_payload(reference_id(project['category'], project['brief'], project.get('reference_id', '')))
+            payload['procedural_model'] = selected_model(project['category'], project['brief'] + ' ' + body.prompt, project.get('model_type', 'auto')) if project['quote']['has_3d'] and not any(a['purpose'] == 'model' for a in allowed_assets) else None
             refs = [a for a in project['assets'] if a['purpose'] == 'reference'] if body.mode == 'reference' else []
             if body.reference_asset: refs = [a for a in refs if a['name'] == body.reference_asset]
             reference_notes = ''
@@ -386,13 +392,18 @@ class Studio:
         for asset in used_assets:
             raw = self.store.asset_path(project, asset['name']).read_bytes()
             assets[asset['name']] = 'data:' + asset['mime'] + ';base64,' + base64.b64encode(raw).decode()
-        inline = InlinePreview(revision['files'], assets, data['nonce']); inline.feed(revision['files']['index.html']); inline.close()
+        markup = self.offline_images(revision['files']['index.html'])
+        inline = InlinePreview(revision['files'], assets, data['nonce']); inline.feed(markup); inline.close()
         nonce = data['nonce']
         script = lambda code: '<script nonce="' + nonce + '">' + re.sub(r'</script', r'<\\/script', code, flags=re.I) + '</script>'
         html = ''.join(inline.parts)
         html += script('window.__studioPreview=' + json.dumps({'channel': data['channel']}) + ';')
         html += script(Path(__file__).with_name('bridge.js').read_text(encoding='utf-8'))
+        from .threed.integration import procedural_kind, libraries, scene_code
+        procedural = procedural_kind(revision['files']['index.html'])
+        if procedural: html += script(libraries())
         html += script(revision['files']['app.js'])
+        if procedural: html += script(scene_code(procedural))
         model = next((a for a in used_assets if a['purpose'] == 'model'), None)
         if model and Path(__file__).with_name('product-3d.js').exists():
             html += script('window.__studioModel=' + json.dumps(assets[model['name']]) + ';')
@@ -400,21 +411,38 @@ class Studio:
         html += '</body></html>'
         return html, nonce
 
+    async def prepare_reference_photos(self, project, revision=None):
+        settings = self.app.state.engine.settings
+        if settings.privacy_mode == 'online' and self.app.state.panels.preferences.web_enabled:
+            files = self.store.revision(project, revision)['files']
+            await self.reference_photos.prepare(files['index.html'])
+
+    def offline_images(self, markup):
+        settings = self.app.state.engine.settings
+        online = settings.privacy_mode == 'online' and self.app.state.panels.preferences.web_enabled
+        return self.reference_photos.embed(markup, online=online)
+
     def used_assets(self, project, files):
         return [a for a in project['assets'] if a['purpose'] in {'image', 'model'} and (
             any('assets/' + a['name'] in text for text in files.values()) or (
                 a['purpose'] == 'model' and 'data-studio-model' in files['index.html']))]
 
     def export(self, project):
+        from .threed.integration import procedural_kind, libraries, scene_code, ROOT as THREED_ROOT
         current = self.store.revision(project)
+        procedural = procedural_kind(current['files']['index.html'])
         used_assets = self.used_assets(project, current['files'])
         output = io.BytesIO()
         with zipfile.ZipFile(output, 'w', compression=zipfile.ZIP_DEFLATED) as package:
             for name, content in current['files'].items():
                 if name == 'index.html':
-                    content = re.sub(r'</body\s*>', '<script src="studio-runtime.js" defer></script>' + ('<script src="product-3d.js" defer></script>' if any(a['purpose'] == 'model' for a in used_assets) else '') + '</body>', content, count=1, flags=re.I)
+                    content = self.offline_images(content)
+                    content = re.sub(r'</body\s*>', '<script src="studio-runtime.js" defer></script>' + ('<script src="product-3d.js" defer></script>' if any(a['purpose'] == 'model' for a in used_assets) else '') + ('<script src="procedural-3d.js" defer></script>' if procedural else '') + '</body>', content, count=1, flags=re.I)
                 package.writestr('site/' + name, content)
             package.writestr('site/studio-runtime.js', Path(__file__).with_name('bridge.js').read_bytes())
+            if procedural:
+                package.writestr('site/procedural-3d.js', libraries() + '\n' + scene_code(procedural))
+                package.writestr('LICENCAS-3D.txt', '\n\n'.join((THREED_ROOT/'vendor'/name).read_text() for name in ('three-LICENSE.txt','gsap-README.txt')))
             for asset in used_assets:
                 package.write(self.store.asset_path(project, asset['name']), 'site/assets/' + asset['name'])
             model = next((a for a in used_assets if a['purpose'] == 'model'), None)

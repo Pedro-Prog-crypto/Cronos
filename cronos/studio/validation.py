@@ -22,6 +22,7 @@ class Document(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.ids = []; self.anchors = []; self.forms = []; self.form_fields = []; self.active_form = None; self.images = []; self.inputs = []; self.tags = []
         self.models = 0
+        self.procedural = []
         self.resources = []; self.errors = []; self.title = False; self.viewport = False; self.lang = False
 
     def handle_starttag(self, tag, attrs):
@@ -39,6 +40,7 @@ class Document(HTMLParser):
             if 'http-equiv' in values: self.errors.append('Metadados HTTP não são permitidos no projeto.')
             if values.get('name') == 'viewport': self.viewport = True
         if 'data-studio-model' in values: self.models += 1
+        if 'data-studio-procedural' in values: self.procedural.append(values['data-studio-procedural'])
         if tag == 'form':
             if self.active_form is not None: self.errors.append('Formulários aninhados não são permitidos.')
             self.forms.append(values.get('data-studio-form'))
@@ -56,6 +58,8 @@ class Document(HTMLParser):
                 continue
             if tag == 'a' and key == 'href':
                 if not re.match(r'^(https://[^\s<>]+|mailto:[\w.+@-]+|tel:[+\d -]+)$', value): self.errors.append('Link externo inválido ou sem destino real.')
+            elif tag == 'img' and key == 'src' and value in reference_images():
+                self.resources.append(value)
             elif (tag == 'link' and value == 'styles.css') or (tag == 'script' and value == 'app.js') or ASSET.fullmatch(value):
                 self.resources.append(value)
             else: self.errors.append('Recurso não autorizado: ' + value[:80])
@@ -108,6 +112,8 @@ def validate(files, assets=(), *, run_syntax=True):
     check('Campos de atendimento', {'name', 'email', 'message', 'date', 'time', 'service', 'consent'} <= fields, 'Campos necessários para contato e agendamento presentes.')
     if doc.models:
         check('Modelo 3D conectado', doc.models == 1 and any(name.endswith('.glb') for name in assets), 'O visualizador precisa de um GLB fornecido e um único ponto data-studio-model.')
+    if doc.procedural:
+        check('Modelo procedural conectado', not doc.models and len(doc.procedural) == 1 and doc.procedural[0] in {'earbuds','airplane','hotel'}, 'Um dos três modelos procedurais enviados, sem GLB obrigatório nem JavaScript remoto.')
     css, js = files['styles.css'], files['app.js']
     css_urls = re.findall(r'url\(\s*[\'"]?([^\)\'"\s]+)', css, re.I)
     check('CSS sem dependências remotas', not re.search(r'@import|expression\s*\(|-moz-binding|javascript:', css, re.I) and all(v.startswith('#') or (ASSET.fullmatch(v) and v[7:] in assets) for v in css_urls), 'CSS não baixa dependências ou imagens não autorizadas.')
@@ -126,6 +132,11 @@ def validate(files, assets=(), *, run_syntax=True):
     else: checks.append({'name': 'Sintaxe JavaScript', 'status': 'unavailable', 'detail': 'Node não encontrado; nada foi instalado. Verifique no navegador.'})
     return {'checks': checks, 'passed': not any(c['status'] == 'failed' for c in checks), 'browser': None,
             'limitations': ['Análise estática não comprova correção de todo JavaScript nem ausência de vulnerabilidades.', 'Execute os testes no navegador e revise conteúdo, direitos de imagem, privacidade, hospedagem e integrações antes de vender/publicar.']}
+
+
+def reference_images():
+    from .references import REFERENCE_SITES
+    return {url for ref in REFERENCE_SITES.values() for url in ref.sample_images}
 
 
 class InlinePreview(HTMLParser):

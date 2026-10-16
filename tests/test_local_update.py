@@ -83,6 +83,11 @@ def test_shipped_manifest_verifies_real_payload():
     assert any(name.startswith('cronos/ui/assets/SiteStudio-') for name in payload)
     assert {'cronos/studio/directions.py','cronos/studio/image_generation.py','cronos/studio/restaurant.py','cronos/studio/media/restaurant-fire.jpg'} <= payload.keys()
     assert {'cronos/studio/provider_pool.py','cronos/integrations.py','cronos/providers.py'} <= payload.keys()
+    assert {'cronos/studio/references.py','cronos/studio/threed/config.py','cronos/studio/threed/models.py',
+            'cronos/studio/threed/generator.py','cronos/studio/threed/pricing_config.py','cronos/studio/threed/integration.py',
+            'cronos/studio/threed/templates/basic.html','cronos/studio/threed/templates/standard.html','cronos/studio/threed/templates/premium.html',
+            'cronos/studio/threed/vendor/three-0.128.0.min.js','cronos/studio/threed/vendor/gsap-README.txt',
+            'cronos/studio/mistral_original/SHA256.json','cronos/studio/mistral_original/generator.py.txt'} <= payload.keys()
 
 
 def test_downloadable_package_runs_as_a_standalone_updater(tmp_path):

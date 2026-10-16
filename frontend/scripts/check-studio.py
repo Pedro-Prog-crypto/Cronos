@@ -30,6 +30,7 @@ async def main():
    errors=[];violations=[]
    page.on('pageerror',lambda e:errors.append(str(e)))
    page.on('console',lambda m:violations.append(m.text) if 'Refused to' in m.text or 'violates the following Content Security' in m.text else None)
+   await page.route('https://images.unsplash.com/**',lambda route:route.fulfill(body=(Path(__file__).resolve().parents[2]/'cronos/studio/media/restaurant-fire.jpg').read_bytes(),content_type='image/jpeg'))
    await page.goto(BASE+'/#cronos-session='+TOKEN)
    await page.get_by_role('button',name='ESTÚDIO DE SITES',exact=True).click()
    await expect(page.get_by_role('dialog',name='Estúdio de Sites',exact=True)).to_be_visible()
@@ -37,10 +38,10 @@ async def main():
    await page.screenshot(path='/tmp/cronos-studio-gallery.png')
    await page.locator('.ss-direction.hotel').count() # Direction category belongs to nested art.
    await page.locator('.ss-direction').filter(has_text='Hotéis e pousadas').click()
-   await page.get_by_role('button',name='Explorar demonstração funcional',exact=True).click()
+   await page.get_by_role('button',name='GERAR SITE AUTOMATICAMENTE',exact=True).click()
    await expect(page.get_by_role('button',name='Testar esta prévia',exact=True)).to_be_enabled(timeout=10000)
    website=page.frame_locator('.ss-frame-container iframe')
-   await expect(website.locator('h1')).to_contain_text('Existe um lugar')
+   await expect(website.locator('h1')).to_contain_text('Seu Refúgio')
    await page.screenshot(path='/tmp/cronos-studio-preview.png')
    contact=website.locator('form[data-studio-form="contact"]')
    await contact.locator('[name="name"]').fill('Senhor Teste')
@@ -86,7 +87,7 @@ async def main():
    await page.get_by_role('tab',name='Código',exact=True).click()
    editor=page.get_by_label('Editor de index.html',exact=True)
    content=await editor.input_value()
-   await editor.fill(content.replace('Existe um lugar entre a pausa e o extraordinário.','Hotel Aurora — edição revisada.'))
+   await editor.fill(content.replace('Seu Refúgio','Hotel Aurora — edição revisada.'))
    await page.get_by_role('button',name='Salvar versão',exact=True).click()
    await expect(page.locator('.ss-badge')).to_contain_text('v2')
    async with page.expect_download() as download:

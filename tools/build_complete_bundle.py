@@ -6,7 +6,7 @@ import subprocess
 import zipfile
 
 ROOT=Path(__file__).resolve().parents[1]
-EXTRA=['docs/STUDIO_DE_SITES.md','ABRIR-CRONOS.bat','LEIA-PRIMEIRO.txt','tools/start_bundle.py','tools/launch_bundle.vbs','tools/apply_interface_update.py','tools/interface_update_manifest.json']
+EXTRA=['docs/INTEGRACAO-MISTRAL-3D.md','docs/STUDIO_DE_SITES.md','ABRIR-CRONOS.bat','LEIA-PRIMEIRO.txt','tools/start_bundle.py','tools/launch_bundle.vbs','tools/apply_interface_update.py','tools/interface_update_manifest.json']
 
 
 def build_patch():
@@ -22,6 +22,7 @@ def build():
     build_patch()
     tracked=subprocess.check_output(['git','ls-files','-z','--','cronos','modelos','config/providers.example.json','.env.example','pyproject.toml'],cwd=ROOT).decode().split('\0')
     names=sorted(set(filter(None,tracked))|set(EXTRA))
+    names=sorted(set(names)|{p.relative_to(ROOT).as_posix() for p in (ROOT/'examples/3d-product-demo').rglob('*') if p.is_file()})
     for name in names:
         parts=Path(name).parts
         if any(p in {'.env','.venv','vault','.cronos-local','__pycache__'} for p in parts):raise ValueError('Arquivo local privado recusado: '+name)
