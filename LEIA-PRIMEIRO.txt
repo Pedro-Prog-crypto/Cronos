@@ -10,3 +10,6 @@ A pasta antiga continua sendo usada. Nao apague essa pasta depois da atualizacao
 As imagens PNG/JPEG e os arquivos ZIP/codigo sao escolhidos nos dois icones ao lado do microfone. O scanner aparece enquanto a IA analisa. O Olho de Deus abre por comando, sem globo na tela inicial.
 
 Este pacote contem o codigo completo, mas nao inventa nem inclui suas chaves privadas. As configuracoes continuam no seu computador. Precisa de uma instalacao anterior funcional com Python/ambiente virtual e APIs cadastradas. Se ela nao for encontrada automaticamente, o programa pede apenas que voce indique a pasta.
+
+CARDS E PAINEIS MOVEIS
+Arraste pelo titulo para colocar cada card ou painel onde quiser. Textos longos podem ser percorridos com o scroll do mouse ou arrastando o proprio texto, sem barras visiveis. Se houver seis cards, eles aparecem com tres de cada lado do holograma. Abrir uma imagem ou ZIP nao corta a fala; a analise espera a explicacao terminar para falar. ESC continua interrompendo quando voce quiser.

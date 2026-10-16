@@ -1,6 +1,6 @@
 # Atualização local preservando os dados
 
-O pacote `releases/CRONOS-Atualizacao-Preservando-Dados.zip` contém a atualização de interface e análise da revisão 1442976 e um aplicador local. É destinado à instalação existente baseada em b736566, sem alteração de dependências. Não é uma instalação completa e não inclui chaves ou memórias do usuário.
+O pacote `releases/CRONOS-Atualizacao-Preservando-Dados.zip` contém a atualização de interface e análise da revisão indicada em tools/interface_update_manifest.json e um aplicador local. É destinado à instalação existente baseada em b736566, sem alteração de dependências. Não é uma instalação completa e não inclui chaves ou memórias do usuário.
 
 1. Extraia em uma pasta temporária.
 2. Execute `Atualizar-Cronos-Preservando-Dados.bat`.

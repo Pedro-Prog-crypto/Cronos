@@ -9,7 +9,17 @@ ROOT=Path(__file__).resolve().parents[1]
 EXTRA=['ABRIR-CRONOS.bat','LEIA-PRIMEIRO.txt','tools/start_bundle.py','tools/launch_bundle.vbs','tools/apply_interface_update.py','tools/interface_update_manifest.json']
 
 
+def build_patch():
+    manifest=json.loads((ROOT/'tools/interface_update_manifest.json').read_text())
+    names=[*manifest['files'],'tools/apply_interface_update.py','tools/interface_update_manifest.json','Atualizar-Cronos-Preservando-Dados.bat']
+    output=ROOT/'releases/CRONOS-Atualizacao-Preservando-Dados.zip';output.parent.mkdir(exist_ok=True)
+    with zipfile.ZipFile(output,'w',zipfile.ZIP_DEFLATED) as package:
+        for name in names:package.write(ROOT/name,name)
+        package.writestr('LEIA-PRIMEIRO.txt',(ROOT/'docs/ATUALIZAR_SEM_RECADASTRAR.md').read_text())
+
+
 def build():
+    build_patch()
     tracked=subprocess.check_output(['git','ls-files','-z','--','cronos','modelos','config/providers.example.json','.env.example','pyproject.toml'],cwd=ROOT).decode().split('\0')
     names=sorted(set(filter(None,tracked))|set(EXTRA))
     for name in names:

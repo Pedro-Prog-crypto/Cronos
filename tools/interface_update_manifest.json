@@ -1,15 +1,15 @@
 {
-  "revision": "14429761f558ebc6ad3b3b8da75e41cb2fd62318",
+  "revision": "dcd4e970d6b1a831ffac67b73cbb8626f5af776f",
   "files": {
     "cronos/app.py": "ac8d5a4dc3ba3bbb4a92a942dfeafa11e8a2a703dbd98f70cae7a73917bc2bc5",
     "cronos/documents.py": "4ce1558e1f86644bfed8ae04539961e03e2dbf0d720ce985f7f5664f4db18711",
     "cronos/security.py": "f90b577e1343250c5d14d683f20d7f6b317943509d7b326e7cc2b940c86b3c51",
-    "cronos/ui/assets/ModulePanel-CmqN0NhD.js": "c5abc61e4ad45cf6935a47aa23fc2f01a4ef8dbf83a4435533d7cb7362a82311",
-    "cronos/ui/assets/StremioPanel-Du7u9xbF.js": "bd19ed8c0a2bde75552866a23e8343b1c56350f5e01a9060581cdd52488443fc",
-    "cronos/ui/assets/main-BXgqTD3O.js": "69de16b9fa7093ec803e784b51ec56183e7a6e9d5c64e22972c4dfc23038a2c4",
-    "cronos/ui/assets/main-etn7qUvT.css": "d7825b20943e54d610b7710afeb8ca2b178c6cf537fb0bb02779d7c172053b24",
-    "cronos/ui/assets/scene.worker-Bx2hilp9.js": "45430c2581ce5b4f22e9d21e60b2551574d8af03b7c37f484b519318bc29ab4f",
-    "cronos/ui/assets/search-TNEeBgqg.js": "6236117de8a1e2077d8ed7008b81268f9be3aea4787548745434ad127675b923",
-    "cronos/ui/index.html": "aaf052f8dea80e042a7abed0bc251a38a2a8060e6f30cc4ac28f157c6de6d377"
+    "cronos/ui/assets/ModulePanel-DT_T21bt.js": "1d43af736d9d14d52a799e73840a49b448f5065af19d00b3dc32cdf9b494d9de",
+    "cronos/ui/assets/StremioPanel-Dfhy7SX4.js": "ef93e315bf1fdac87a221582c5afc81c6a920587d3b6e1f1cf9ee24e03648502",
+    "cronos/ui/assets/main-CPHozqHs.js": "3cc88bcc7e3890bcabffcf343a0f6740d554eb68703ab910b10d5bc534eae0a2",
+    "cronos/ui/assets/main-DHJXveaB.css": "9f85dd3b9b9e0e575a459459a130cda98a17be28321717935425a3b5d7891049",
+    "cronos/ui/assets/scene.worker-d1s90Go2.js": "8af9e705d203f6ed51c624fb9bbea5c5cc7e21bbfc6298f6c8ed43f25f161945",
+    "cronos/ui/assets/search-CskmVQc5.js": "1384ae164d85ec047ab8217b2062bb632e8fbc20972fad077484fff142cb9de6",
+    "cronos/ui/index.html": "44d80f97faa2f43a848a30e5783a8b637e73a63914ae7575d3312c1f7771a5de"
   }
 }
