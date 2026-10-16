@@ -1,5 +1,6 @@
 """Embed the dependency-free helper into one Windows BAT, with no downloads."""
 from pathlib import Path
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -18,6 +19,10 @@ exit /b %CRONOS_RESCUE_RESULT%
 '''
     output = ROOT / 'releases/SALVAR-E-ABRIR-CRONOS.bat'
     output.write_bytes((header + (ROOT / 'tools/rescue_installation.py').read_text()).replace('\n', '\r\n').encode('utf-8'))
+    # Browsers may display BAT files as text. The ZIP downloads as one attachment
+    # and contains exactly the same single launcher, with no application overlay.
+    with zipfile.ZipFile(output.with_suffix('.zip'), 'w', zipfile.ZIP_DEFLATED) as archive:
+        archive.write(output, output.name)
     return output
 
 

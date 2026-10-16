@@ -2,6 +2,7 @@ import importlib.util
 import json
 from pathlib import Path
 import sqlite3
+import zipfile
 
 import pytest
 
@@ -108,6 +109,9 @@ def test_bat_embeds_the_verified_helper_and_has_no_network(tmp_path):
     embedded = raw.split('\n# CRONOS_RESCUE_PYTHON\n')[1]
     assert embedded == (ROOT / 'tools/rescue_installation.py').read_text()
     compile(embedded, 'embedded-rescue.py', 'exec')
+    with zipfile.ZipFile(destination.with_suffix('.zip')) as archive:
+        assert archive.namelist() == [destination.name]
+        assert archive.read(destination.name) == destination.read_bytes()
     header = raw.split('\n# CRONOS_RESCUE_PYTHON\n')[0]
     assert len(header.splitlines()[4]) < 8000
     assert not any(term in header.lower() for term in ('https://', 'invoke-webrequest', 'downloadstring', ' pip '))
