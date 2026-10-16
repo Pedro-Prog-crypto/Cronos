@@ -1,0 +1,12 @@
+CRONOS COMPLETO — UM PACOTE
+
+1. Extraia TODO o ZIP.
+2. Abra ABRIR-CRONOS.bat.
+
+O iniciador procura sua instalacao anterior e abre o Cronos atualizado usando as APIs, integracoes e memorias que ja estavam la. Se houver mais de uma instalacao, escolha a pasta que voce usa. Nao e preciso colar as chaves de novo, copiar memorias ou executar outro pacote de atualizacao.
+
+A pasta antiga continua sendo usada. Nao apague essa pasta depois da atualizacao. Guarde este ZIP como pacote completo do programa.
+
+As imagens PNG/JPEG e os arquivos ZIP/codigo sao escolhidos nos dois icones ao lado do microfone. O scanner aparece enquanto a IA analisa. O Olho de Deus abre por comando, sem globo na tela inicial.
+
+Este pacote contem o codigo completo, mas nao inventa nem inclui suas chaves privadas. As configuracoes continuam no seu computador. Precisa de uma instalacao anterior funcional com Python/ambiente virtual e APIs cadastradas. Se ela nao for encontrada automaticamente, o programa pede apenas que voce indique a pasta.

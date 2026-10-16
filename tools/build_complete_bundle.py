@@ -1,0 +1,31 @@
+"""Build one runtime ZIP from tracked code; never copy local env, vault or venv."""
+import hashlib
+import json
+from pathlib import Path
+import subprocess
+import zipfile
+
+ROOT=Path(__file__).resolve().parents[1]
+EXTRA=['ABRIR-CRONOS.bat','LEIA-PRIMEIRO.txt','tools/start_bundle.py','tools/launch_bundle.vbs','tools/apply_interface_update.py','tools/interface_update_manifest.json']
+
+
+def build():
+    tracked=subprocess.check_output(['git','ls-files','-z','--','cronos','modelos','config/providers.example.json','.env.example','pyproject.toml'],cwd=ROOT).decode().split('\0')
+    names=sorted(set(filter(None,tracked))|set(EXTRA))
+    for name in names:
+        parts=Path(name).parts
+        if any(p in {'.env','.venv','vault','.cronos-local','__pycache__'} for p in parts):raise ValueError('Arquivo local privado recusado: '+name)
+        if name.startswith('config/') and name!='config/providers.example.json':raise ValueError('Configuracao privada recusada.')
+    output=ROOT/'releases/CRONOS-Completo-Um-Arquivo.zip';output.parent.mkdir(exist_ok=True)
+    with zipfile.ZipFile(output,'w',zipfile.ZIP_DEFLATED,compresslevel=6) as package:
+        for name in names:package.write(ROOT/name,name)
+    with zipfile.ZipFile(output) as package:
+        if package.testzip():raise ValueError('Falha de integridade do ZIP.')
+        manifest=json.loads(package.read('tools/interface_update_manifest.json'))
+        for name,expected in manifest['files'].items():
+            if hashlib.sha256(package.read(name)).hexdigest()!=expected:raise ValueError('Pacote inconsistente: '+name)
+    return output,len(names)
+
+
+if __name__=='__main__':
+    output,count=build();print(json.dumps({'file':str(output),'files':count,'size_bytes':output.stat().st_size}))
