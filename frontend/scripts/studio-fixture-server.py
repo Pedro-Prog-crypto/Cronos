@@ -44,7 +44,32 @@ class Builder:
   if any(a['purpose']=='model' for a in data.get('assets',[])):files['index.html']=files['index.html'].replace('<section id="sobre"','<section class="product-demo"><div data-studio-model></div></section><section id="sobre"')
   files['index.html']=files['index.html'].replace('Uma cozinha de encontros.','Um projeto de teste gerado a partir do briefing.')
   return {'reply':json.dumps({'summary':'Senhor, esta é uma geração de teste. Composição e formulários disponíveis para verificar no navegador. Nenhuma chamada a provedores externos.', 'files':files}),'topics':[]}
-app=create_app(settings,Builder())
+if os.getenv('STUDIO_TEST_FALLBACK') == '1':
+ from dataclasses import replace
+ import cronos.studio.service as studio_service
+ settings=replace(settings,gemini_key='fixture-not-a-real-key')
+ entries=json.loads(settings.providers_file.read_text())
+ entries['providers'].insert(0,{'id':'mistral','kind':'openai','model':'fixture-code','base_url':'https://example.com/v1','key_env':'STUDIO_FIXTURE_IMAGE_KEY'})
+ settings.providers_file.write_text(json.dumps(entries))
+ calls['adapters']={}
+ class ReserveBuilder(Builder):
+  def __init__(self,identifier):self.identifier=identifier
+  async def reply(self,system,messages):
+   calls['adapters'][self.identifier]=calls['adapters'].get(self.identifier,0)+1
+   if self.identifier=='gemini':raise ProviderError('Fixture quota',429)
+   if 'aguardar cancelamento manual' in messages[-1]['content']:
+    await asyncio.Event().wait()
+   await asyncio.sleep(2)
+   return await super().reply(system,messages)
+ studio_service.make_provider=lambda config: ReserveBuilder(config.provider)
+ app=create_app(settings)
+else:
+ app=create_app(settings,Builder())
 @app.get('/fixture/calls')
 async def fixture_calls():return calls
+@app.post('/fixture/reset-cooldowns')
+async def fixture_reset_cooldowns():
+ app.state.studio.provider_cooldowns.clear()
+ app.state.studio.vision_cooldowns.clear()
+ return {'reset':True}
 uvicorn.run(app,host='127.0.0.1',port=int(os.getenv('STUDIO_TEST_PORT','8871')),log_level='warning')

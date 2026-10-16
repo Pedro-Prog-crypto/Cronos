@@ -61,16 +61,31 @@ class CompatibleProvider:
         if spec.key_env and not key:
             raise ProviderError(f"Configure {spec.key_env} para usar {spec.id}.")
         base = checked_url(spec.base_url)
+        # Canonical image messages are shared by Studio's vision failover. Convert
+        # only at the transport boundary; a text-only model may reject and yield.
+        wire_messages = []
+        for message in messages:
+            if not message.get('image'):
+                wire_messages.append(message)
+                continue
+            image = message['image']
+            if spec.kind == 'anthropic':
+                content = [{'type': 'text', 'text': message['content']},
+                           {'type': 'image', 'source': {'type': 'base64', 'media_type': image['mime_type'], 'data': image['data']}}]
+            else:
+                content = [{'type': 'text', 'text': message['content']},
+                           {'type': 'image_url', 'image_url': {'url': 'data:' + image['mime_type'] + ';base64,' + image['data']}}]
+            wire_messages.append({'role': message['role'], 'content': content})
         if spec.kind == "anthropic":
             path = "/messages"
             headers = {"x-api-key": key, "anthropic-version": "2023-06-01"}
             payload = {"model": spec.model, "max_tokens": spec.max_output_tokens or 8192,
-                       "system": system + "\n" + OUTPUT_RULES, "messages": messages}
+                       "system": system + "\n" + OUTPUT_RULES, "messages": wire_messages}
         else:
             path = "/chat/completions"
             headers = {"Authorization": "Bearer " + key} if key else {}
             payload = {"model": spec.model,
-                       "messages": [{"role": "system", "content": system + "\n" + OUTPUT_RULES}, *messages],
+                       "messages": [{"role": "system", "content": system + "\n" + OUTPUT_RULES}, *wire_messages],
                        "response_format": {"type": "json_object"}}
             if spec.max_output_tokens:
                 payload["max_tokens"] = spec.max_output_tokens

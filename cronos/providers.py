@@ -233,7 +233,9 @@ class Ollama:
                 response = await client.post(base + "/api/chat", json={
                     "model": self.settings.ollama_model, "stream": False, "format": "json",
                     **({"options": {"num_predict": self.settings.output_tokens}} if self.settings.output_tokens else {}),
-                    "messages": [{"role": "system", "content": system + "\n" + OUTPUT_RULES}, *messages],
+                    "messages": [{"role": "system", "content": system + "\n" + OUTPUT_RULES},
+                                 *[{k: v for k, v in message.items() if k != 'image'} |
+                                   ({'images': [message['image']['data']]} if message.get('image') else {}) for message in messages]],
                 })
                 response.raise_for_status()
                 return parse_completed_reply(response.json()["message"]["content"])

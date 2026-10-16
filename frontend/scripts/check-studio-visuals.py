@@ -106,6 +106,9 @@ async def main():
             await page.screenshot(path='/tmp/cronos-studio-ideas-mobile.png')
             assert await page.locator('.site-studio').evaluate('n=>n.scrollWidth<=innerWidth+2')
             await page.set_viewport_size({'width':1672,'height':1000})
+            # The previous scenario exhausted the only mock adapter. The next
+            # scenario is independent; no real provider quota is reset here.
+            assert (await client.post('/fixture/reset-cooldowns')).status_code==200
             await page.get_by_role('button',name='Voltar aos projetos',exact=True).click()
             await page.get_by_role('button',name='Novo projeto',exact=True).click()
             await page.get_by_label('Nome do projeto',exact=True).fill('Ateliê do bairro')
