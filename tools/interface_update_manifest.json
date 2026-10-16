@@ -1,5 +1,5 @@
 {
-  "revision": "d1a95d8fac7c34089d49c277023a899c3f8c2e66",
+  "revision": "02753eaca40f2284ee2b57adc30bb42e3615f4a9",
   "files": {
     "cronos/app.py": "3f0cb9a427b73608cfe092bfd6a70049fc275bed6343bbb9a7bde023004bf927",
     "cronos/documents.py": "4ce1558e1f86644bfed8ae04539961e03e2dbf0d720ce985f7f5664f4db18711",
@@ -17,15 +17,15 @@
     "cronos/studio/service.py": "b0b84e77db116f048f594076b618e8caa3d4901ff59944e17e5023770c483879",
     "cronos/studio/store.py": "56b85634ac0a6fb1301a15294ee22b9d8ff6a86da34e6f551aa259796ea0bc7f",
     "cronos/studio/validation.py": "34a8791bca9ada816b0f7b71cb7ce061b3267ce7383eec1164f15babf78a65dc",
-    "cronos/ui/assets/ModulePanel-B4av3Qa3.js": "479dfd301e22bee599bc0fc57c181bb7698439399f499037cbb6ad111c9e95bc",
-    "cronos/ui/assets/SiteStudio-BZWXBTzU.js": "00b958ca8936963d68737b8c6e9d8abbb57e71a46c43a35179272b79d5426347",
+    "cronos/ui/assets/ModulePanel-Bnm_sJkg.js": "1eda9b01940dd65fea8bdbe938ce6773d6aca1d2f9deb088fb0e38d2f9d97b4d",
     "cronos/ui/assets/SiteStudio-CH77MYuf.css": "df8d87c56ca44a90a0f5614c0cd9d8cbfdfba3e3788ecfe601122f87cb7d9b7a",
-    "cronos/ui/assets/StremioPanel-CLA3kknG.js": "6f88aa587350ba48073d6bdd364916843523a8f84a6977d9d719f1649f2ac65a",
-    "cronos/ui/assets/main-DHC1IdPh.js": "a3d52f0646f517ea57ee797e66a026b49d6d24d1522e28eb6ffdd0a055fc2632",
+    "cronos/ui/assets/SiteStudio-QYNhKA67.js": "8a5cae7a396439db677a413e52aeb25313633eb9eb0889b86a45de3333b29aa6",
+    "cronos/ui/assets/StremioPanel-wGv0Urp_.js": "63cee459d7fa64637642f681040900ea8db0476dca9d26c9f0b54f3b72181c16",
+    "cronos/ui/assets/main-Cy4Iycx8.js": "602b503a2fc4b3758ed0be1e74815e7367e8cf8b5e5693e34f09f37527ec0313",
     "cronos/ui/assets/main-P1ikkr1n.css": "d912ce7b4ecde4c10c35ac82580cc33183fe3f9eb522d2a1846fa4203c2d091a",
-    "cronos/ui/assets/scene.worker-d1s90Go2.js": "8af9e705d203f6ed51c624fb9bbea5c5cc7e21bbfc6298f6c8ed43f25f161945",
-    "cronos/ui/assets/search-CEGZitPK.js": "544f35620636844d0734bac6311d4fdd6e6bf266585a9574c89b0292ca16f969",
-    "cronos/ui/assets/smartphone-CvdmeKow.js": "47cdcfcb31b3d225acb57eac5581c20e32af53c1d4eef4434ffc60a3cb9aee03",
-    "cronos/ui/index.html": "2e6509a1ade5920188bda9aa51d72406e4cb9ed98b89015731b22f8c72782b57"
+    "cronos/ui/assets/scene.worker-Bx2hilp9.js": "45430c2581ce5b4f22e9d21e60b2551574d8af03b7c37f484b519318bc29ab4f",
+    "cronos/ui/assets/search-AQRHLc6C.js": "32c2e83a9514c1ffeab5a0764c7cbc6d940cf21625756d4e03c30705afe3ea20",
+    "cronos/ui/assets/smartphone-Dk8MlbGV.js": "352783ade0dbff157d329123c4362673968a1c733bdbcb515a9e9667c5758126",
+    "cronos/ui/index.html": "765925723587fcb003b63b3d111b02c55dfe000db12ad64ddc9ccb2a32a80746"
   }
 }
