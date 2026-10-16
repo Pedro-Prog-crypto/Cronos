@@ -8,9 +8,10 @@ import {api,jsonApi,getToken,onConnection,ApiError,streamChat} from './api';
 
 import {MemorySpiral,MemoryGraph} from './components/MemorySpiral';
 import {AnalysisPanel,AnalysisKind} from './components/AnalysisPanel';
-import {AnswerCards,HolographicCard} from './components/HolographicCards';
+import {AnswerCards,HolographicCard,MovableCardFrame} from './components/HolographicCards';
 import {localCommand} from './commands';
 import {cardRequest,cardDisplayCommand} from './cardRequests';
+import {cardPositionCommand,CardLayout} from './cardLayout';
 import {stremioCommand,StremioRequest} from './stremioCommands';
 const StremioPanel=lazy(()=>import('./components/StremioPanel'));
 import {prospectCommand} from './prospectCommands';
@@ -30,14 +31,16 @@ export default function App(){
   const updatePreferences=useCallback((value:any)=>setPanelPrefs(value),[]);
   useEffect(()=>{const update=()=>setPageHidden(document.hidden);document.addEventListener('visibilitychange',update);return()=>document.removeEventListener('visibilitychange',update);},[]);
   const [updateBusy,setUpdateBusy]=useState(false);
-  const [analysis,setAnalysis]=useState<AnalysisKind|null>(null),[analysisBusy,setAnalysisBusy]=useState(false);
+  const [analyses,setAnalyses]=useState<AnalysisKind[]>([]),[analysisTasks,setAnalysisTasks]=useState<AnalysisKind[]>([]);
+  const analysisBusy=analysisTasks.length>0;
+  const analysisSpeechQueue=useRef<string[]>([]),[analysisSpeechRevision,setAnalysisSpeechRevision]=useState(0);
   const [connected,setConnected]=useState(false),[config,setConfig]=useState<any>(null);
   const [notice,setNotice]=useState(''),[error,setError]=useState(false);
   const [chatOpen,setChatOpen]=useState(false),[module,setModule]=useState<string|null>(null);
   const [draft,setDraft]=useState(''),[busy,setBusy]=useState(false),[tools,setTools]=useState<ToolResult[]>([]);
   const [autoVoice,setAutoVoice]=useState(true),[announceAlerts,setAnnounceAlerts]=useState(false),[monitor,setMonitor]=useState<any>(null);
   const [eyeOpen,setEyeOpen]=useState(false),[placeQuery,setPlaceQuery]=useState(''),[graph,setGraph]=useState<MemoryGraph>({nodes:[],edges:[],total:0}),[graphRevision,setGraphRevision]=useState(0),[note,setNote]=useState<{path:string;content:string}|null>(null);
-  const [showSpokenCards,setShowSpokenCards]=useState(false);
+  const [showSpokenCards,setShowSpokenCards]=useState(false),[cardLayout,setCardLayout]=useState<CardLayout>('orbit');
   const spokenCards=useRef(false);
   const applyCardRequest=(text:string,typed=false)=>{const requested=cardRequest(text);if(requested!==null)spokenCards.current=requested;setShowSpokenCards(requested===false?false:typed||spokenCards.current);};
   const [displayTurn,setDisplayTurn]=useState<{question:string;source:'text'|'transcription';reply:string}|null>(null);
@@ -61,6 +64,10 @@ export default function App(){
   const live=useRef({busy:false,recording:false,transcribing:false,speaking:false,generating:false,module:null as string|null,announce:false,fish:false});
   live.current={busy,recording:microphone.capturing||microphone.starting,transcribing:microphone.transcribing,speaking:voice.isSpeaking,generating:voice.isGenerating,module,announce:announceAlerts,fish:Boolean(config?.fish_configured)};
   const voiceRef=useRef(voice);voiceRef.current=voice;
+  useEffect(()=>{
+    if(busy||updateBusy||voice.isSpeaking||voice.isGenerating||!analysisSpeechQueue.current.length)return;
+    const reply=analysisSpeechQueue.current.shift()!;voiceRef.current.prepare();void voiceRef.current.speak(reply);
+  },[analysisSpeechRevision,busy,updateBusy,voice.isSpeaking,voice.isGenerating]);
   useEffect(()=>{if(!announceAlerts)pendingAlerts.current.clear();},[announceAlerts]);
 
   const connectBackend=useCallback(async()=>{
@@ -118,7 +125,7 @@ export default function App(){
     return()=>{alive=false;controller.abort();};
   },[connected,graphRevision,tell]);
   useEffect(()=>{if(!connected)return;const timer=setInterval(()=>{if(prefsRef.current?.auto_index!==false&&!document.hidden&&!live.current.busy&&!live.current.recording&&!live.current.transcribing)setGraphRevision(value=>value+1);},60000);return()=>clearInterval(timer);},[connected]);
-  const openAnalysis=(kind:AnalysisKind)=>{voice.stop();setAnalysis(kind);setEyeOpen(false);setModule(null);setChatOpen(false);setShowSpokenCards(false);};
+  const openAnalysis=(kind:AnalysisKind)=>{if(autoVoice&&config?.fish_speech_configured)voice.prepare();setAnalyses(previous=>previous.includes(kind)?previous:[...previous,kind]);setEyeOpen(false);setModule(null);setChatOpen(false);};
   const runCommand=(text:string)=>{
     const attachment=text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
     if(/\b(?:analis\w*|examin\w*|abr\w*|envi\w*|carreg\w*)\b/.test(attachment)&&/\b(?:imagem|foto|fotografia|arquivo|zip|codigo)\b/.test(attachment)){
@@ -127,6 +134,7 @@ export default function App(){
     const film=stremioCommand(text);if(film){if(config?.privacy_mode==='local'){tell('Stremio online desativado no modo local.',true);return true;}voice.stop();setStremio(film);setModule(null);setChatOpen(false);return true;}
     const leadCommand=prospectCommand(text);if(leadCommand){if(config?.privacy_mode==='local'){tell('Prospecção online desativada no modo local.',true);return true;}voice.stop();setProspect(leadCommand);setModule(null);setChatOpen(false);return true;}
     if(music.current?.handle(text)){setChatOpen(false);voice.stop();return true;}
+    const position=cardPositionCommand(text);if(position&&(showSpokenCards||/cards?|cart[õo]es|textos?/i.test(text))){setCardLayout(position);setShowSpokenCards(true);setChatOpen(false);return true;}
     const cards=cardDisplayCommand(text);if(cards!==null){spokenCards.current=cards;setShowSpokenCards(cards);setChatOpen(false);if(cards){if(lastAnswer.current)setDisplayTurn(lastAnswer.current);else if(!displayTurn?.reply)tell('Ainda não há uma resposta para mostrar. Faça uma pergunta e peça a explicação em cards.',true);setModule(null);setEyeOpen(false);setNote(null);}return true;}
     const command=localCommand(text,eyeOpen);if(!command)return false;latency.current=null;
     if(command.type==='presence'){
@@ -135,7 +143,7 @@ export default function App(){
       return true;
     }
     if((command.type==='eye'||command.type==='place')&&config?.privacy_mode==='local'){tell('O mapa mundial está desativado em modo local.',true);return true;}
-    if(command.type==='eye'){setAnalysis(null);voice.prepare();eyeAnnouncement.current=true;setEyeOpen(true);setChatOpen(false);setModule(null);setNote(null);}
+    if(command.type==='eye'){setAnalyses([]);voice.prepare();eyeAnnouncement.current=true;setEyeOpen(true);setChatOpen(false);setModule(null);setNote(null);}
     else if(command.type==='memory'){setEyeOpen(false);setShowSpokenCards(false);setChatOpen(false);setGraphRevision(value=>value+1);}
     else if(command.type==='panel')setChatOpen(true);
     else if(command.type==='place'){setPlaceQuery(command.query);setEyeOpen(true);setChatOpen(false);}
@@ -143,8 +151,8 @@ export default function App(){
   };commandRef.current=runCommand;
   const selectNote=useCallback(async(path:string)=>{if(eyeOpen){setEyeOpen(false);return;}try{setNote(await jsonApi(`/memory/note?path=${encodeURIComponent(path)}`));}catch(error){tell('Não foi possível abrir essa nota.',true);}},[eyeOpen,tell]);
   const worldReady=()=>{if(eyeAnnouncement.current){eyeAnnouncement.current=false;if(config?.fish_speech_configured)void voice.speak('Ampliando sua perspectiva. Olho de Deus aberto.');}};
-  interrupt.current=()=>{setAnalysis(null);spokenCards.current=false;setStremio(null);setProspect(null);music.current?.stop();latency.current=null;turnVersion.current++;chatAbort.current?.abort();voice.stop();microphone.cancelCapture();eyeAnnouncement.current=false;pendingAlerts.current.clear();setBusy(false);inFlight.current=false;setModule(null);setEyeOpen(false);setNote(null);setChatOpen(false);setShowSpokenCards(false);setNotice('');};
-  bargeIn.current=()=>{latency.current=null;turnVersion.current++;chatAbort.current?.abort();voice.stop();microphone.cancelCapture();pendingAlerts.current.clear();setBusy(false);inFlight.current=false;setNotice('');};
+  interrupt.current=()=>{analysisSpeechQueue.current=[];setAnalyses([]);spokenCards.current=false;setStremio(null);setProspect(null);music.current?.stop();latency.current=null;turnVersion.current++;chatAbort.current?.abort();voice.stop();microphone.cancelCapture();eyeAnnouncement.current=false;pendingAlerts.current.clear();setBusy(false);inFlight.current=false;setModule(null);setEyeOpen(false);setNote(null);setChatOpen(false);setShowSpokenCards(false);setNotice('');};
+  bargeIn.current=()=>{analysisSpeechQueue.current=[];latency.current=null;turnVersion.current++;chatAbort.current?.abort();voice.stop();microphone.cancelCapture();pendingAlerts.current.clear();setBusy(false);inFlight.current=false;setNotice('');};
   useEffect(()=>{const key=(event:KeyboardEvent)=>{if(event.key==='F4'&&!event.altKey&&!event.ctrlKey&&!event.metaKey){event.preventDefault();if(!event.repeat)handlers.current.mic();return;}if(event.key==='Escape'){if(!live.current.speaking&&!live.current.generating&&!live.current.busy&&music.current?.exitView()){event.preventDefault();return;}event.preventDefault();interrupt.current();}};window.addEventListener('keydown',key);return()=>{window.removeEventListener('keydown',key);chatAbort.current?.abort();};},[]);
   useEffect(()=>{if(!notice)return;const timer=setTimeout(()=>setNotice(''),8000);return()=>clearTimeout(timer);},[notice]);
 
@@ -158,7 +166,7 @@ export default function App(){
     const text=value.trim();if(!text||inFlight.current)return;if(!audio&&runCommand(text)){setDraft('');return;}
     if(!connected){tell('A conexão automática ainda não está disponível. Feche e abra o Kronos novamente.',true);return;}
     applyCardRequest(text,source==='text');if(!audio)setDisplayTurn({question:text,source,reply:''});setChatOpen(false);
-    inFlight.current=true;setBusy(true);voice.stop();if(autoVoice)voice.prepare();setDraft('');tell('Cronos está processando sua mensagem…');
+    analysisSpeechQueue.current=[];inFlight.current=true;setBusy(true);voice.stop();if(autoVoice)voice.prepare();setDraft('');tell('Cronos está processando sua mensagem…');
     latency.current={turn_id:crypto.randomUUID(),source:source==='transcription'?'voice':'text',started:performance.now(),armed:false,chat_ms:0,...(source==='transcription'?recognition.current:{})};
     const turnLatency=latency.current;
     const version=++turnVersion.current,controller=new AbortController();chatAbort.current=controller;
@@ -214,7 +222,7 @@ export default function App(){
       setTools(old=>old.map(item=>item===result?outcome:item));tell(outcome.status==='completed'?'Solicitação atendida; confira seu resultado.':outcome.error||outcome.status,outcome.status==='failed');
     }catch(error){tell(error instanceof Error?error.message:'Falha na confirmação.',true);}finally{setBusy(false);inFlight.current=false;}
   };
-  const openModule=(index:number)=>{setAnalysis(null);setEyeOpen(false);setChatOpen(false);setNote(null);setModule(moduleIds[index]);setModuleActivity('IDLE');};
+  const openModule=(index:number)=>{setAnalyses([]);setEyeOpen(false);setChatOpen(false);setNote(null);setModule(moduleIds[index]);setModuleActivity('IDLE');};
   useEffect(()=>{document.documentElement.dataset.cronosPanel=module?'true':'false';return()=>{delete document.documentElement.dataset.cronosPanel;};},[module]);
   const closeModule=()=>{(iframe.current?.contentWindow as (Window & {cronosPanelClose?:()=>void})|null)?.cronosPanelClose?.();setModule(null);setModuleActivity('IDLE');setGraphRevision(value=>value+1);if(connected)void jsonApi('/status').then(setConfig).catch(()=>{});};
   const handlers=useRef({mic:handleMic,module:openModule});handlers.current={mic:handleMic,module:openModule};
@@ -233,15 +241,15 @@ export default function App(){
       <Suspense fallback={<div className="panel-loading">Abrindo Olho de Deus…</div>}><WorldMap query={placeQuery} onError={message=>tell(message,true)} onReady={worldReady}/></Suspense>
     </div>}
     {!eyeOpen&&!module&&<><button className="reference-attachment" aria-label="Analisar imagem" title="Analisar imagem" onClick={()=>openAnalysis('image')}><ImagePlus size={16}/></button><button className="reference-attachment files" aria-label="Analisar ZIP ou código" title="Analisar ZIP ou código" onClick={()=>openAnalysis('document')}><FileArchive size={16}/></button></>}
-    {analysis&&!eyeOpen&&!module&&<AnalysisPanel key={analysis} kind={analysis} onClose={()=>setAnalysis(null)} onBusy={setAnalysisBusy} onResult={reply=>{lastAnswer.current={question:'Análise de arquivo',source:'text',reply};if(autoVoice&&config?.fish_speech_configured){voice.prepare();void voice.speak(reply);}}}/>}
+    {!eyeOpen&&!module&&analyses.map(kind=><AnalysisPanel key={kind} kind={kind} onClose={()=>setAnalyses(previous=>previous.filter(item=>item!==kind))} onBusy={active=>setAnalysisTasks(previous=>active?[...previous.filter(item=>item!==kind),kind]:previous.filter(item=>item!==kind))} onResult={reply=>{lastAnswer.current={question:kind==='image'?'Análise de imagem':'Análise de arquivo',source:'text',reply};if(autoVoice&&config?.fish_speech_configured){analysisSpeechQueue.current.push(reply);setAnalysisSpeechRevision(value=>value+1);}}}/>)}
     <button className={`reference-mic ${microphone.starting?'starting':microphone.transcribing?'transcribing':busy?'thinking':voice.isGenerating?'generating':voice.isSpeaking?'speaking':microphone.recording?'recording':''}`} aria-pressed={microphone.recording} title={microphone.starting?'Abrindo microfone':microphone.transcribing?'Transcrevendo':busy?'Aguardando Gemini':voice.isGenerating?'Preparando voz':voice.isSpeaking?'Falando — diga Cronos para interromper':microphone.recording?'Microfone ligado':'Microfone desligado'} aria-label={microphone.recording?'Desligar microfone':'Ligar microfone'} onClick={handleMic} ><Mic size={16}/></button>
     {stremio&&<Suspense fallback={<div className="panel-loading">Abrindo Stremio…</div>}><StremioPanel key={JSON.stringify(stremio)} initial={stremio} onClose={()=>setStremio(null)}/></Suspense>}
     {prospect&&<Suspense fallback={<div className="panel-loading">Abrindo prospecção…</div>}><ProspectPanel key={prospect.city+'|'+prospect.category+'|'+(prospect.report?.id||'')} initial={prospect} onClose={()=>setProspect(null)} onAsk={text=>{setProspect(null);void sendText(text);}}/></Suspense>}
     <MusicPlayer ref={music} onTalk={async()=>{voice.stop();microphone.cancelCapture();await microphone.start();}} local={config?.privacy_mode==='local'} onError={message=>tell(message,true)}/>
     {notice&&error&&<div className="scene-notice" role="status">{notice}</div>}
     {note&&<section className="note-window" aria-label="Nota Obsidian"><button onClick={()=>setNote(null)} aria-label="Fechar nota"><X size={18}/></button><pre>{note.content}</pre></section>}
-    {displayTurn?.reply&&showSpokenCards&&!chatOpen&&!module&&!eyeOpen&&<AnswerCards reply={displayTurn.reply}/>}
-    {displayTurn&&displayTurn.source==='text'&&showSpokenCards&&!chatOpen&&!module&&!eyeOpen&&<div className="spoken-question"><HolographicCard title="PERGUNTA" variant="ribbon"><p className="holo-text">{displayTurn.question}</p></HolographicCard></div>}
+    {displayTurn?.reply&&showSpokenCards&&!chatOpen&&!module&&!eyeOpen&&<AnswerCards reply={displayTurn.reply} layout={cardLayout}/>}
+    {displayTurn&&displayTurn.source==='text'&&showSpokenCards&&!chatOpen&&!module&&!eyeOpen&&<MovableCardFrame className="spoken-question"><HolographicCard title="PERGUNTA" variant="ribbon" movable><p className="holo-text">{displayTurn.question}</p></HolographicCard></MovableCardFrame>}
     {chatOpen&&<section className="card-composer" aria-label="Escrever para Kronos"><HolographicCard title="PERGUNTA" variant="layered">
       <button className="holo-close" onClick={()=>setChatOpen(false)} aria-label="Fechar conversa"><X size={17}/></button>
       <form onSubmit={send}><label htmlFor="chat-input">O que você quer perguntar?</label><textarea id="chat-input" value={draft} onChange={event=>{setDraft(event.target.value);event.target.style.height='auto';event.target.style.height=Math.min(260,event.target.scrollHeight)+'px';}} maxLength={16000} rows={2}/>

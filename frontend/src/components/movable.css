@@ -1,0 +1,4 @@
+.movable-surface{translate:var(--drag-x,0px) var(--drag-y,0px)}
+.movable-surface [data-drag-handle]{cursor:grab;touch-action:none;user-select:none}
+.movable-surface[data-dragging=true],.movable-surface[data-dragging=true] [data-drag-handle]{cursor:grabbing}
+.drag-scroll[data-panning=true]{cursor:grabbing;user-select:none}

@@ -1,9 +1,11 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {ImagePlus,FileArchive,X,Upload,ScanLine} from 'lucide-react';
 import {api} from '../api';
+import {useMovable,useDragScroll} from '../hooks/useMovable';
 import './analysis-panel.css';
 export type AnalysisKind='image'|'document';
 export function AnalysisPanel({kind,onClose,onBusy,onResult}:{kind:AnalysisKind;onClose:()=>void;onBusy:(busy:boolean)=>void;onResult:(reply:string)=>void}){
+ const movement=useMovable(),scroll=useDragScroll();
  const [name,setName]=useState(''),[preview,setPreview]=useState(''),[payload,setPayload]=useState('');
  const [files,setFiles]=useState<{name:string;truncated:boolean}[]>([]),[skipped,setSkipped]=useState(0),[truncated,setTruncated]=useState(false);
  const [prompt,setPrompt]=useState(''),[phase,setPhase]=useState<'empty'|'loading'|'ready'|'analyzing'|'done'|'error'>('empty'),[error,setError]=useState(''),[reply,setReply]=useState('');
@@ -43,15 +45,15 @@ export function AnalysisPanel({kind,onClose,onBusy,onResult}:{kind:AnalysisKind;
   finally{if(controller.current===request)onBusy(false);}
  };
  const active=phase==='analyzing';
- return <section className={`analysis-panel ${active?'is-scanning':''}`} role="region" aria-label={kind==='image'?'Análise de imagem':'Análise de arquivo'}>
-  <header><ScanLine size={16}/><strong>{active?'ANALISANDO':phase==='done'?'ANÁLISE CONCLUÍDA':kind==='image'?'ANÁLISE DE IMAGEM':'ANÁLISE DE ARQUIVO'}</strong><button onClick={onClose} aria-label="Fechar análise"><X size={16}/></button></header>
+ return <section ref={movement.ref} onPointerDown={e=>{movement.onPointerDown(e);scroll.onPointerDown(e);}} onPointerMove={e=>{movement.onPointerMove(e);scroll.onPointerMove(e);}} onPointerUp={e=>{movement.onPointerUp(e);scroll.onPointerUp(e);}} onPointerCancel={e=>{movement.onPointerCancel(e);scroll.onPointerCancel(e);}} onKeyDown={movement.onKeyDown} className={`analysis-panel kind-${kind} movable-surface ${active?'is-scanning':''}`} role="region" aria-label={kind==='image'?'Análise de imagem':'Análise de arquivo'}>
+  <header data-drag-handle tabIndex={0} title="Arraste para mover o painel"><ScanLine size={16}/><strong>{active?'ANALISANDO':phase==='done'?'ANÁLISE CONCLUÍDA':kind==='image'?'ANÁLISE DE IMAGEM':'ANÁLISE DE ARQUIVO'}</strong><button onClick={onClose} aria-label="Fechar análise"><X size={16}/></button></header>
   <div className="analysis-viewport">
    {preview?<img src={preview} alt={`Imagem selecionada: ${name}`}/>:files.length?<div className="analysis-file-list"><FileArchive size={30}/><b>{name}</b>{files.map(file=><span key={file.name}>{file.name}{file.truncated?' · trecho':''}</span>)}{skipped>0&&<small>{skipped} arquivo(s) ignorado(s), incluindo binários e configurações privadas.</small>}{truncated&&<small>Análise limitada a trechos: até 24 mil caracteres.</small>}</div>:<button className="analysis-pick" onClick={()=>fileInput.current?.click()}>{kind==='image'?<ImagePlus size={35}/>:<FileArchive size={35}/>}<span>{phase==='loading'?'LENDO ARQUIVO…':kind==='image'?'Escolher imagem':'Escolher ZIP ou código'}</span><small>Até 2 MiB</small></button>}
    {active&&<div className="analysis-scan" aria-hidden="true"/>}
    <i className="analysis-corner top-left"/><i className="analysis-corner bottom-right"/>
   </div>
   <input ref={fileInput} type="file" hidden aria-label={kind==='image'?'Selecionar imagem':'Selecionar ZIP ou código'} accept={kind==='image'?'image/png,image/jpeg':'.zip,.txt,.md,.py,.js,.ts,.tsx,.jsx,.json,.html,.css,.csv,.xml,.yaml,.yml,.toml,.sql,.sh,.bat,.ps1,.c,.cpp,.h,.java,.rs,.go'} onChange={e=>{void choose(e.target.files?.[0]);e.target.value='';}}/>
-  {payload&&<><label className="analysis-question">O que você quer entender?<textarea aria-label="Pergunta sobre o arquivo" rows={2} maxLength={3000} value={prompt} onChange={e=>setPrompt(e.target.value)} placeholder="Descreva, explique ou encontre um problema…"/></label><p className="analysis-consent">Ao analisar, {kind==='image'?'a imagem será enviada ao Gemini':'os trechos legíveis serão enviados à IA selecionada'}. Nenhum arquivo será executado.</p><div className="analysis-actions"><button disabled={active} onClick={()=>fileInput.current?.click()} aria-label="Trocar arquivo"><Upload size={14}/></button><button disabled={active} onClick={()=>void analyze()}>{active?'Analisando…':'Analisar'}</button></div></>}
+  {payload&&<><label className="analysis-question">O que você quer entender?<textarea aria-label="Pergunta sobre o arquivo" rows={2} maxLength={3000} value={prompt} onChange={e=>{setPrompt(e.target.value);e.target.style.height='auto';e.target.style.height=Math.min(170,e.target.scrollHeight)+'px';}} placeholder="Descreva, explique ou encontre um problema…"/></label><p className="analysis-consent">Ao analisar, {kind==='image'?'a imagem será enviada ao Gemini':'os trechos legíveis serão enviados à IA selecionada'}. Nenhum arquivo será executado.</p><div className="analysis-actions"><button disabled={active} onClick={()=>fileInput.current?.click()} aria-label="Trocar arquivo"><Upload size={14}/></button><button disabled={active} onClick={()=>void analyze()}>{active?'Analisando…':'Analisar'}</button></div></>}
   {error&&<p className="analysis-error" role="alert">{error}</p>}
   {reply&&<div className="analysis-result" tabIndex={0}>{reply}</div>}
  </section>;

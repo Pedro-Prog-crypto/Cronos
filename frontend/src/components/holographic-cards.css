@@ -11,3 +11,14 @@
 .holo-compact .holo-shell,.holo-compact .holo-surface{clip-path:none;border-radius:12px}
 .holo-ribbon{--cut:20px}
 .holo-layered .holo-text{font-family:'JetBrains Mono',monospace;font-size:13px}
+
+/* Independent surfaces around the hologram: no scroll column or prescribed drag slots. */
+.answer-card-deck{inset:0;width:100%;height:100%;max-height:none;padding:0;overflow:visible;display:block;pointer-events:none;z-index:auto}
+.floating-answer-card{position:absolute;z-index:30;pointer-events:auto;max-width:calc(100vw - 16px)}
+.floating-answer-card .holo-card{width:100%;max-width:none;margin:0!important}
+.floating-answer-card .holo-surface{padding:18px 20px;min-height:0}
+.floating-answer-card .holo-content h2{font-size:12px;letter-spacing:.15em;margin-bottom:10px;cursor:grab}
+.floating-answer-card .holo-text{max-height:var(--card-body-limit,180px);overflow:auto;font:13px/1.6 'Plus Jakarta Sans',sans-serif;overscroll-behavior:contain}
+.answer-card-deck,.answer-card-deck *,.spoken-question,.card-composer,.holo-tool-deck{scrollbar-width:none!important}
+.answer-card-deck::-webkit-scrollbar,.answer-card-deck *::-webkit-scrollbar,.spoken-question::-webkit-scrollbar,.card-composer::-webkit-scrollbar,.holo-tool-deck::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}
+@media(max-width:700px){.answer-card-deck{inset:0;width:100%;height:100%;max-height:none;overflow:visible;padding:0;display:block}.floating-answer-card .holo-surface{padding:12px}.floating-answer-card .holo-text{font-size:12px}}
