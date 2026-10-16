@@ -415,3 +415,12 @@ def test_unreadable_studio_database_does_not_disable_conversation(settings):
         assert c.get('/studio/projects',headers=AUTH).status_code==503
         assert c.post('/chat',headers=AUTH,json={'message':'Explique Sócrates e equações.'}).status_code==200
     assert database.read_bytes()==original
+
+
+def test_autonomous_plan_does_not_reuse_a_previous_reference(settings):
+    builder=Builder()
+    with TestClient(create_app(settings,builder)) as c:
+        p=new(c);done=generate(c,p,reference='Referência de outro cliente: não reutilizar.')
+        assert done['status']=='ready' and done['reference']==''
+        sent=json.loads(builder.calls[0][1][-1]['content'])
+        assert sent['reference_description']=='' and not sent['visual_reference']

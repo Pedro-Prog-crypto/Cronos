@@ -104,7 +104,7 @@ class Studio:
         entries = provider_catalog(settings)
         if not self.app.state.engine.provider and not any(p['id'] == chosen and p['configured'] for p in entries):
             raise ValueError('Selecione uma integração configurada e permitida no modo atual.')
-        project.update(status='running', research_images=body.research_images, mode=body.mode, reference=body.reference, provider=chosen, started=time.time(), finished=None, error=None)
+        project.update(status='running', research_images=body.research_images, mode=body.mode, reference=body.reference if body.mode == 'reference' else '', provider=chosen, started=time.time(), finished=None, error=None)
         project['quote'] = quote(project['category'], project['brief'] + ' ' + body.prompt)
         self.store.event(project, 'request', 'Pedido do senhor: ' + body.prompt)
         self.store.event(project, 'planning', 'Lendo o briefing, a referência e a última versão. A integração escolhida é ' + chosen + '.')
@@ -136,7 +136,7 @@ class Studio:
                     self.store.event(project, 'images', 'Pesquisa de imagens não executada: modo local ou permissão de busca desativada.')
             allowed_assets = [{k: v for k, v in a.items() if k not in {'raw'}} for a in project['assets'] if a['purpose'] != 'reference']
             payload = {'business': {k: project.get(k) for k in ('name', 'category', 'brief', 'contact', 'quote')},
-                       'mode': body.mode, 'reference_description': body.reference,
+                       'mode': body.mode, 'reference_description': body.reference if body.mode == 'reference' else '',
                        'request': body.prompt, 'assets': allowed_assets,
                        'current_files': current['files'], 'current_summary': current['summary']}
             refs = [a for a in project['assets'] if a['purpose'] == 'reference'] if body.mode == 'reference' else []
