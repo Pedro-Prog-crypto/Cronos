@@ -12,3 +12,11 @@
 .tree-star{pointer-events:none}.scene-under-panel{display:none!important}
 @media(max-width:1023px){.function-tree{width:170px;height:auto;top:10%;transform:none}.function-tree>svg{width:170px;height:500px}.function-tree .tree-link,.function-tree .tree-star{display:none}}
 @media(max-width:1023px){.function-tree{right:0;width:180px;height:550px;top:5%;overflow:hidden}.function-tree>svg{width:380px;height:590px;max-width:none;transform:translateX(-204px)}.function-tree .tree-link,.function-tree .tree-star{display:none}}
+
+.cosmic-starfield{position:absolute;inset:-3%;background-size:cover;opacity:.9;animation:cosmic-drift 55s ease-in-out infinite alternate;will-change:transform}
+@keyframes cosmic-drift{from{transform:translate3d(-.7%,-.4%,0)}to{transform:translate3d(.7%,.5%,0)}}
+.cosmic-star{animation-name:cosmic-twinkle;box-shadow:0 0 7px #78dfff,0 0 2px #fff}
+@keyframes cosmic-twinkle{0%,100%{opacity:.15;transform:scale(.8)}45%{opacity:.45}55%{opacity:1;transform:scale(1.4)}65%{opacity:.4}}
+@media(prefers-reduced-motion:reduce){.cosmic-starfield{animation:none}}
+
+@media(min-width:1024px){.function-tree{width:clamp(235px,20vw,380px);height:auto;aspect-ratio:380/590;right:0}.function-tree>svg{width:100%;height:100%}}

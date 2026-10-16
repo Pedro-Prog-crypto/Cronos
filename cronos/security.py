@@ -126,7 +126,7 @@ class SecurityMiddleware:
             state=read_json(updater.folder/'status.json',{})
             if state.get('phase') in {'queued','installing','testing'}:
                 return await JSONResponse({'detail':'Atualização em andamento. Aguarde a verificação e recarregue a página.'},503)(scope,receive,send)
-        limit = 10 * 1024 * 1024 if path == '/voice/transcribe' else 2 * 1024 * 1024 if path == '/chat/audio/stream' else 3 * 1024 * 1024 if path == '/vision/analyze' else 2 * 1024 * 1024 if path == '/vision/preview' else 256 * 1024
+        limit = 10 * 1024 * 1024 if path == '/voice/transcribe' else 2 * 1024 * 1024 if path == '/chat/audio/stream' else 3 * 1024 * 1024 if path in {'/vision/analyze','/documents/preview','/documents/analyze'} else 2 * 1024 * 1024 if path == '/vision/preview' else 256 * 1024
         try:
             length = int(headers.get('content-length', '0'))
             if length < 0:

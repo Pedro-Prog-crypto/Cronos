@@ -510,6 +510,8 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         except Exception as exc:
             raise HTTPException(502, fish_error(exc, "transcrição do microfone")) from exc
 
+    from cronos.documents import install_documents
+    install_documents(app, authenticate)
     install_routes(app, authenticate)
     install_panels(app, authenticate)
     install_geography(app, authenticate)

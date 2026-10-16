@@ -11,7 +11,7 @@ export const IntegratedNeuralStage=React.memo(function Stage({state,audioLevelSo
  return <div className={`relative w-full h-full overflow-hidden select-none ${className}`}>
   <CosmicBackground/>
   <div className="cronos-central-hologram absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 flex flex-col items-center justify-center pointer-events-auto">
-   <CronosOrb state={state} audioLevel={audioLevel} audioLevelSource={audioLevelSource} onOrbClick={onOrbClick} size={440} weaveDensity={1} showCrossLinks/>
+   <CronosOrb state={state} audioLevel={audioLevel} audioLevelSource={audioLevelSource} onOrbClick={onOrbClick} size={440} weaveDensity={1} showCrossLinks={false}/>
    <div className="-mt-7 flex flex-col items-center"><CronosLogo isSpeaking={state==='SPEAKING'} size="sm"/></div>
   </div>
   <div className="function-tree">

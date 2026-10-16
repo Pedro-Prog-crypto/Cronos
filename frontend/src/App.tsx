@@ -1,13 +1,13 @@
 import {UpdateNotice} from './components/UpdateNotice';
 /** @license SPDX-License-Identifier: Apache-2.0 */
 import React,{Suspense,lazy,useCallback,useEffect,useRef,useState} from 'react';
-import {Mic,X,Send} from 'lucide-react';
+import {Mic,X,Send,ImagePlus,FileArchive} from 'lucide-react';
 import {IntegratedNeuralStage} from './components/IntegratedNeuralStage';
 import {useCronosVoice,useMicrophone} from './hooks/useCronosVoice';
 import {api,jsonApi,getToken,onConnection,ApiError,streamChat} from './api';
 
 import {MemorySpiral,MemoryGraph} from './components/MemorySpiral';
-import {HolographicGlobe} from './components/HolographicGlobe';
+import {AnalysisPanel,AnalysisKind} from './components/AnalysisPanel';
 import {AnswerCards,HolographicCard} from './components/HolographicCards';
 import {localCommand} from './commands';
 import {cardRequest,cardDisplayCommand} from './cardRequests';
@@ -30,6 +30,7 @@ export default function App(){
   const updatePreferences=useCallback((value:any)=>setPanelPrefs(value),[]);
   useEffect(()=>{const update=()=>setPageHidden(document.hidden);document.addEventListener('visibilitychange',update);return()=>document.removeEventListener('visibilitychange',update);},[]);
   const [updateBusy,setUpdateBusy]=useState(false);
+  const [analysis,setAnalysis]=useState<AnalysisKind|null>(null),[analysisBusy,setAnalysisBusy]=useState(false);
   const [connected,setConnected]=useState(false),[config,setConfig]=useState<any>(null);
   const [notice,setNotice]=useState(''),[error,setError]=useState(false);
   const [chatOpen,setChatOpen]=useState(false),[module,setModule]=useState<string|null>(null);
@@ -54,7 +55,7 @@ export default function App(){
   const saveLatency=useCallback((value:any)=>{const {started,armed,...metrics}=value;void jsonApi('/panels/latency',metrics).catch(()=>{});},[]);
   const tell=useCallback((message:string,isError=false)=>{setNotice(message);setError(isError);},[]);
   const voice=useCronosVoice({preferences:panelPrefs,streaming:Boolean(config?.fish_pcm_streaming),onSpeechStart:metrics=>{const current=latency.current;if(current?.armed&&metrics?.turn_id===current.turn_id){current.armed=false;saveLatency({...current,...metrics,first_audio_ms:Math.round(performance.now()-current.started)});}},onError:message=>{if(latency.current)latency.current.armed=false;tell(message,true);}});
-  const microphone=useMicrophone(useCallback((text,metrics)=>{recognition.current=metrics;if(!text.trim()){tell('Não consegui entender a fala. Tente novamente.',true);return;}if(commandRef.current(text))return;if(prefsRef.current?.called_only&&!/\b(?:cronos|kronos|chronos)\b/i.test(text))return;setChatOpen(false);void sendRef.current(text);},[tell]),useCallback(message=>tell(message,true),[tell]),Boolean(config?.direct_audio_chat)||config?.transcription_provider==='vosk',busy||updateBusy||voice.isSpeaking||voice.isGenerating||(pageHidden&&panelPrefs?.background_processing===false),panelPrefs,config?.direct_audio_chat?async(audio,metrics)=>{recognition.current=metrics;await sendRef.current('Pergunta por voz',audio);}:undefined,config?.local_voice_interrupt?{active:busy||voice.isSpeaking||voice.isGenerating,onKeyword:()=>bargeIn.current(),wakeOnly:Boolean(panelPrefs?.called_only)}:undefined);
+  const microphone=useMicrophone(useCallback((text,metrics)=>{recognition.current=metrics;if(!text.trim()){tell('Não consegui entender a fala. Tente novamente.',true);return;}if(commandRef.current(text))return;if(prefsRef.current?.called_only&&!/\b(?:cronos|kronos|chronos)\b/i.test(text))return;setChatOpen(false);void sendRef.current(text);},[tell]),useCallback(message=>tell(message,true),[tell]),Boolean(config?.direct_audio_chat)||config?.transcription_provider==='vosk',busy||analysisBusy||updateBusy||voice.isSpeaking||voice.isGenerating||(pageHidden&&panelPrefs?.background_processing===false),panelPrefs,config?.direct_audio_chat?async(audio,metrics)=>{recognition.current=metrics;await sendRef.current('Pergunta por voz',audio);}:undefined,config?.local_voice_interrupt?{active:busy||voice.isSpeaking||voice.isGenerating,onKeyword:()=>bargeIn.current(),wakeOnly:Boolean(panelPrefs?.called_only)}:undefined);
   const state=voice.isSpeaking?'SPEAKING':microphone.capturing?'LISTENING':moduleActivity;
   const audioLevelSource=voice.isSpeaking?voice.audioLevelSource:microphone.audioLevelSource;
   const live=useRef({busy:false,recording:false,transcribing:false,speaking:false,generating:false,module:null as string|null,announce:false,fish:false});
@@ -117,7 +118,12 @@ export default function App(){
     return()=>{alive=false;controller.abort();};
   },[connected,graphRevision,tell]);
   useEffect(()=>{if(!connected)return;const timer=setInterval(()=>{if(prefsRef.current?.auto_index!==false&&!document.hidden&&!live.current.busy&&!live.current.recording&&!live.current.transcribing)setGraphRevision(value=>value+1);},60000);return()=>clearInterval(timer);},[connected]);
+  const openAnalysis=(kind:AnalysisKind)=>{voice.stop();setAnalysis(kind);setEyeOpen(false);setModule(null);setChatOpen(false);setShowSpokenCards(false);};
   const runCommand=(text:string)=>{
+    const attachment=text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    if(/\b(?:analis\w*|examin\w*|abr\w*|envi\w*|carreg\w*)\b/.test(attachment)&&/\b(?:imagem|foto|fotografia|arquivo|zip|codigo)\b/.test(attachment)){
+      openAnalysis(/\b(?:imagem|foto|fotografia)\b/.test(attachment)?'image':'document');return true;
+    }
     const film=stremioCommand(text);if(film){if(config?.privacy_mode==='local'){tell('Stremio online desativado no modo local.',true);return true;}voice.stop();setStremio(film);setModule(null);setChatOpen(false);return true;}
     const leadCommand=prospectCommand(text);if(leadCommand){if(config?.privacy_mode==='local'){tell('Prospecção online desativada no modo local.',true);return true;}voice.stop();setProspect(leadCommand);setModule(null);setChatOpen(false);return true;}
     if(music.current?.handle(text)){setChatOpen(false);voice.stop();return true;}
@@ -129,7 +135,7 @@ export default function App(){
       return true;
     }
     if((command.type==='eye'||command.type==='place')&&config?.privacy_mode==='local'){tell('O mapa mundial está desativado em modo local.',true);return true;}
-    if(command.type==='eye'){voice.prepare();eyeAnnouncement.current=true;setEyeOpen(true);setChatOpen(false);setModule(null);setNote(null);}
+    if(command.type==='eye'){setAnalysis(null);voice.prepare();eyeAnnouncement.current=true;setEyeOpen(true);setChatOpen(false);setModule(null);setNote(null);}
     else if(command.type==='memory'){setEyeOpen(false);setShowSpokenCards(false);setChatOpen(false);setGraphRevision(value=>value+1);}
     else if(command.type==='panel')setChatOpen(true);
     else if(command.type==='place'){setPlaceQuery(command.query);setEyeOpen(true);setChatOpen(false);}
@@ -137,7 +143,7 @@ export default function App(){
   };commandRef.current=runCommand;
   const selectNote=useCallback(async(path:string)=>{if(eyeOpen){setEyeOpen(false);return;}try{setNote(await jsonApi(`/memory/note?path=${encodeURIComponent(path)}`));}catch(error){tell('Não foi possível abrir essa nota.',true);}},[eyeOpen,tell]);
   const worldReady=()=>{if(eyeAnnouncement.current){eyeAnnouncement.current=false;if(config?.fish_speech_configured)void voice.speak('Ampliando sua perspectiva. Olho de Deus aberto.');}};
-  interrupt.current=()=>{spokenCards.current=false;setStremio(null);setProspect(null);music.current?.stop();latency.current=null;turnVersion.current++;chatAbort.current?.abort();voice.stop();microphone.cancelCapture();eyeAnnouncement.current=false;pendingAlerts.current.clear();setBusy(false);inFlight.current=false;setModule(null);setEyeOpen(false);setNote(null);setChatOpen(false);setShowSpokenCards(false);setNotice('');};
+  interrupt.current=()=>{setAnalysis(null);spokenCards.current=false;setStremio(null);setProspect(null);music.current?.stop();latency.current=null;turnVersion.current++;chatAbort.current?.abort();voice.stop();microphone.cancelCapture();eyeAnnouncement.current=false;pendingAlerts.current.clear();setBusy(false);inFlight.current=false;setModule(null);setEyeOpen(false);setNote(null);setChatOpen(false);setShowSpokenCards(false);setNotice('');};
   bargeIn.current=()=>{latency.current=null;turnVersion.current++;chatAbort.current?.abort();voice.stop();microphone.cancelCapture();pendingAlerts.current.clear();setBusy(false);inFlight.current=false;setNotice('');};
   useEffect(()=>{const key=(event:KeyboardEvent)=>{if(event.key==='F4'&&!event.altKey&&!event.ctrlKey&&!event.metaKey){event.preventDefault();if(!event.repeat)handlers.current.mic();return;}if(event.key==='Escape'){if(!live.current.speaking&&!live.current.generating&&!live.current.busy&&music.current?.exitView()){event.preventDefault();return;}event.preventDefault();interrupt.current();}};window.addEventListener('keydown',key);return()=>{window.removeEventListener('keydown',key);chatAbort.current?.abort();};},[]);
   useEffect(()=>{if(!notice)return;const timer=setTimeout(()=>setNotice(''),8000);return()=>clearTimeout(timer);},[notice]);
@@ -208,7 +214,7 @@ export default function App(){
       setTools(old=>old.map(item=>item===result?outcome:item));tell(outcome.status==='completed'?'Solicitação atendida; confira seu resultado.':outcome.error||outcome.status,outcome.status==='failed');
     }catch(error){tell(error instanceof Error?error.message:'Falha na confirmação.',true);}finally{setBusy(false);inFlight.current=false;}
   };
-  const openModule=(index:number)=>{setEyeOpen(false);setChatOpen(false);setNote(null);setModule(moduleIds[index]);setModuleActivity('IDLE');};
+  const openModule=(index:number)=>{setAnalysis(null);setEyeOpen(false);setChatOpen(false);setNote(null);setModule(moduleIds[index]);setModuleActivity('IDLE');};
   useEffect(()=>{document.documentElement.dataset.cronosPanel=module?'true':'false';return()=>{delete document.documentElement.dataset.cronosPanel;};},[module]);
   const closeModule=()=>{(iframe.current?.contentWindow as (Window & {cronosPanelClose?:()=>void})|null)?.cronosPanelClose?.();setModule(null);setModuleActivity('IDLE');setGraphRevision(value=>value+1);if(connected)void jsonApi('/status').then(setConfig).catch(()=>{});};
   const handlers=useRef({mic:handleMic,module:openModule});handlers.current={mic:handleMic,module:openModule};
@@ -222,10 +228,12 @@ export default function App(){
 
     {!eyeOpen&&<main className={`absolute inset-0 ${module?'scene-under-panel':''}`}><IntegratedNeuralStage state={state} audioLevelSource={audioLevelSource} onOrbClick={stageMic} onMicToggle={stageMic} onModuleClick={stageModule}/></main>}
     {!eyeOpen&&<div className={`memory-slot ${eyeOpen?'small':''}`}><MemorySpiral graph={graph} small={eyeOpen} onSelect={selectNote}/></div>}
-    <div className={`eye-slot ${eyeOpen?'expanded':''}`}>
-      {eyeOpen&&<button className="eye-close" aria-label="Fechar Olho de Deus" title="Fechar Olho de Deus · F4 controla o microfone" onClick={()=>{eyeAnnouncement.current=false;setEyeOpen(false);}}><X size={20}/></button>}
-      {eyeOpen?<Suspense fallback={<HolographicGlobe onOpen={()=>{}}/>}><WorldMap query={placeQuery} onError={message=>tell(message,true)} onReady={worldReady}/></Suspense>:<HolographicGlobe onOpen={()=>{if(config?.privacy_mode==='local'){tell('O mapa mundial usa serviços externos e está desativado em modo local.',true);return;}voice.prepare();eyeAnnouncement.current=true;setEyeOpen(true);setNote(null);}}/>}
-    </div>
+    {eyeOpen&&<div className="eye-slot expanded">
+      <button className="eye-close" aria-label="Fechar Olho de Deus" title="Fechar Olho de Deus · F4 controla o microfone" onClick={()=>{eyeAnnouncement.current=false;setEyeOpen(false);}}><X size={20}/></button>
+      <Suspense fallback={<div className="panel-loading">Abrindo Olho de Deus…</div>}><WorldMap query={placeQuery} onError={message=>tell(message,true)} onReady={worldReady}/></Suspense>
+    </div>}
+    {!eyeOpen&&!module&&<><button className="reference-attachment" aria-label="Analisar imagem" title="Analisar imagem" onClick={()=>openAnalysis('image')}><ImagePlus size={16}/></button><button className="reference-attachment files" aria-label="Analisar ZIP ou código" title="Analisar ZIP ou código" onClick={()=>openAnalysis('document')}><FileArchive size={16}/></button></>}
+    {analysis&&!eyeOpen&&!module&&<AnalysisPanel key={analysis} kind={analysis} onClose={()=>setAnalysis(null)} onBusy={setAnalysisBusy} onResult={reply=>{lastAnswer.current={question:'Análise de arquivo',source:'text',reply};if(autoVoice&&config?.fish_speech_configured){voice.prepare();void voice.speak(reply);}}}/>}
     <button className={`reference-mic ${microphone.starting?'starting':microphone.transcribing?'transcribing':busy?'thinking':voice.isGenerating?'generating':voice.isSpeaking?'speaking':microphone.recording?'recording':''}`} aria-pressed={microphone.recording} title={microphone.starting?'Abrindo microfone':microphone.transcribing?'Transcrevendo':busy?'Aguardando Gemini':voice.isGenerating?'Preparando voz':voice.isSpeaking?'Falando — diga Cronos para interromper':microphone.recording?'Microfone ligado':'Microfone desligado'} aria-label={microphone.recording?'Desligar microfone':'Ligar microfone'} onClick={handleMic} ><Mic size={16}/></button>
     {stremio&&<Suspense fallback={<div className="panel-loading">Abrindo Stremio…</div>}><StremioPanel key={JSON.stringify(stremio)} initial={stremio} onClose={()=>setStremio(null)}/></Suspense>}
     {prospect&&<Suspense fallback={<div className="panel-loading">Abrindo prospecção…</div>}><ProspectPanel key={prospect.city+'|'+prospect.category+'|'+(prospect.report?.id||'')} initial={prospect} onClose={()=>setProspect(null)} onAsk={text=>{setProspect(null);void sendText(text);}}/></Suspense>}
