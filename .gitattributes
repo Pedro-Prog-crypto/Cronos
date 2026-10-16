@@ -1,1 +1,5 @@
 cronos/revision.txt export-subst
+# Preserve supplied originals and pinned third-party bytes, including their line endings.
+cronos/studio/mistral_original/*.txt -text -diff -whitespace
+cronos/studio/threed/vendor/* -text -whitespace
+examples/3d-product-demo/vendor/* -text -whitespace
