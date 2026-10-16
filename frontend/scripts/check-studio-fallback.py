@@ -35,7 +35,7 @@ async def main():
             assert not done.get('error') and len(done['history']) == 2
             assert done['last_request'] == 'Crie este site editorial para o meu hotel.'
             calls = (await client.get('/fixture/calls')).json()['adapters']
-            assert calls == {'gemini': 1, 'mistral': 1}, calls
+            assert calls == {'gemini': 1, 'mistral': 2}, calls
             await page.screenshot(path='/tmp/cronos-studio-fallback-recovered.png')
             await prompt.fill('Aguardar cancelamento manual; não continue para outra IA.')
             await page.get_by_role('button', name='GERAR NOVA VERSÃO', exact=True).click()
@@ -46,7 +46,7 @@ async def main():
             assert cancelled['status'] == 'cancelled' and cancelled['revision'] == 1
             await asyncio.sleep(.2)
             calls = (await client.get('/fixture/calls')).json()['adapters']
-            assert calls == {'gemini': 1, 'mistral': 2}, calls
+            assert calls == {'gemini': 1, 'mistral': 3}, calls
             assert not errors, errors
             await browser.close()
     print('PASS: in-app authorization describes reserves; Gemini 429 recovers through Mistral; no intermediate red error; request and revision preserved; manual cancellation does not launch another reserve. Mock adapters only, no live APIs.')

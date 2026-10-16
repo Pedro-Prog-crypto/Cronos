@@ -53,13 +53,13 @@ async def download_image(title):
     return page['body'], source
 
 
-async def suggest_image(category, orientation='any'):
+async def suggest_image(category, orientation='any', *, exclude=()):
     terms = {'restaurante': 'Brazilian cuisine', 'hotel': 'hotel swimming pool', 'lava_jato': 'car detailing',
              'loja': 'shop interior', 'clinica': 'physiotherapy', 'barbearia': 'barbershop interior',
              'academia': 'gym training', 'imobiliaria': 'house architecture', 'educacao': 'library',
              'eventos': 'concert stage', 'portfolio': 'architecture', 'servicos': 'office interior', 'personalizado': 'architecture'}
-    entries = await search_images(terms.get(category, 'architecture'), limit=8, orientation=orientation)
-    eligible = [e for e in entries if e['license'].startswith(('CC BY', 'CC0', 'Public domain', 'PD'))]
+    entries = await search_images(terms.get(category, 'architecture'), limit=20, orientation=orientation)
+    eligible = [e for e in entries if e['title'] not in exclude and e['license'].startswith(('CC BY', 'CC0', 'Public domain', 'PD')) and not re.search(r'\b(?:NC|ND)\b',e['license'])]
     if not eligible: raise ValueError('Nenhuma imagem com licença identificada foi encontrada.')
     # Prefer usable resolution rather than the first arbitrary tiny search result.
     entry = max(eligible, key=lambda e: min(e.get('width', 0), e.get('height', 0)))

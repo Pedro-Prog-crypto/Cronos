@@ -2,6 +2,28 @@
 
 Abra pelo botão **ESTÚDIO DE SITES** ou diga **“Cronos, abrir estúdio de sites”**. **“Cronos, faça um site para…”** abre o briefing com o pedido preenchido. O Cronos passa a tratar o usuário como **senhor** por uma instrução adicional; o arquivo de personalidade existente não é sobrescrito.
 
+## Início e oportunidades
+
+O Estúdio abre em **Início**, com atalhos para **Criar um site com IA**, **Explorar negócios** e os projetos recentes. **Modelos prontos** é uma área separada para os exemplos fornecidos, sem chamadas de IA. Não confunda o exemplo inicial com uma versão personalizada salva.
+
+Em **Oportunidades no Brasil**, pesquise uma cidade e categoria. A busca não gera projetos. Escolha a faixa e clique em **Criar proposta com IA** no estabelecimento desejado: o servidor confere o resultado da pesquisa, cria um projeto e inicia ideias → escolha pelo Cronos → fotografias opcionais → código → verificações. O painel mostra etapas e tempo real, sem percentual inventado. Enquanto a primeira versão não existe, mostra o andamento em vez da página demonstrativa. O clique pode consumir cota das APIs de texto; imagens geradas por IA continuam opcionais, com confirmação separada.
+
+Apenas o estabelecimento escolhido inicia a tarefa. Clicar novamente no mesmo identificador público reabre seu projeto ativo, inclusive em uma nova pesquisa, sem outra geração. Se houver uma criação diferente em andamento, a segunda aguarda uma ação do usuário e nenhum projeto órfão é criado. Fechar o estúdio não cancela o servidor; cancelar explicitamente preserva o pedido, as fontes e a última versão. A pesquisa permanece na tela ao voltar do projeto enquanto o Estúdio estiver aberto. Resultados expirados exigem nova pesquisa.
+
+A faixa inicial é **Básico, R$200–500, 2D**. As demais faixas são opções de escopo. O texto “sem 3D” não deve ativar uma cena tridimensional. A disponibilidade de uma fonte de imagem ou de um modelo comercial não é garantida; dados desconhecidos do estabelecimento continuam pendentes, sem inventar serviços, preços ou interesse em contratar.
+
+## Criação própria e variedade
+
+**CRIAR SITE COM IA** executa o fluxo inteiro com confirmação: prepara três ideias, escolhe a menos semelhante às direções recentes e constrói a página. **PREPARAR PROPOSTAS VISUAIS** mantém a escolha manual. Os comandos curtos de criação abrem esse formulário com categoria/faixa preenchidas, sem gerar um modelo repetido nem consumir API antes da ação explícita.
+
+O planejamento considera até 12 projetos/direções recentes, incluindo organização, sequência de conteúdo, paleta e movimentos. Não envia o código nem os campos de contato de outros clientes. A criação autônoma começa sem o HTML do exemplo e sem impor sua paleta. Revisões e referências escolhidas continuam respeitando a direção do usuário.
+
+Antes de salvar uma primeira criação autônoma, o servidor compara a estrutura HTML e regras de disposição em CSS com projetos recentes. Uma cópia estrutural que só muda textos, imagens, cores, fontes ou espaçamento é recusada e enviada para correção. Depois da tentativa de correção, outra integração disponível pode assumir. Esse filtro detecta repetição estrutural; não comprova exclusividade mundial, inovação artística ou qualidade estética de todo resultado. Os testes no navegador continuam registrando o que foi observado, separadamente.
+
+A pesquisa automática de fotografias evita títulos usados nos projetos comparados e prefere resolução utilizável, autoria e licença identificadas; não seleciona CC com restrição NC/ND para essa proposta comercial. O responsável ainda precisa conferir os direitos e a adequação da foto. Não há geração paga de fotografia escondida neste fluxo.
+
+A mesma fila de IAs acompanha planejamento e construção. Se uma falha, a próxima tenta continuar o pedido; uma IA que respondeu ao planejamento pode também responder ao código. Não há sondagens pagas paralelas. Falhas de todas as opções e cancelamento manual preservam o projeto; reiniciar não repete automaticamente uma chamada.
+
 ## Criar e revisar
 
 A galeria reúne as 13 categorias e 17 referências do material enviado, com textos, imagens, paletas, recursos previstos e preços. Os três templates Basic/Standard/Premium e os modelos procedurais completos de fones, avião e edifício estão integrados. GERAR SITE AUTOMATICAMENTE cria o template localmente, sem IA; PERSONALIZAR COM IA mantém o fluxo de propostas e revisões. Consulte INTEGRACAO-MISTRAL-3D.md para a correspondência dos arquivos, as correções de execução e as faixas de preço. O restaurante LASTRO anterior permanece no código de legado e nas versões que já estiverem salvas; não substitui o novo material.

@@ -46,6 +46,15 @@ class Generate(Strict):
     reference: str = Field(default='', max_length=10000)
     reference_asset: str = Field(default='', max_length=40, pattern=r'^(?:|[a-f0-9]{32}\.(?:jpg|png))$')
     research_images: bool = False
+    plan_first: bool = False
+
+
+class OpportunityCreate(Strict):
+    report_id: str = Field(min_length=1, max_length=40)
+    lead_id: str = Field(min_length=1, max_length=200)
+    provider: str = Field(default='', max_length=64)
+    tier: Literal['economy', 'standard', 'premium_2d', 'premium_3d'] = 'economy'
+    research_images: bool = True
 
 
 class Asset(Strict):
@@ -157,11 +166,20 @@ def install_studio(app, authenticate):
                 'limits': ['Sem geração de credenciais ou acesso a código proprietário de outras IAs.', 'Pagamentos, login de clientes e estoque precisam de implementação específica antes de publicar.']}
 
     @app.get('/studio/projects', dependencies=auth)
-    async def projects(archived: bool = False): return {'projects': service().store.list(archived=archived)}
+    async def projects(archived: bool = False): return {'projects': service().summaries(archived=archived)}
 
     @app.post('/studio/projects', dependencies=auth)
     async def create(body: NewProject):
         try: return service().new(body)
+        except ValueError as exc: raise HTTPException(409, str(exc)) from None
+
+    @app.post('/studio/opportunities', dependencies=auth)
+    async def opportunity(body: OpportunityCreate):
+        online()
+        report = app.state.prospects.reports.get(body.report_id)
+        lead = next((item for item in (report or {}).get('leads', []) if item['id'] == body.lead_id), None)
+        if not lead: raise HTTPException(404, 'Resultado expirado. Pesquise novamente; nenhum negócio foi inventado.')
+        try: return service().from_opportunity(report, lead, body)
         except ValueError as exc: raise HTTPException(409, str(exc)) from None
 
     @app.get('/studio/projects/{identifier}', dependencies=auth)

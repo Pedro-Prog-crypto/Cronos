@@ -56,6 +56,12 @@ As imagens sample_images dessa referência são autorizadas como demonstração,
 Imagens próprias e composição CSS/SVG são preferíveis a elementos sem função. Não diga que testou: o estúdio verifica depois.
 Se current_files estiver vazio, comece uma composição nova: não reproduza o exemplo do catálogo.
 Siga approved_direction quando presente. Use a proposta como critério para composição, ritmo e conteúdo.
+Quando design_policy.unique_creation for verdadeiro, planeje a disposição a partir de approved_direction.
+Compare recent_designs: mudar só cores, letras ou imagens de um trabalho anterior não atende.
+Nos sites básicos, limite a quantidade de funções, mantendo cuidado com fotografias, organização e interação.
+Inclua movimentos em 2D com propósito: hover/foco de botões, transições curtas ou revelação discreta.
+Respeite prefers-reduced-motion; não esconda conteúdo quando JS falhar, não use scroll artificial,
+nem anime o site inteiro sem parar. Escolha cores pelo negócio e pela proposta, não por uma paleta fixa.
 Não resolva todo negócio com título à esquerda, foto à direita e três benefícios iguais. Escolha a
 composição a partir do objetivo: cardápio e reservas para restaurante, agenda para música,
 horários de aulas para academia, equipe e especialidades para clínica. Texto específico e útil.
@@ -111,6 +117,14 @@ class Studio:
         origin = current['report'].get('origin', 'starter' if project['revision'] == 0 else 'saved')
         return {**project, 'code_origin': origin, 'current': current, 'history': self.store.history(project)}
 
+    def summaries(self, archived=False):
+        result=[]
+        for project in self.store.list(archived=archived):
+            current=self.store.revision(project)
+            origin=current['report'].get('origin','starter' if project['revision']==0 else 'saved')
+            result.append({**project,'code_origin':origin})
+        return result
+
     def new(self, body):
         data = body.model_dump()
         from .threed.integration import template_site, reference_id, selected_model
@@ -125,6 +139,43 @@ class Studio:
         self.store.commit(project, files, summary, {**validate(files), 'origin': 'template' if automatic else 'starter'})
         self.store.event(project, 'template' if automatic else 'draft', summary if automatic else 'Senhor, escolha planejar sozinho ou fornecer uma referência e depois inicie a criação.')
         return self.detail(project['id'])
+
+    def from_opportunity(self, report, lead, body):
+        from .routes import NewProject, Generate
+        # Stable public source identifier: repeated clicks reopen, never pay twice.
+        for item in self.store.list():
+            if (item.get('opportunity') or {}).get('lead_id') == lead['id']:
+                return self.detail(item['id'])
+        self.available()
+        chosen = body.provider or self.app.state.engine.settings.provider
+        self.check_provider(chosen)
+        from .catalog import CATEGORY_IDS
+        category = lead.get('category', report['category'])
+        if category not in CATEGORY_IDS: category = 'restaurante' if category in {'pizzaria','cafeteria','lanchonete','japones','todos'} else 'servicos'
+        public = {k:lead.get(k) for k in ('name','city','address','phone','website','site_status')}
+        brief = ('Prepare uma proposta de site para este estabelecimento a partir apenas dos dados públicos abaixo. '
+                 'Fotografias pesquisadas são ilustrativas, não fotos documentais do local. '
+                 'Dados ausentes devem ficar pendentes; não invente preços, cardápio, horários, avaliações ou interesse em contratar. '
+                 'Crie uma composição própria, fotografias bem enquadradas e movimentos leves; não repita a disposição dos projetos anteriores. '
+                 + ('3D é opcional e precisa ter função.' if body.tier == 'premium_3d' else 'Site em duas dimensões, com movimentos leves.')
+                 + '\nDados públicos: '+json.dumps(public,ensure_ascii=False))
+        detail = self.new(NewProject(name=str(lead['name']).strip()[:100],category=category,brief=brief[:6000],tier=body.tier))
+        project = self.store.get(detail['id'])
+        project['opportunity'] = {'lead_id':lead['id'],'city':report['city'],'source':report['source'],
+                                  'evidence':lead.get('evidence',[])[:11], 'public':public}
+        self.store.save(project)
+        return self.start(project, Generate(mode='autonomous',provider=chosen,prompt=brief[:6000],research_images=body.research_images,plan_first=True))
+
+    async def prepare_plans(self, project, body, providers, recent):
+        from .directions import SYSTEM as PLAN_SYSTEM, parse_directions
+        from .composition import plan_context
+        payload={'business':{k:project.get(k) for k in ('name','category','brief','contact','quote')},
+                 'request':body.prompt,'reference':body.reference if body.mode=='reference' else '',
+                 'recent_designs':plan_context(recent),
+                 'scope':{'three_dimensional':bool(project.get('quote',{}).get('has_3d')), 'motion':'Movimentos leves em 2D, com redução de movimento e navegação por teclado.'}}
+        self.store.event(project,'directions','Criando três ideias de organização, fotografias, cores e movimentos para este negócio.')
+        with request_scope('studio-directions',project['id']):
+            return await providers.reply(PLAN_SYSTEM,[{'role':'user','content':json.dumps(payload,ensure_ascii=False)}],transform=parse_directions)
 
     def code_provider(self, settings, *, use_injected=True):
         # Conversation output limits often truncate complete site bundles. This is a
@@ -167,21 +218,10 @@ class Studio:
         return self.detail(project['id'])
 
     async def generate_directions(self, project, body):
-        from .directions import SYSTEM as PLAN_SYSTEM, parse_directions
         try:
             providers = self.provider_pool(project)
-            recent = []
-            for saved in self.store.list():
-                if saved['id'] == project['id']: continue
-                chosen = selected_direction(saved)
-                if chosen:
-                    recent.append({'category': saved['category'], **{k: chosen[k] for k in ('composition', 'typography', 'palette')}})
-                if len(recent) >= 8: break
-            payload = {'business': {k: project.get(k) for k in ('name', 'category', 'brief', 'contact')},
-                       'request': body.prompt, 'reference': body.reference if body.mode == 'reference' else '',
-                       'recent_designs': recent}
-            with request_scope('studio-directions', project['id']):
-                plans = await providers.reply(PLAN_SYSTEM, [{'role': 'user', 'content': json.dumps(payload, ensure_ascii=False)}], transform=parse_directions)
+            from .composition import recent_projects
+            plans = await self.prepare_plans(project, body, providers, recent_projects(self.store, project['id']))
             # Replace plans only after a full valid response from an available adapter.
             project.update(directions=plans, direction_id=None, status='ideas_ready', finished=time.time())
             self.store.event(project, 'ideas_ready', 'Três propostas salvas. Compare as composições, escolha uma direção e aprove antes de construir. As miniaturas são esquemas, não imagens geradas.')
@@ -210,10 +250,10 @@ class Studio:
         settings = self.app.state.engine.settings
         chosen = body.provider or settings.provider
         self.check_provider(chosen)
-        project.update(status='running', job_kind='site', research_images=body.research_images, mode=body.mode, reference=body.reference if body.mode == 'reference' else '', reference_asset=body.reference_asset if body.mode == 'reference' else '', provider=chosen, started=time.time(), finished=None, error=None, last_request=body.prompt)
+        project.update(status='running', job_kind='site', research_images=body.research_images, mode=body.mode, reference=body.reference if body.mode == 'reference' else '', reference_asset=body.reference_asset if body.mode == 'reference' else '', provider=chosen, started=time.time(), finished=None, error=None, last_request=body.prompt, plan_first=body.plan_first)
         project['quote'] = quote(project['category'], project['brief'] + ' ' + body.prompt, project.get('tier', 'reference'), project.get('reference_id', ''))
         self.store.event(project, 'request', 'Pedido do senhor: ' + body.prompt)
-        self.store.event(project, 'planning', 'Lendo o briefing, a referência e a última versão. A integração escolhida é ' + chosen + '.')
+        self.store.event(project, 'planning', 'Lendo seu pedido, as referências e a última versão. A integração escolhida é ' + chosen + '.')
         self.task = asyncio.create_task(self.generate(project, body))
         return self.detail(project['id'])
 
@@ -223,6 +263,16 @@ class Studio:
             # Text/code generation uses REST even when everyday conversation uses Live audio.
             if settings.provider == 'gemini': settings = replace(settings, gemini_transport='rest')
             current = self.store.revision(project)
+            from .composition import recent_projects, choose_plan, plan_context, review as composition_review
+            recent = recent_projects(self.store, project['id'])
+            providers = self.provider_pool(project)
+            origin = current['report'].get('origin', 'starter' if project['revision'] == 0 else 'saved')
+            unique_creation = body.mode == 'autonomous' and origin in {'starter','template'} and body.plan_first
+            if unique_creation and not selected_direction(project):
+                plans = await self.prepare_plans(project, body, providers, recent)
+                chosen, comparison = choose_plan(plans, recent)
+                project.update(directions=plans,direction_id=chosen['id'],design_comparison=comparison)
+                self.store.event(project,'direction','Ideia escolhida pelo Cronos: '+chosen['name']+'. A construção continua com essa composição; as três ideias ficam disponíveis para consulta.')
             if body.research_images and len(project['assets']) < 11:
                 if settings.privacy_mode == 'online' and state.panels.preferences.web_enabled:
                     from .images import suggest_image
@@ -232,7 +282,9 @@ class Studio:
                         if orientation in existing: continue
                         self.store.event(project, 'images', 'Pesquisando fotografia ' + orientation + ' com fonte e licença identificadas.')
                         try:
-                            raw, original_name, source = await asyncio.wait_for(suggest_image(project['category'], orientation), 25)
+                            excluded={title for r in recent for title in r['image_titles'] if title}
+                            image_job=suggest_image(project['category'], orientation, exclude=excluded) if body.plan_first else suggest_image(project['category'], orientation)
+                            raw, original_name, source = await asyncio.wait_for(image_job, 25)
                             await self.add_asset(project, raw, 'image', original_name, source, job=True)
                             self.store.event(project, 'images', 'Fotografia ' + orientation + ' salva. Confira o enquadramento e a adequação ao negócio em Imagens e 3D.')
                         except (ValueError, OSError, TypeError, KeyError, AttributeError, TimeoutError, httpx.HTTPError):
@@ -244,13 +296,15 @@ class Studio:
             payload = {'business': {k: project.get(k) for k in ('name', 'category', 'brief', 'contact', 'quote')},
                        'mode': body.mode, 'reference_description': body.reference if body.mode == 'reference' else '',
                        'request': body.prompt, 'assets': allowed_assets,
-                       'current_files': {} if origin == 'starter' else current['files'],
-                       'current_summary': '' if origin == 'starter' else current['summary'],
+                       'current_files': {} if origin == 'starter' or unique_creation else current['files'],
+                       'current_summary': '' if origin == 'starter' or unique_creation else current['summary'],
                        'approved_direction': selected_direction(project),
-                       'browser_observations': project.get('browser_reports', [])}
-            from .threed.integration import reference_payload, reference_id, selected_model
-            payload['template_reference'] = reference_payload(reference_id(project['category'], project['brief'], project.get('reference_id', '')))
-            payload['procedural_model'] = selected_model(project['category'], project['brief'] + ' ' + body.prompt, project.get('model_type', 'auto')) if project['quote']['has_3d'] and not any(a['purpose'] == 'model' for a in allowed_assets) else None
+                       'browser_observations': project.get('browser_reports', []),
+                       'recent_designs':plan_context(recent),
+                       'design_policy':{'unique_creation':unique_creation,'scope':'Use variedade de disposição e movimento leve mesmo no site básico. 3D somente quando solicitado.'}}
+            from .threed.integration import reference_payload, reference_id, suggested_model
+            payload['template_reference'] = reference_payload(reference_id(project['category'], project['brief'], project.get('reference_id', ''))) if body.mode=='reference' else None
+            payload['procedural_model'] = suggested_model(project['category'], project['brief'] + ' ' + body.prompt, project.get('model_type', 'auto')) if project['quote']['has_3d'] and not any(a['purpose'] == 'model' for a in allowed_assets) else None
             refs = [a for a in project['assets'] if a['purpose'] == 'reference'] if body.mode == 'reference' else []
             if body.reference_asset: refs = [a for a in refs if a['name'] == body.reference_asset]
             reference_notes = ''
@@ -270,7 +324,6 @@ class Studio:
                           [{'role': 'user', 'content': 'Descreva a referência visual.', 'image': {'mime_type': image['mime'], 'data': base64.b64encode(raw).decode()}}], transform=reference_text)
                     image['analysis'] = reference_notes
             payload['visual_reference'] = reference_notes
-            providers = self.provider_pool(project)
             self.store.event(project, 'generation', 'Solicitando os três arquivos do site. Se uma integração falhar, a próxima configurada assume esta etapa com o mesmo pedido e os recursos salvos.')
             payload_text = json.dumps(payload, ensure_ascii=False)
             deliveries = {}
@@ -285,9 +338,10 @@ class Studio:
                     report = await asyncio.to_thread(validate, files, [a['name'] for a in project['assets'] if a['purpose'] != 'reference'])
                     report['backend'] = await asyncio.to_thread(backend_checks)
                     report['visual_content'] = visual_review(files, current['files'], allowed_assets)
-                    if not report['passed'] or any(c['status'] == 'failed' for c in [*report['backend'], *report['visual_content']]):
+                    report['composition'] = composition_review(files,recent,enabled=unique_creation)
+                    if not report['passed'] or any(c['status'] == 'failed' for c in [*report['backend'], *report['visual_content'], *report['composition']]):
                         project['rejected_report'] = report
-                        failures = '; '.join(c['name'] + ': ' + c['detail'] for c in [*report['checks'], *report['backend'], *report['visual_content']] if c['status'] == 'failed')
+                        failures = '; '.join(c['name'] + ': ' + c['detail'] for c in [*report['checks'], *report['backend'], *report['visual_content'], *report['composition']] if c['status'] == 'failed')
                         raise InvalidProject('Revisão recusada pelas verificações: ' + failures)
                     break
                 except InvalidProject as exc:

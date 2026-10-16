@@ -150,7 +150,7 @@ def test_status_returns_full_catalog_and_the_normal_generation_path_keeps_ai_res
         made=generate(client,item)
         assert made['status']=='ready'
         payload=json.loads(builder.calls[-1][1][-1]['content'])
-        assert payload['template_reference']['id']=='hotel'
+        assert payload['template_reference'] is None  # Autonomous work is no longer tied to the sample palette.
         assert made['provider_queue'] and made['active_provider']=='gemini'
 
 

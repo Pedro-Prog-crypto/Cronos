@@ -35,6 +35,7 @@ async def main():
    await page.route('https://images.unsplash.com/**',lambda route:route.fulfill(body=image.getvalue(),content_type='image/jpeg'))
    await page.goto(BASE+'/#cronos-session=studio-test-only')
    await page.get_by_role('button',name='ESTÚDIO DE SITES',exact=True).click()
+   await page.locator('.ss-sidebar').get_by_role('button',name='Modelos prontos',exact=True).click()
    await expect(page.locator('.ss-direction')).to_have_count(13)
    await expect(page.locator('.ss-price-overview article')).to_have_count(4)
    await expect(page.locator('.ss-price-overview')).to_contain_text('15.000')
@@ -159,14 +160,15 @@ async def main():
       await exported.close()
      finally:
       server.terminate();server.wait(timeout=10)
-   # Equivalent spoken text creates the requested local category template.
+   # Spoken creation now opens the autonomous form, not a repeated demo.
    await page.get_by_role('button',name='Fechar Estúdio de Sites',exact=True).click()
    await page.get_by_role('button',name='ENTENDIMENTO DE LINGUAGEM',exact=True).click()
    await page.locator('.phrase-card').click()
    await page.locator('#chat-input').fill('Cronos, criar site 3D para imobiliária')
    await page.get_by_role('button',name='Enviar mensagem',exact=True).click()
-   await expect(page.locator('.ss-frame-container iframe')).to_be_visible(timeout=15000)
-   await expect(page.frame_locator('.ss-frame-container iframe').locator('[data-studio-procedural="hotel"] canvas')).to_be_visible(timeout=15000)
+   await expect(page.get_by_role('button',name='CRIAR SITE COM IA',exact=True)).to_be_visible()
+   assert await page.get_by_label('Faixa do novo site',exact=True).input_value()=='premium_3d'
+   assert await page.get_by_label('Briefing do site',exact=True).input_value()=='criar site 3D para imobiliária'
    assert (await client.get('/fixture/calls')).json()==initial
    assert not errors,errors
    await browser.close()

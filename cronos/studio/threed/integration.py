@@ -19,12 +19,18 @@ MODEL_NAMES = {'earbuds': 'Fones com estojo', 'airplane': 'Avião comercial', 'h
 TEMPLATES = {'basic', 'standard', 'premium'}
 
 
+def wants_3d(text):
+    text=text.casefold()
+    text=re.sub(r'\b(?:sem|n[aã]o(?:\s+(?:quero|use|usar|utilize|utilizar|coloque|incluir|inclua|preciso))?|dispensar)\s+(?:(?:um|uma|o|nenhum|visualizador|modelo|efeito|site|em|de)\s+){0,4}(?:3d|3-d|tr[eê]s dimens[oõ]es)\b','',text)
+    return bool(re.search(r'\b(?:3d|3-d|tr[eê]s dimens[oõ]es)\b',text))
+
+
 def reference_id(category, brief='', requested=''):
     if requested:
         if requested not in REFERENCE_SITES or REFERENCE_SITES[requested].category != category:
             raise ValueError('Escolha uma referência que pertença à categoria do projeto.')
         return requested
-    if re.search(r'\b(?:3d|3-d|três dimensões)\b', brief.casefold()) and category + '_3d' in REFERENCE_SITES:
+    if wants_3d(brief) and category + '_3d' in REFERENCE_SITES:
         return category + '_3d'
     return category if category in REFERENCE_SITES else 'personalizado'
 
@@ -37,6 +43,16 @@ def selected_model(category, brief='', requested='auto'):
     if any(term in text for term in ('avião', 'aviao', 'aeronave')): return 'airplane'
     if category in {'hotel', 'imobiliaria', 'eventos'}: return 'hotel'
     return 'earbuds'
+
+
+def suggested_model(category, brief='', requested='auto'):
+    """AI projects should not receive unrelated earphones just for choosing 3D."""
+    if requested != 'auto':return selected_model(category,brief,requested)
+    text=brief.casefold()
+    if any(term in text for term in ('avião','aviao','aeronave')):return 'airplane'
+    if any(term in text for term in ('fone','earbud','headphone','buds')):return 'earbuds'
+    if category in {'hotel','imobiliaria'}:return 'hotel'
+    return None
 
 
 def reference_payload(identifier):

@@ -64,7 +64,7 @@ def test_complete_zip_has_runtime_and_starts_using_existing_data(tmp_path):
         assert {'ABRIR-CRONOS.bat','tools/start_bundle.py','tools/launch_bundle.vbs','cronos/app.py','cronos/ui/index.html','cronos/documents.py','cronos/eye-ui/index.html','cronos/studio/service.py','cronos/studio/product-3d.js','cronos/studio/bridge.js'}<=names
         assert {'cronos/studio/directions.py','cronos/studio/image_generation.py','cronos/studio/restaurant.py','cronos/studio/media/restaurant-fire.jpg'}<=names
         assert {'cronos/studio/provider_pool.py','cronos/integrations.py','cronos/providers.py'}<=names
-        assert {'cronos/studio/references.py','cronos/studio/threed/config.py','cronos/studio/threed/models.py',
+        assert {'cronos/studio/composition.py','cronos/studio/references.py','cronos/studio/threed/config.py','cronos/studio/threed/models.py',
                 'cronos/studio/threed/generator.py','cronos/studio/threed/pricing_config.py','cronos/studio/threed/integration.py',
                 'cronos/studio/threed/templates/basic.html','cronos/studio/threed/templates/standard.html','cronos/studio/threed/templates/premium.html',
                 'cronos/studio/threed/vendor/three-0.128.0.min.js','cronos/studio/threed/vendor/orbit-controls-0.128.0.js','cronos/studio/threed/vendor/gsap-3.11.4.min.js',

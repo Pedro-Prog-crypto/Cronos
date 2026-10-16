@@ -23,6 +23,7 @@ async def main():
             draft=(await client.post('/studio/projects',json={'name':'Referência do senhor','category':'restaurante','brief':'Planejar uma cozinha autoral'})).json()
             await page.goto(BASE+'/#cronos-session=studio-test-only')
             await page.get_by_role('button',name='ESTÚDIO DE SITES',exact=True).click()
+            await page.locator('.ss-sidebar').get_by_role('button',name='Modelos prontos',exact=True).click()
             await expect(page.locator('.ss-reference-art')).not_to_have_count(0)
             # Plan a saved draft to keep testing the draft export guard separately
             # from the new local automatic-template delivery.
@@ -109,7 +110,7 @@ async def main():
             # scenario is independent; no real provider quota is reset here.
             assert (await client.post('/fixture/reset-cooldowns')).status_code==200
             await page.get_by_role('button',name='Voltar aos projetos',exact=True).click()
-            await page.get_by_role('button',name='Novo projeto',exact=True).click()
+            await page.get_by_role('button',name='Novo site com IA',exact=True).click()
             await page.get_by_label('Nome do projeto',exact=True).fill('Ateliê do bairro')
             await page.get_by_label('Briefing do site',exact=True).fill('Quero três direções diferentes de um site editorial de restaurante, com fotografia e cardápio.')
             await page.locator('.ss-mode-options button').first.click()

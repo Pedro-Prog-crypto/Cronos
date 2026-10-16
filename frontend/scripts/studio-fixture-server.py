@@ -15,7 +15,7 @@ settings=Settings(root/'vault',root/'personality.md','studio-test-only','gemini'
 settings.providers_file.write_text(json.dumps({'providers':[{'id':'image-fixture','kind':'openai','model':'fixture-text','base_url':'https://api.openai.com/v1','key_env':'STUDIO_FIXTURE_IMAGE_KEY'}]}))
 os.environ['STUDIO_FIXTURE_IMAGE_KEY']='not-a-real-key-fixture-only'
 calls={'plans':0,'site':0,'image':0}
-async def fake_photo(category,orientation='any'):
+async def fake_photo(category,orientation='any',**kwargs):
  return (Path(__file__).resolve().parents[2]/'cronos/studio/media/restaurant-fire.jpg').read_bytes(),'File:Fixture photograph.jpg',{'url':'https://commons.wikimedia.org/wiki/File:Fixture.jpg','author':'Autor de teste','license':'CC0'}
 image_search.suggest_image=fake_photo
 import base64
@@ -46,6 +46,9 @@ class Builder:
   data=json.loads(messages[-1]['content']);files=starter(data['business']['category'],data['business']['name'],[a['name'] for a in data.get('assets',[]) if a['purpose']=='image'])
   if 'simular falha 429' in data.get('request','').lower():raise ProviderError('Integração de teste: limite temporário (HTTP 429).',429)
   files['index.html']=files['index.html'].replace('Conteúdo de demonstração. Substitua por informações confirmadas do seu negócio.','Conteúdo específico deste briefing de teste.').replace('O que faz sentido para você faz parte de cada escolha.','Uma direção preparada para este projeto de teste.')
+  if data.get('design_policy',{}).get('unique_creation'):
+   variant=sum(ord(c) for c in data['business']['name'])%3
+   files['styles.css']+='\nmain{display:grid;grid-template-columns:'+['1fr 2fr','2fr 1fr','1fr'][variant]+';gap:37px}'
   if any(a['purpose']=='model' for a in data.get('assets',[])):files['index.html']=files['index.html'].replace('<section id="sobre"','<section class="product-demo"><div data-studio-model></div></section><section id="sobre"')
   files['index.html']=files['index.html'].replace('Uma cozinha de encontros.','Um projeto de teste gerado a partir do briefing.')
   return {'reply':json.dumps({'summary':'Senhor, esta é uma geração de teste. Composição e formulários disponíveis para verificar no navegador. Nenhuma chamada a provedores externos.', 'files':files}),'topics':[]}
@@ -70,6 +73,18 @@ if os.getenv('STUDIO_TEST_FALLBACK') == '1':
  app=create_app(settings)
 else:
  app=create_app(settings,Builder())
+if os.getenv('STUDIO_TEST_OPPORTUNITIES') == '1':
+ from uuid import uuid4
+ from cronos.prospects import recommendation
+ async def fixture_search(args):
+  leads=[]
+  for index,name in enumerate(('Mesa da Praça','Cozinha do Lago')):
+   lead={'id':'osm:node:fixture-'+str(index),'name':name,'city':'Brasília, DF','category':'restaurante','address':'Endereço público de teste','phone':None,'website':None,'rating':None,'rating_count':None,'seats':None,'site_status':'unverified','evidence':[{'source':'Fixture de teste — não é estabelecimento captado','url':'https://www.openstreetmap.org','note':'Fonte simulada para verificar a interface.'}]}
+   leads.append(recommendation(lead))
+  report={'id':str(uuid4()),'city':'Brasília, DF','category':args.category,'source':'osm','leads':leads,'attribution':'Fixture de teste. Nenhum cliente real.','coverage':'Somente dois registros de teste.'}
+  app.state.prospects.reports[report['id']]=report
+  return report
+ app.state.prospects.search=fixture_search
 @app.get('/fixture/calls')
 async def fixture_calls():return calls
 @app.post('/fixture/reset-cooldowns')

@@ -22,6 +22,10 @@ SYSTEM = '''Você é diretor de arte do CRONOS Studio. Trate o usuário como sen
 Proponha EXATAMENTE três direções de site para o negócio descrito. Não escreva código agora.
 As três devem diferir em composição, navegação e hierarquia, não apenas em cor.
 Considere recent_designs para evitar repetir composições já aprovadas no estúdio.
+Não reapresente a mesma organização com outro nome ou paleta. Varie a posição, sequência
+das seções e ritmo de leitura de acordo com o negócio. Em escopo 2D não proponha um visualizador 3D.
+Projetos básicos exigem bom acabamento e fotografias bem enquadradas, com menos funções.
+Descreva movimentos discretos de 2D e sua função, respeitando redução de movimento.
 Essa comparação orienta diversidade; não prometa exclusividade mundial ou originalidade comprovada.
 Uma pode usar narrativa editorial e fotografia vertical; outra uma abertura horizontal
 imersiva; outra pode priorizar informação ou produto com composição tipográfica expressiva.
@@ -55,6 +59,7 @@ def parse_directions(result):
             if any(not re.fullmatch(r'#[0-9a-fA-F]{6}', color) for color in plan['palette']): raise ValueError()
             if any(not isinstance(s, str) or not 2 <= len(s) <= 180 for s in plan['sections']): raise ValueError()
         if len({p['name'].casefold() for p in plans}) != 3: raise ValueError()
+        if len({re.sub(r'\W+',' ',p['composition'].casefold()).strip() for p in plans}) != 3: raise ValueError()
         return [dict(plan, id=str(i + 1)) for i, plan in enumerate(plans)]
     except (ValueError, KeyError, TypeError):
         raise ValueError('A integração não entregou três propostas completas. O projeto anterior foi preservado.') from None

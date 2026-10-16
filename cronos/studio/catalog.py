@@ -1,6 +1,7 @@
 """Design starting points, not fabricated client work or commercial leads."""
 
 from html import escape
+from .threed.integration import wants_3d
 from .references import get_reference, REFERENCE_SITES
 from .threed.pricing_config import get_price_for_site, PRICING_TIERS, CATEGORY_PRICING
 
@@ -66,7 +67,7 @@ def _supplied_quote(category, brief):
     text = brief.casefold()
 
     # Verificar por recursos 3D
-    has_3d = '3d' in text or '3-d' in text or 'três dimensões' in text or 'três dimensoes' in text
+    has_3d = wants_3d(text)
 
     # Verificar por recursos 2D avançados
     has_2d_enhanced = any(term in text for term in ['animações', 'animacoes', 'interativo', 'efeitos', 'parallax'])
@@ -247,7 +248,7 @@ def starter(category='restaurante', name='', assets=(), brief='', reference_id='
         ref_site = REFERENCE_SITES.get(category, REFERENCE_SITES["personalizado"])
 
     # Obter informações de preço
-    has_3d = '3d' in brief.casefold() or '3-d' in brief.casefold() or 'três dimensões' in brief.casefold()
+    has_3d = wants_3d(brief)
     price_info = get_price_for_site(category, quality="standard", has_3d=has_3d)
 
     # Determinar tipo do site

@@ -33,6 +33,7 @@ async def main():
    await page.route('https://images.unsplash.com/**',lambda route:route.fulfill(body=(Path(__file__).resolve().parents[2]/'cronos/studio/media/restaurant-fire.jpg').read_bytes(),content_type='image/jpeg'))
    await page.goto(BASE+'/#cronos-session='+TOKEN)
    await page.get_by_role('button',name='ESTÚDIO DE SITES',exact=True).click()
+   await page.locator('.ss-sidebar').get_by_role('button',name='Modelos prontos',exact=True).click()
    await expect(page.get_by_role('dialog',name='Estúdio de Sites',exact=True)).to_be_visible()
    await expect(page.locator('.ss-direction')).to_have_count(13)
    await page.screenshot(path='/tmp/cronos-studio-gallery.png')
