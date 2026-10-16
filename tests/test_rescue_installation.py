@@ -104,6 +104,10 @@ def test_bat_embeds_the_verified_helper_and_has_no_network(tmp_path):
     spec = importlib.util.spec_from_file_location('rescue_builder', ROOT / 'tools/build_rescue_launcher.py')
     builder = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(builder)
+    (tmp_path/'tools').mkdir()
+    (tmp_path/'releases').mkdir()
+    (tmp_path/'tools/rescue_installation.py').write_bytes((ROOT/'tools/rescue_installation.py').read_bytes())
+    builder.ROOT=tmp_path
     destination = builder.build()
     raw = destination.read_text(encoding='utf-8')
     embedded = raw.split('\n# CRONOS_RESCUE_PYTHON\n')[1]
