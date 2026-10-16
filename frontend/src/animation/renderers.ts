@@ -1,18 +1,8 @@
-import type {CronosState} from '../types/cronos';
+import {CronosState} from '../types/cronos';
 export type SceneInput={state:CronosState;audio:number;hidden:boolean;links:boolean;fps?:number};
 type SceneCanvas=HTMLCanvasElement|OffscreenCanvas;
 function context(canvas:SceneCanvas){return canvas.getContext('2d') as CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D|null;}
 function buffer():SceneCanvas{return typeof OffscreenCanvas!=='undefined'?new OffscreenCanvas(1,1):document.createElement('canvas');}
-/** Even angular harmonics keep opposite sides balanced around the same center. */
-export function orbPoint(u:number,phase:number,time:number,radius:number,energy:number,c=Math.cos(u),s=Math.sin(u)){
- const wave=Math.sin(u*4+phase+time*.18)*(.32+energy*.15)+Math.sin(u*2-phase*.7-time*.3)*.2;
- const r=radius+wave*(12+energy*8);
- return {x:300+c*r,y:300+s*r*.98};
-}
-export function orbEnergy(state:CronosState,audio:number){
- const level=Math.max(0,Math.min(1,audio));
- return state==='LISTENING'?.38+level*.85:state==='SPEAKING'?.12+level*.1:.06;
-}
 export function renderOrb(canvas:SceneCanvas,size:number,_density:number,pixelRatio:number,input:()=>SceneInput){
  const ctx=context(canvas);if(!ctx)return;
  const logical=600,ratio=Math.min(pixelRatio,1.25),scale=Math.ceil(size*ratio)/logical;
@@ -31,16 +21,18 @@ export function renderOrb(canvas:SceneCanvas,size:number,_density:number,pixelRa
   if(!active)return;const value=input(),now=performance.now();
   if(value.hidden){last=now;schedule(180);return;}
   if(now-last<1000/(value.fps||30)-1){schedule();return;}
-  const dt=Math.min(.06,(now-last)/1000);last=now;time+=dt*(value.state==='LISTENING'?1.35:value.state==='SPEAKING'?.65:.8);
-  const target=orbEnergy(value.state,value.audio);
+  const dt=Math.min(.06,(now-last)/1000);last=now;time+=dt;
+  const target=value.state==='SPEAKING'?.6+Math.min(1,value.audio)*.7:value.state==='LISTENING'?.25:.08;
   energy+=(target-energy)*Math.min(1,dt*5);
   ctx.clearRect(0,0,logical,logical);light.clearRect(0,0,logical,logical);
-  const radius=180+Math.sin(time*.85)*2+energy*22;
+  const radius=184+Math.sin(time*.85)*3+energy*8;
   for(let k=0;k<count;k++){
-   const phase=k*Math.PI*2/count,p=points[k];
+   const phase=k*Math.PI*2/count,p=points[k],rotation=time*(k%2?.2:-.16);
    for(let i=0;i<=steps;i++){
-    const point=orbPoint(basis[i].u,phase,time,radius,energy,basis[i].c,basis[i].s);
-    p[i*2]=point.x;p[i*2+1]=point.y;
+    const {u,c,s}=basis[i],wave=Math.sin(u*3+phase+rotation)*(.55+energy*.22)+Math.sin(u*5-phase*.7-time*.45)*.27;
+    const r=radius+wave*(18+energy*15)+Math.cos(u*2+phase-time*.32)*8;
+    const z=Math.sin(u*3+phase+rotation)*12;
+    p[i*2]=300+c*r+z*.12;p[i*2+1]=300+s*r*.96-z*.18;
    }
    trace(light,p);light.strokeStyle=k%3?'rgba(17,98,255,.48)':'rgba(0,210,255,.55)';light.lineWidth=6+energy*2;light.stroke();
   }
