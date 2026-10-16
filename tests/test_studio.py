@@ -34,7 +34,8 @@ class Builder:
             if isinstance(value, Exception): raise value
             return value
         data = json.loads(messages[-1]['content'])
-        files = starter(data['business']['category'], data['business']['name'])
+        files = starter(data['business']['category'], data['business']['name'], [a['name'] for a in data.get('assets', []) if a['purpose']=='image'])
+        files['index.html'] = files['index.html'].replace('Conteúdo de demonstração. Substitua por informações confirmadas do seu negócio.', 'Conteúdo específico preparado a partir do briefing de teste.').replace('O que faz sentido para você faz parte de cada escolha.', 'Uma proposta construída para este projeto de teste.')
         files['index.html'] = files['index.html'].replace('Uma cozinha de encontros.', 'Site criado com briefing verificado.')
         return {'reply': json.dumps({'summary': 'Senhor, composição editorial criada para este projeto. Dados pendentes devem ser confirmados.', 'files': files}), 'topics': []}
 
@@ -184,7 +185,8 @@ def test_forms_browser_reports_and_clean_export(settings):
         assert len(rows) == 2 and rows[-1]['data']['message'] == data['message']
         assert c.post(prefix + '/browser-report', headers=AUTH, json={'revision': 1, 'viewport': 390, 'checks': []}).status_code == 409
         assert c.post(prefix + '/browser-report', headers=AUTH, json={'revision': 0, 'viewport': 390, 'checks': [{'name': 'DOM', 'status': 'passed'}]}).status_code == 200
-        raw = c.get(prefix + '/export', headers=AUTH)
+        assert c.get(prefix + '/export', headers=AUTH).status_code == 409
+        raw = c.get(prefix + '/export?draft=true', headers=AUTH)
         assert raw.status_code == 200
         with zipfile.ZipFile(io.BytesIO(raw.content)) as z:
             assert z.testzip() is None
@@ -343,19 +345,19 @@ def test_user_address_is_appended_without_overwriting_personality(settings):
 
 def test_autonomous_image_research_is_optional_and_keeps_source(settings,monkeypatch):
     calls=[];image=io.BytesIO();Image.new('RGB',(40,30),'green').save(image,'PNG')
-    async def suggest(category):
-        calls.append(category)
+    async def suggest(category, orientation='any'):
+        calls.append((category, orientation))
         return image.getvalue(),'File:Owned test.png',{'url':'https://commons.wikimedia.org/wiki/File:Test.png','author':'Autor de teste','license':'CC0'}
     monkeypatch.setattr('cronos.studio.images.suggest_image',suggest)
     with TestClient(create_app(settings,Builder())) as c:
         p=new(c);done=generate(c,p,research_images=True)
-        assert done['status']=='ready' and calls==['hotel']
+        assert done['status']=='ready' and calls==[('hotel','horizontal'),('hotel','vertical')]
         assert done['assets'][0]['source']['license']=='CC0'
         q=new(c,name='Sem pesquisa');generate(c,q)
-        assert calls==['hotel']
+        assert calls==[('hotel','horizontal'),('hotel','vertical')]
     with TestClient(create_app(replace(settings,privacy_mode='local'),Builder())) as c:
         p=new(c,name='Modo local');generate(c,p,research_images=True)
-        assert calls==['hotel']
+        assert calls==[('hotel','horizontal'),('hotel','vertical')]
 
 
 def test_form_contract_is_checked_per_form():

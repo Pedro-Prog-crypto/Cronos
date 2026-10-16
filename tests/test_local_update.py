@@ -81,6 +81,7 @@ def test_shipped_manifest_verifies_real_payload():
     payload=updater.entries(root)
     assert {'cronos/app.py','cronos/documents.py','cronos/security.py','cronos/engine.py','cronos/prospects.py','cronos/studio/__init__.py','cronos/studio/service.py','cronos/studio/routes.py','cronos/studio/runtime.py','cronos/studio/catalog.py','cronos/studio/store.py','cronos/studio/validation.py','cronos/studio/network.py','cronos/studio/images.py','cronos/studio/bridge.js','cronos/studio/product-3d.js','cronos/ui/index.html'} <= payload.keys()
     assert any(name.startswith('cronos/ui/assets/SiteStudio-') for name in payload)
+    assert {'cronos/studio/directions.py','cronos/studio/image_generation.py','cronos/studio/restaurant.py','cronos/studio/media/restaurant-fire.jpg'} <= payload.keys()
 
 
 def test_downloadable_package_runs_as_a_standalone_updater(tmp_path):

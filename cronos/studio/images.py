@@ -10,21 +10,27 @@ HEADERS = {'User-Agent': 'Cronos-Studio/1.0 (https://github.com/Pedro-Prog-crypt
 def plain(value): return re.sub(r'<[^>]*>', '', str(value))[:500]
 
 
-async def search_images(query, limit=8):
+async def search_images(query, limit=8, orientation='any'):
     async with httpx.AsyncClient(timeout=15, headers=HEADERS) as client:
         response = await client.get('https://commons.wikimedia.org/w/api.php', params={
             'action': 'query', 'format': 'json', 'generator': 'search', 'gsrsearch': query + ' filetype:bitmap',
-            'gsrnamespace': 6, 'gsrlimit': limit, 'prop': 'imageinfo', 'iiprop': 'url|extmetadata|mime', 'iiurlwidth': 600})
+            'gsrnamespace': 6, 'gsrlimit': min(30, limit * 3) if orientation != 'any' else limit, 'prop': 'imageinfo', 'iiprop': 'url|extmetadata|mime|size', 'iiurlwidth': 600})
         response.raise_for_status(); data = response.json()
     results = []
     for page in data.get('query', {}).get('pages', {}).values():
         info = (page.get('imageinfo') or [{}])[0]; meta = info.get('extmetadata', {})
         if info.get('mime') not in {'image/jpeg', 'image/png'}: continue
+        width, height = info.get('width', 0), info.get('height', 0)
+        shape = 'square' if width == height else 'horizontal' if width > height else 'vertical'
+        if orientation != 'any' and (not width or not height or shape != orientation): continue
+        thumb = info.get('thumburl', '')
         results.append({'title': page['title'], 'source': info.get('descriptionurl'),
+                        'width': width, 'height': height, 'orientation': shape,
+                        'thumbnail': thumb if thumb.startswith('https://upload.wikimedia.org/') else '',
                         'author': plain(meta.get('Artist', {}).get('value', '')),
                         'license': plain(meta.get('LicenseShortName', {}).get('value', '')),
                         'attribution': plain(meta.get('Attribution', {}).get('value', ''))})
-    return results
+    return results[:limit]
 
 
 async def download_image(title):
@@ -47,14 +53,15 @@ async def download_image(title):
     return page['body'], source
 
 
-async def suggest_image(category):
-    terms = {'restaurante': 'restaurant cuisine interior', 'hotel': 'hotel pool architecture', 'lava_jato': 'car detailing',
-             'loja': 'retail shop interior', 'clinica': 'medical clinic interior', 'barbearia': 'barbershop interior',
-             'academia': 'fitness gym interior', 'imobiliaria': 'modern house architecture', 'educacao': 'education library',
-             'eventos': 'concert stage', 'portfolio': 'architecture design', 'servicos': 'office architecture', 'personalizado': 'abstract architecture'}
-    entries = await search_images(terms.get(category, 'architecture'), limit=5)
+async def suggest_image(category, orientation='any'):
+    terms = {'restaurante': 'Brazilian cuisine', 'hotel': 'hotel swimming pool', 'lava_jato': 'car detailing',
+             'loja': 'shop interior', 'clinica': 'physiotherapy', 'barbearia': 'barbershop interior',
+             'academia': 'gym training', 'imobiliaria': 'house architecture', 'educacao': 'library',
+             'eventos': 'concert stage', 'portfolio': 'architecture', 'servicos': 'office interior', 'personalizado': 'architecture'}
+    entries = await search_images(terms.get(category, 'architecture'), limit=8, orientation=orientation)
     eligible = [e for e in entries if e['license'].startswith(('CC BY', 'CC0', 'Public domain', 'PD'))]
     if not eligible: raise ValueError('Nenhuma imagem com licença identificada foi encontrada.')
-    entry = eligible[0]
+    # Prefer usable resolution rather than the first arbitrary tiny search result.
+    entry = max(eligible, key=lambda e: min(e.get('width', 0), e.get('height', 0)))
     raw, source = await download_image(entry['title'])
     return raw, entry['title'], source

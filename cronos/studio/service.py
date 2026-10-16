@@ -20,6 +20,7 @@ from .catalog import starter, quote
 from .runtime import validated, submit, FormError
 from .store import Store
 from .validation import validate, parse_bundle, InvalidProject, InlinePreview
+from .directions import selected_direction, visual_review
 
 SYSTEM = '''Você é o engenheiro de software e diretor de design do CRONOS Studio. Trate o usuário como senhor.
 Crie uma solução cuidadosa, original e específica para o briefing. Priorize hierarquia tipográfica, composição editorial,
@@ -47,6 +48,18 @@ Backend de pagamento, contas de clientes, estoque e integrações não existe ne
 Se há 3D: o visualizador confiável usa o GLB fornecido pelo usuário. Use <div data-studio-model></div> (altura e largura via CSS).
 Sem GLB, não finja um modelo real do produto nem componentes internos. Explique o recurso necessário.
 Imagens próprias e composição CSS/SVG são preferíveis a elementos sem função. Não diga que testou: o estúdio verifica depois.
+Se current_files estiver vazio, comece uma composição nova: não reproduza o exemplo do catálogo.
+Siga approved_direction quando presente. Use a proposta como critério para composição, ritmo e conteúdo.
+Não resolva todo negócio com título à esquerda, foto à direita e três benefícios iguais. Escolha a
+composição a partir do objetivo: cardápio e reservas para restaurante, agenda para música,
+horários de aulas para academia, equipe e especialidades para clínica. Texto específico e útil.
+Para preços e informações de um negócio fictício, conteúdo ilustrativo só é permitido quando o
+briefing o autorizar explicitamente. Nunca transforme números demonstrativos em dados reais.
+Imagens têm width, height e orientation: escolha horizontal para aberturas e vertical para
+narrativa editorial, ajustando object-fit e object-position em CSS. Não distorça fotos.
+Não use uma imagem de mockup do site como se fosse a página inteira ou foto do negócio.
+No resumo, apresente decisões visuais e funções. Não introduza explicações sobre banco de dados,
+SQL ou infraestrutura a menos que o usuário tenha perguntado. Não inclua esses detalhes no site.
 '''
 
 
@@ -61,17 +74,22 @@ class Studio:
         from uuid import UUID
         class StatusArgs(Arguments):
             project_id: UUID | None = None
+            technical: bool = False
         def status(args):
             if args.project_id:
                 try: item = self.store.get(str(args.project_id))
                 except KeyError: raise ValueError('Projeto não encontrado. Consulte studio_status sem ID para listar os projetos.') from None
                 current = self.store.revision(item)
-                return {k: item.get(k) for k in ('id', 'name', 'category', 'status', 'revision', 'error', 'started', 'finished')} | {
-                    'events': item['events'][-12:], 'summary': current['summary'], 'checks': current['report'],
-                    'browser_observations': item.get('browser_reports', []), 'files': list(current['files'])}
+                report = current['report']
+                result = {k: item.get(k) for k in ('id', 'name', 'category', 'status', 'revision', 'error', 'started', 'finished')} | {
+                    'events': item['events'][-4:], 'summary': current['summary'], 'files': list(current['files']),
+                    'verification': {'code_passed': report.get('passed'), 'browser_observed': bool(item.get('browser_reports')),
+                                     'failed': [c['name'] for c in report.get('checks', []) if c['status'] == 'failed']}}
+                if args.technical: result.update(checks=report, browser_observations=item.get('browser_reports', []))
+                return result
             return {'projects': [{k: p.get(k) for k in ('id', 'name', 'category', 'status', 'revision')} for p in self.store.list()[:20]],
                     'note': 'Dados reais salvos no estúdio. A interface abre com abrir estúdio de sites; criação e edição precisam do briefing e da direção escolhida pelo senhor.'}
-        app.state.registry.register(Tool('studio_status', 'Consulta projetos, etapas, versões e verificações reais do Estúdio de Sites. Não gera, altera ou publica código.', StatusArgs, status))
+        app.state.registry.register(Tool('studio_status', 'Consulta projetos e etapas reais do Estúdio de Sites. Use technical=true somente para uma solicitação explícita de detalhes dos testes. Não gera, altera ou publica código.', StatusArgs, status))
 
     async def close(self):
         if self.task and not self.task.done():
@@ -79,16 +97,84 @@ class Studio:
 
     def detail(self, identifier):
         project = self.store.get(identifier)
-        return {**project, 'current': self.store.revision(project), 'history': self.store.history(project)}
+        current = self.store.revision(project)
+        origin = current['report'].get('origin', 'starter' if project['revision'] == 0 else 'saved')
+        return {**project, 'code_origin': origin, 'current': current, 'history': self.store.history(project)}
 
     def new(self, body):
         data = body.model_dump()
         data['quote'] = quote(data['category'], data['brief'])
         project = self.store.new(data)
-        files = starter(project['category'], project['name'])
-        self.store.commit(project, files, 'Ponto de partida de demonstração; ainda não gerado pela IA.', validate(files))
+        demo_names = []
+        if project['category'] == 'restaurante':
+            photo = Path(__file__).with_name('media') / 'restaurant-fire.jpg'
+            if photo.is_file():
+                raw = photo.read_bytes(); asset_name = uuid4().hex + '.jpg'
+                self.store.asset_path(project, asset_name).write_bytes(raw)
+                project['assets'].append({'name': asset_name, 'purpose': 'image', 'original_name': 'Fotografia ilustrativa do exemplo LASTRO.jpg', 'mime': 'image/jpeg',
+                    'bytes': len(raw), 'width': 1536, 'height': 1024, 'orientation': 'horizontal',
+                    'source': {'kind': 'demo', 'author': 'Gerada por IA para o Cronos Studio', 'license': 'Ilustrativa. Não representa um estabelecimento real.', 'url': None}})
+                demo_names.append(asset_name)
+        files = starter(project['category'], project['name'], demo_names)
+        self.store.commit(project, files, 'Exemplo de estrutura. Ainda não é uma criação da IA para este briefing.', {**validate(files), 'origin': 'starter'})
         self.store.event(project, 'draft', 'Senhor, escolha planejar sozinho ou fornecer uma referência e depois inicie a criação.')
         return self.detail(project['id'])
+
+    def code_provider(self, settings):
+        # Conversation output limits often truncate complete site bundles. This is a
+        # separate provider instance; neither .env nor conversation settings change.
+        settings = replace(settings, gemini_transport='rest', output_tokens=max(settings.output_tokens or 0, 8192), provider_timeout=240)
+        provider = self.app.state.engine.provider or make_provider(settings)
+        if self.app.state.engine.provider is None and hasattr(provider, 'spec'):
+            provider.spec = provider.spec.model_copy(update={'max_output_tokens': max(provider.spec.max_output_tokens or 0, 8192), 'timeout_seconds': 240})
+        if self.app.state.engine.provider is None and hasattr(provider, 'settings'):
+            provider.settings = replace(provider.settings, gemini_transport='rest', output_tokens=max(provider.settings.output_tokens or 0, 8192), provider_timeout=240)
+        return provider
+
+    def start_directions(self, project, body):
+        self.available()
+        if project.get('archived'): raise ValueError('Reative o projeto antes de propor direções.')
+        if body.mode == 'reference' and not body.reference.strip():
+            raise ValueError('Descreva a referência para as propostas. A imagem pode ser usada na criação do site.')
+        chosen = body.provider or self.app.state.engine.settings.provider
+        if not self.app.state.engine.provider and not any(p['id'] == chosen and p['configured'] for p in provider_catalog(self.app.state.engine.settings)):
+            raise ValueError('Selecione uma integração configurada e permitida no modo atual.')
+        project.update(status='running', job_kind='directions', provider=chosen, started=time.time(), finished=None, error=None,
+                       mode=body.mode, reference=body.reference if body.mode == 'reference' else '', reference_asset=body.reference_asset if body.mode == 'reference' else '', last_request=body.prompt)
+        self.store.event(project, 'directions', 'Preparando três propostas distintas de composição, tipografia e imagens. O código salvo permanece intacto.')
+        self.task = asyncio.create_task(self.generate_directions(project, body))
+        return self.detail(project['id'])
+
+    async def generate_directions(self, project, body):
+        from .directions import SYSTEM as PLAN_SYSTEM, parse_directions
+        try:
+            provider = self.code_provider(replace(self.app.state.engine.settings, provider=project['provider']))
+            recent = []
+            for saved in self.store.list():
+                if saved['id'] == project['id']: continue
+                chosen = selected_direction(saved)
+                if chosen:
+                    recent.append({'category': saved['category'], **{k: chosen[k] for k in ('composition', 'typography', 'palette')}})
+                if len(recent) >= 8: break
+            payload = {'business': {k: project.get(k) for k in ('name', 'category', 'brief', 'contact')},
+                       'request': body.prompt, 'reference': body.reference if body.mode == 'reference' else '',
+                       'recent_designs': recent}
+            with request_scope('studio-directions', project['id']):
+                result = await asyncio.wait_for(provider.reply(PLAN_SYSTEM, [{'role': 'user', 'content': json.dumps(payload, ensure_ascii=False)}]), 240)
+            plans = parse_directions(result)
+            # Replace plans only after a full valid response. No automatic paid retry.
+            project.update(directions=plans, direction_id=None, status='ideas_ready', finished=time.time())
+            self.store.event(project, 'ideas_ready', 'Três propostas salvas. Compare as composições, escolha uma direção e aprove antes de construir. As miniaturas são esquemas, não imagens geradas.')
+        except asyncio.CancelledError:
+            project.update(status='cancelled', finished=time.time())
+            self.store.event(project, 'cancelled', 'Propostas interrompidas. Código e propostas anteriores preservados. Nenhuma chamada repetida.')
+            raise
+        except (ProviderError, ValueError, OSError, TimeoutError) as exc:
+            project.update(status='failed', finished=time.time(), error=str(exc)[:1000] or 'A integração não respondeu a tempo.')
+            self.store.event(project, 'failed', project['error'])
+        except Exception:
+            project.update(status='failed', finished=time.time(), error='Falha ao preparar as propostas. A versão salva foi preservada.')
+            self.store.event(project, 'failed', project['error'])
 
     def available(self):
         if self.task and not self.task.done(): raise ValueError('Há um projeto em criação. Aguarde ou cancele antes de iniciar outro.')
@@ -98,13 +184,15 @@ class Studio:
         if project.get('archived'): raise ValueError('Reative o projeto arquivado antes de criar outra versão.')
         if body.mode == 'reference' and not (body.reference.strip() or any(a['purpose'] == 'reference' for a in project['assets'])):
             raise ValueError('Envie uma imagem de referência ou descreva a referência antes de iniciar.')
+        if body.mode == 'reference' and body.reference_asset and not any(a['name'] == body.reference_asset and a['purpose'] == 'reference' for a in project['assets']):
+            raise ValueError('A imagem de referência escolhida não pertence a este projeto.')
         if len(body.prompt.strip()) < 3: raise ValueError('Descreva o que o site deve fazer.')
         settings = self.app.state.engine.settings
         chosen = body.provider or settings.provider
         entries = provider_catalog(settings)
         if not self.app.state.engine.provider and not any(p['id'] == chosen and p['configured'] for p in entries):
             raise ValueError('Selecione uma integração configurada e permitida no modo atual.')
-        project.update(status='running', research_images=body.research_images, mode=body.mode, reference=body.reference if body.mode == 'reference' else '', provider=chosen, started=time.time(), finished=None, error=None)
+        project.update(status='running', job_kind='site', research_images=body.research_images, mode=body.mode, reference=body.reference if body.mode == 'reference' else '', reference_asset=body.reference_asset if body.mode == 'reference' else '', provider=chosen, started=time.time(), finished=None, error=None, last_request=body.prompt)
         project['quote'] = quote(project['category'], project['brief'] + ' ' + body.prompt)
         self.store.event(project, 'request', 'Pedido do senhor: ' + body.prompt)
         self.store.event(project, 'planning', 'Lendo o briefing, a referência e a última versão. A integração escolhida é ' + chosen + '.')
@@ -116,30 +204,35 @@ class Studio:
             state = self.app.state; settings = replace(state.engine.settings, provider=project['provider'])
             # Text/code generation uses REST even when everyday conversation uses Live audio.
             if settings.provider == 'gemini': settings = replace(settings, gemini_transport='rest')
-            provider = state.engine.provider or make_provider(settings)
+            provider = self.code_provider(settings)
             current = self.store.revision(project)
-            if body.research_images and not any(a['purpose'] in {'image', 'model'} for a in project['assets']):
+            if body.research_images and len(project['assets']) < 11:
                 if settings.privacy_mode == 'online' and state.panels.preferences.web_enabled:
-                    self.store.event(project, 'images', 'Pesquisando uma imagem pública relacionada à categoria. Autoria e licença serão guardadas para conferência antes da entrega.')
-                    try:
-                        import httpx
-                        from .images import suggest_image
-                        raw, original_name, source = await asyncio.wait_for(suggest_image(project['category']), 45)
-                        raw, ext, mime = await asyncio.to_thread(prepare_asset, raw, 'image', original_name)
-                        name = uuid4().hex + '.' + ext
-                        self.store.asset_path(project, name).write_bytes(raw)
-                        project['assets'].append({'name': name, 'purpose': 'image', 'mime': mime, 'original_name': original_name[:120], 'bytes': len(raw), 'source': source})
-                        self.store.event(project, 'images', 'Imagem selecionada e copiada para o projeto. Fonte e licença disponíveis em Imagens e 3D; revise a adequação ao negócio.')
-                    except (ValueError, OSError, TypeError, KeyError, AttributeError, TimeoutError, httpx.HTTPError):
-                        self.store.event(project, 'images', 'Não consegui obter uma imagem licenciada nesta tentativa. A criação continuará com ilustração original; nenhuma fotografia foi inventada.')
+                    from .images import suggest_image
+                    import httpx
+                    existing = {a.get('orientation') for a in project['assets'] if a['purpose'] == 'image' and (a.get('source') or {}).get('kind') != 'demo'}
+                    for orientation in ('horizontal', 'vertical'):
+                        if orientation in existing: continue
+                        self.store.event(project, 'images', 'Pesquisando fotografia ' + orientation + ' com fonte e licença identificadas.')
+                        try:
+                            raw, original_name, source = await asyncio.wait_for(suggest_image(project['category'], orientation), 25)
+                            await self.add_asset(project, raw, 'image', original_name, source, job=True)
+                            self.store.event(project, 'images', 'Fotografia ' + orientation + ' salva. Confira o enquadramento e a adequação ao negócio em Imagens e 3D.')
+                        except (ValueError, OSError, TypeError, KeyError, AttributeError, TimeoutError, httpx.HTTPError):
+                            self.store.event(project, 'images', 'A fonte pública não forneceu uma imagem ' + orientation + ' utilizável nesta tentativa. Não vou apresentar uma ilustração como fotografia real; envie uma foto ou use a geração de imagens opcional.')
                 else:
-                    self.store.event(project, 'images', 'Pesquisa de imagens não executada: modo local ou permissão de busca desativada.')
-            allowed_assets = [{k: v for k, v in a.items() if k not in {'raw'}} for a in project['assets'] if a['purpose'] != 'reference']
+                    self.store.event(project, 'images', 'Pesquisa de imagens não executada: modo local ou busca desativada.')
+            allowed_assets = [{k: v for k, v in a.items() if k not in {'raw'}} for a in project['assets'] if a['purpose'] in {'image', 'model'} and (a.get('source') or {}).get('kind') != 'demo']
+            origin = current['report'].get('origin', 'starter' if project['revision'] == 0 else 'saved')
             payload = {'business': {k: project.get(k) for k in ('name', 'category', 'brief', 'contact', 'quote')},
                        'mode': body.mode, 'reference_description': body.reference if body.mode == 'reference' else '',
                        'request': body.prompt, 'assets': allowed_assets,
-                       'current_files': current['files'], 'current_summary': current['summary']}
+                       'current_files': {} if origin == 'starter' else current['files'],
+                       'current_summary': '' if origin == 'starter' else current['summary'],
+                       'approved_direction': selected_direction(project),
+                       'browser_observations': project.get('browser_reports', [])}
             refs = [a for a in project['assets'] if a['purpose'] == 'reference'] if body.mode == 'reference' else []
+            if body.reference_asset: refs = [a for a in refs if a['name'] == body.reference_asset]
             reference_notes = ''
             if refs:
                 image = refs[-1]
@@ -166,9 +259,10 @@ class Studio:
                     self.store.event(project, 'validation', 'O código chegou. Verificando recursos, formulários, destinos, arquivos e sintaxe, sem executar código no computador.')
                     report = await asyncio.to_thread(validate, files, [a['name'] for a in project['assets'] if a['purpose'] != 'reference'])
                     report['backend'] = await asyncio.to_thread(backend_checks)
-                    if not report['passed'] or any(c['status'] == 'failed' for c in report['backend']):
+                    report['visual_content'] = visual_review(files, current['files'], allowed_assets)
+                    if not report['passed'] or any(c['status'] == 'failed' for c in [*report['backend'], *report['visual_content']]):
                         project['rejected_report'] = report
-                        failures = '; '.join(c['name'] + ': ' + c['detail'] for c in [*report['checks'], *report['backend']] if c['status'] == 'failed')
+                        failures = '; '.join(c['name'] + ': ' + c['detail'] for c in [*report['checks'], *report['backend'], *report['visual_content']] if c['status'] == 'failed')
                         raise InvalidProject('Revisão recusada pelas verificações: ' + failures)
                     break
                 except InvalidProject as exc:
@@ -177,6 +271,7 @@ class Studio:
                     payload_text = json.dumps({**payload, 'validation_error': str(exc), 'previous_candidate': str(result.get('reply', ''))[:140000],
                                                'correction': 'Corrija os problemas e retorne os três arquivos completos, em um pacote menor se o anterior foi truncado.'}, ensure_ascii=False)
             project['status'] = 'ready'; project['finished'] = time.time()
+            report['origin'] = 'generated'
             self.store.commit(project, files, summary, report)
             self.store.event(project, 'ready', 'Versão salva. Verificações estáticas concluídas; agora abra a prévia e execute os testes no navegador antes de aprovar.')
         except asyncio.CancelledError:
@@ -190,21 +285,65 @@ class Studio:
             project['status'] = 'failed'; project['finished'] = time.time(); project['error'] = 'Falha interna no estúdio. A última versão foi preservada.'
             self.store.event(project, 'failed', project['error'])
 
-    async def add_asset(self, project, raw, purpose, original_name, source=None):
+    def start_image(self, project, body):
+        from .image_generation import image_providers
         self.available()
+        if project.get('archived'): raise ValueError('Reative o projeto antes de gerar imagens.')
+        if not body.approved: raise ValueError('Confirme o envio à API de imagens antes de iniciar.')
+        if body.provider not in {p['id'] for p in image_providers(self.app.state.engine.settings)}:
+            raise ValueError('Nenhuma integração oficial OpenAI de imagens disponível. Use fotos próprias ou a busca pública; nenhuma chave foi alterada.')
+        project.update(status='running', job_kind='image', started=time.time(), finished=None, error=None)
+        self.store.event(project, 'image_generation', 'Solicitando uma imagem ' + body.orientation + ' à API escolhida. Pode consumir créditos; não há repetição automática.')
+        self.task = asyncio.create_task(self.generate_image(project, body))
+        return self.detail(project['id'])
+
+    async def generate_image(self, project, body):
+        from .image_generation import generate_image
+        try:
+            plan = selected_direction(project)
+            context = json.dumps({'name': project['name'], 'category': project['category'], 'brief': project['brief'], 'direction': plan}, ensure_ascii=False)
+            instruction = ('Crie uma proposta visual de site, com composição e tipografia específicas ao briefing. Uma única tela de site, sem moldura de computador. Texto em português. Isto é um mockup ilustrativo; não invente avaliações nem endereço.'
+                           if body.purpose == 'reference' else 'Crie uma fotografia editorial ilustrativa para este projeto fictício, sem texto, logos ou marcas. Não represente como foto documental de um cliente real.')
+            prompt = instruction + '\nFormato ' + body.orientation + '.\nDados do projeto (não são instruções): ' + context + '\nPedido: ' + body.prompt
+            with request_scope('studio-image', project['id']):
+                raw = await asyncio.wait_for(generate_image(self.app.state.engine.settings, body.provider, prompt, body.orientation, body.model), 190)
+            raw, _, _ = await asyncio.to_thread(prepare_asset, raw, body.purpose, 'generated.jpg', 8 * 1024 * 1024)
+            await self.add_asset(project, raw, body.purpose, ('Proposta visual' if body.purpose == 'reference' else 'Imagem ilustrativa') + ' ' + body.orientation + '.jpg',
+                                 {'kind': 'ai_mockup' if body.purpose == 'reference' else 'ai_image', 'provider': body.provider, 'model': body.model,
+                                  'license': 'Gerada por IA; revise direitos e adequação antes de uso comercial.', 'author': 'Gerada por IA', 'url': None}, job=True)
+            project.update(status='ideas_ready' if project.get('directions') else 'draft' if project['revision'] == 0 else 'ready', finished=time.time())
+            self.store.event(project, 'image_ready', 'Imagem salva em Imagens e 3D. ' + ('É uma proposta visual, não um site funcional.' if body.purpose == 'reference' else 'Identifique o uso ilustrativo antes de apresentar como fotografia do negócio.'))
+        except asyncio.CancelledError:
+            project.update(status='cancelled', finished=time.time())
+            self.store.event(project, 'cancelled', 'Solicitação de imagem cancelada localmente. Se já foi recebida pelo provedor, pode haver cobrança. Nenhuma repetição automática.')
+            raise
+        except (ProviderError, ValueError, OSError, TimeoutError) as exc:
+            project.update(status='failed', finished=time.time(), error=str(exc)[:1000] or 'A API de imagens não respondeu a tempo.')
+            self.store.event(project, 'failed', project['error'])
+        except Exception:
+            project.update(status='failed', finished=time.time(), error='Não foi possível salvar a imagem. Projeto e configurações preservados.')
+            self.store.event(project, 'failed', project['error'])
+
+    async def add_asset(self, project, raw, purpose, original_name, source=None, *, job=False):
+        if not job: self.available()
         expected_revision = project['revision']
         raw, ext, mime = await asyncio.to_thread(prepare_asset, raw, purpose, original_name)
-        self.available()
-        project = self.store.get(project['id'])
-        if project['revision'] != expected_revision or project['status'] == 'running':
+        if not job: self.available()
+        latest = self.store.get(project['id'])
+        if latest['revision'] != expected_revision or (latest['status'] == 'running' and not job):
             raise ValueError('O projeto mudou durante o envio. Reabra-o antes de adicionar o recurso.')
+        if not job: project = latest
         if len(project['assets']) >= 12:
             raise ValueError('Até 12 recursos por projeto. Remova um recurso sem uso para adicionar outro.')
         if purpose == 'model' and any(a['purpose'] == 'model' for a in project['assets']):
             raise ValueError('Já há um GLB neste projeto. Remova-o se não estiver em uma versão salva, ou crie outro projeto para preservar o histórico.')
         name = uuid4().hex + '.' + ext
         self.store.asset_path(project, name).write_bytes(raw)
-        project['assets'].append({'name': name, 'purpose': purpose, 'mime': mime, 'original_name': original_name[:120], 'bytes': len(raw), 'source': source})
+        dimensions = {}
+        if purpose != 'model':
+            with Image.open(io.BytesIO(raw)) as img:
+                dimensions = {'width': img.width, 'height': img.height, 'orientation': 'horizontal' if img.width > img.height else 'vertical' if img.width < img.height else 'square'}
+        project['assets'].append({'name': name, 'purpose': purpose, 'mime': mime, 'original_name': original_name[:120], 'bytes': len(raw), 'source': source, **dimensions})
         self.store.save(project)
         return self.detail(project['id'])
 
@@ -240,7 +379,7 @@ class Studio:
         return html, nonce
 
     def used_assets(self, project, files):
-        return [a for a in project['assets'] if a['purpose'] != 'reference' and (
+        return [a for a in project['assets'] if a['purpose'] in {'image', 'model'} and (
             any('assets/' + a['name'] in text for text in files.values()) or (
                 a['purpose'] == 'model' and 'data-studio-model' in files['index.html']))]
 
@@ -327,7 +466,7 @@ ANTES DE PUBLICAR OU VENDER:
 - Nenhum software é inquebrável. Mantenha dependências, hospedagem e backups atualizados.
 '''
 
-def prepare_asset(raw, purpose, original_name):
+def prepare_asset(raw, purpose, original_name, image_limit=2 * 1024 * 1024):
     if len(raw) > 8 * 1024 * 1024: raise ValueError('Recurso acima de 8 MiB.')
     if original_name.lower().endswith('.glb'):
         import struct
@@ -347,12 +486,15 @@ def prepare_asset(raw, purpose, original_name):
         ext, mime = 'glb', 'model/gltf-binary'
     else:
         if purpose == 'model': raise ValueError('O modelo deve ser GLB autocontido.')
-        if len(raw) > 2 * 1024 * 1024: raise ValueError('Imagem acima de 2 MiB.')
+        if len(raw) > image_limit: raise ValueError('Imagem acima de 2 MiB.')
         try:
             with Image.open(io.BytesIO(raw)) as original:
                 if original.format not in {'PNG', 'JPEG', 'WEBP'} or original.width * original.height > 16_000_000: raise ValueError()
                 image = ImageOps.exif_transpose(original).convert('RGB'); image.thumbnail((1800, 1800))
-                output = io.BytesIO(); image.save(output, format='JPEG', quality=88); raw = output.getvalue()
+                for quality in (88, 80, 70):
+                    output = io.BytesIO(); image.save(output, format='JPEG', quality=quality); raw = output.getvalue()
+                    if len(raw) <= 2 * 1024 * 1024: break
+                if len(raw) > 2 * 1024 * 1024: raise ValueError()
         except (OSError, ValueError, Image.DecompressionBombError): raise ValueError('Imagem PNG, JPEG ou WebP inválida ou grande demais.') from None
         ext, mime = 'jpg', 'image/jpeg'
     return raw, ext, mime

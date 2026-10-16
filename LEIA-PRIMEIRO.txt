@@ -18,3 +18,6 @@ ESTUDIO DE SITES
 Abra o botao ESTUDIO DE SITES ou diga: Cronos, abrir estudio de sites.
 Escolha uma categoria, nomeie o projeto e decida: planejar sozinho ou seguir referencia. A demonstracao abre sem IA. A criacao personalizada usa uma integracao ja cadastrada, com etapas reais, tempo decorrido, versoes, edicao, testes e exportacao.
 Os projetos ficam no cofre atual, em .cronos/studio. APIs, integracoes e memorias existentes nao sao substituidas.
+
+IDEIAS E IMAGENS DO ESTUDIO
+Comece em Ideias e direcao. Compare tres propostas, aprove uma e depois construa o site. As miniaturas sao esquemas, nao imagens finais. Na aba Imagens e 3D ha upload, busca por formato horizontal/vertical e geracao opcional de imagem pela API oficial OpenAI, se ja houver uma integracao compativel com chave e creditos. Essa API pode cobrar separadamente da assinatura ChatGPT. Exportar o exemplo inicial exige confirmacao; pedidos que falham ficam registrados sem substituir a versao salva.

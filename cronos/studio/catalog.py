@@ -2,7 +2,7 @@
 from html import escape
 
 CATEGORIES = [
-    ('restaurante', 'Restaurantes', 'gastronomia', '#d9ad65', 'SABORES', 'À mesa, o tempo ganha outro sabor.', 'Uma cozinha de encontros. Um lugar para ficar.'),
+    ('restaurante', 'Restaurantes', 'gastronomia', '#cf4828', 'LASTRO', 'O mar decide. A brasa transforma.', 'Cozinha no fogo, cardápio e uma mesa para conversar.'),
     ('hotel', 'Hotéis e pousadas', 'hospitalidade', '#c69459', 'AURORA', 'Existe um lugar entre a pausa e o extraordinário.', 'Dias mais leves. Memórias que ficam.'),
     ('lava_jato', 'Lava-jatos e estética', 'automotivo', '#29c5ff', 'PULSE', 'O cuidado está em cada detalhe.', 'Estética automotiva com precisão, do primeiro ao último toque.'),
     ('loja', 'Lojas e produtos', 'comércio', '#b0ebad', 'FORMA', 'Objetos que fazem parte da sua história.', 'Uma seleção feita para durar.'),
@@ -40,6 +40,9 @@ def quote(category, brief):
 
 
 def starter(category='restaurante', name='', assets=()):
+    if category == 'restaurante':
+        from .restaurant import restaurant_starter
+        return restaurant_starter(name, assets)
     record = next((r for r in CATEGORIES if r[0] == category), CATEGORIES[0])
     key, label, sector, color, demo_name, title, desc = record
     name = escape(name or demo_name, quote=True)

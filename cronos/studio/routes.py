@@ -39,6 +39,7 @@ class Generate(Strict):
     prompt: str = Field(min_length=3, max_length=12000)
     provider: str = Field(default='', max_length=64)
     reference: str = Field(default='', max_length=10000)
+    reference_asset: str = Field(default='', max_length=40, pattern=r'^(?:|[a-f0-9]{32}\.(?:jpg|png))$')
     research_images: bool = False
 
 
@@ -78,10 +79,24 @@ class PublicURL(Strict):
 
 class ImageQuery(Strict):
     query: str = Field(min_length=3, max_length=120)
+    orientation: Literal['any', 'horizontal', 'vertical', 'square'] = 'any'
 
 
 class ImagePick(Strict):
     title: str = Field(min_length=6, max_length=240)
+
+
+class ImageCreate(Strict):
+    provider: str = Field(min_length=1, max_length=64)
+    model: Literal['gpt-image-1'] = 'gpt-image-1'
+    orientation: Literal['horizontal', 'vertical'] = 'horizontal'
+    purpose: Literal['image', 'reference'] = 'reference'
+    prompt: str = Field(min_length=10, max_length=4000)
+    approved: bool = False
+
+
+class DirectionPick(Strict):
+    direction_id: str = Field(min_length=1, max_length=16)
 
 
 class PageSummary(HTMLParser):
@@ -120,7 +135,13 @@ def install_studio(app, authenticate):
 
     @app.get('/studio/catalog', dependencies=auth)
     async def get_catalog():
-        return {'categories': catalog(), 'providers': provider_catalog(app.state.engine.settings), 'selected': app.state.engine.settings.provider,
+        from .image_generation import image_providers
+        settings = app.state.engine.settings
+        entries = provider_catalog(settings)
+        for entry in entries:
+            if entry['id'] == 'gemini': entry['model'] = settings.gemini_model
+        return {'categories': catalog(), 'providers': entries, 'selected': settings.provider,
+                'image_providers': image_providers(app.state.engine.settings),
                 'storage': str(service().store.root), 'capabilities': ['HTML/CSS/JavaScript', 'Contato e solicitação de horário em SQLite', 'Prévia isolada', 'Edição por conversa', 'GLB autocontido', 'Exportação e versões'],
                 'limits': ['Sem geração de credenciais ou acesso a código proprietário de outras IAs.', 'Pagamentos, login de clientes e estoque precisam de implementação específica antes de publicar.']}
 
@@ -174,6 +195,25 @@ def install_studio(app, authenticate):
         try: return service().start(project(identifier), body)
         except ValueError as exc: raise HTTPException(409, str(exc)) from None
 
+    @app.post('/studio/projects/{identifier}/directions', dependencies=auth)
+    async def directions(identifier: str, body: Generate):
+        try: return service().start_directions(project(identifier), body)
+        except ValueError as exc: raise HTTPException(409, str(exc)) from None
+
+    @app.post('/studio/projects/{identifier}/direction', dependencies=auth)
+    async def choose_direction(identifier: str, body: DirectionPick):
+        item = mutable(identifier)
+        chosen = next((d for d in item.get('directions', []) if d['id'] == body.direction_id), None)
+        if not chosen: raise HTTPException(422, 'Proposta não encontrada. Gere as propostas e escolha uma direção.')
+        item['direction_id'] = chosen['id']
+        service().store.event(item, 'direction', 'Direção aprovada pelo senhor: ' + chosen['name'] + '. O código só muda ao iniciar a construção.')
+        return service().detail(identifier)
+
+    @app.post('/studio/projects/{identifier}/images/generate', dependencies=auth)
+    async def create_image(identifier: str, body: ImageCreate):
+        try: return service().start_image(project(identifier), body)
+        except ValueError as exc: raise HTTPException(409, str(exc)) from None
+
     @app.post('/studio/projects/{identifier}/cancel', dependencies=auth)
     async def cancel(identifier: str):
         item = project(identifier)
@@ -200,6 +240,7 @@ def install_studio(app, authenticate):
         if item['revision'] != body.base_revision: raise HTTPException(409, 'A versão mudou durante a verificação. Reabra o projeto antes de salvar.')
         if not report['passed']: raise HTTPException(422, {'message': 'A versão foi preservada; corrija as verificações que falharam.', 'report': report})
         report['backend'] = await asyncio.to_thread(backend_checks)
+        report['origin'] = 'edited'
         item = mutable(identifier)
         if item['revision'] != body.base_revision: raise HTTPException(409, 'Outra versão foi salva durante os testes. Reabra o projeto antes de salvar.')
         item['status'] = 'ready'; item['error'] = None
@@ -300,8 +341,12 @@ def install_studio(app, authenticate):
         return entry
 
     @app.get('/studio/projects/{identifier}/export', dependencies=auth)
-    async def export(identifier: str):
+    async def export(identifier: str, draft: bool = False):
         item = project(identifier)
+        detail = service().detail(identifier)
+        if item['status'] == 'running': raise HTTPException(409, 'Aguarde ou cancele a criação antes de exportar.')
+        if detail['code_origin'] == 'starter' and not draft:
+            raise HTTPException(409, 'Este projeto ainda contém apenas o exemplo inicial. Crie uma versão com IA ou escolha explicitamente exportar o rascunho.')
         package = await asyncio.to_thread(service().export, item)
         return Response(package, media_type='application/zip', headers={'Content-Disposition': 'attachment; filename="Cronos-Site-' + identifier[:8] + '.zip"'})
 
@@ -324,7 +369,7 @@ def install_studio(app, authenticate):
         from .images import search_images
         online()
         try:
-            return {'images': await search_images(body.query), 'note': 'Confira licença, autoria, marcas e autorização de pessoas antes de usar comercialmente.'}
+            return {'images': await search_images(body.query, orientation=body.orientation), 'note': 'Confira licença, autoria, marcas e autorização de pessoas antes de usar comercialmente.'}
         except (httpx.HTTPError, ValueError, TypeError, KeyError, AttributeError):
             raise HTTPException(502, 'A fonte de imagens não respondeu. Use uma imagem própria ou tente mais tarde.') from None
 

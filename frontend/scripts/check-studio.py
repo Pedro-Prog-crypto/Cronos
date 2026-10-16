@@ -75,6 +75,7 @@ async def main():
    await page.get_by_label('Direção do projeto',exact=True).select_option('autonomous')
    await page.get_by_label('Pedido de alteração do site',exact=True).fill('Crie uma direção visual de hotel e mostre o modelo 3D fornecido, sem inventar componentes.')
    await page.get_by_role('button',name='CRIAR COM IA',exact=True).click()
+   await page.get_by_role('button',name='CONFIRMAR SOLICITAÇÃO',exact=True).click()
    await expect(page.locator('.ss-badge')).to_contain_text('Versão disponível',timeout=15000)
    await page.get_by_role('tab',name='Prévia',exact=True).click()
    await expect(page.get_by_role('button',name='Testar esta prévia',exact=True)).to_be_enabled(timeout=15000)

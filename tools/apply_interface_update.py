@@ -32,8 +32,9 @@ def entries(source):
     result={}
     for name,expected in manifest['files'].items():
         path=PurePosixPath(name)
+        bundled_image = path.suffix == '.jpg' and str(path.parent) in {'cronos/studio/media', 'cronos/ui/assets'}
         if (not name.startswith('cronos/') or '\\' in name or ':' in name or any(p.startswith('.') for p in path.parts)
-            or path.name.lower() in PRIVATE or not (path.suffix in {'.py','.js','.css','.html'})):
+            or path.name.lower() in PRIVATE or not (path.suffix in {'.py','.js','.css','.html'} or bundled_image)):
             raise ValueError('O manifesto inclui um destino fora do codigo permitido.')
         origin=regular(source/name)
         if not origin.is_file() or digest(origin)!=expected:raise ValueError('Pacote incompleto ou alterado: '+name)
