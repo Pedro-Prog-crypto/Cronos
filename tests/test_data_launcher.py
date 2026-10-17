@@ -72,6 +72,7 @@ def test_one_bat_contains_verified_current_code_without_private_data(tmp_path,mo
         assert {'cronos/live_screen.py','cronos/studio/engineering.py','cronos/ui/index.html'}<=names
         assert not any(name in names for name in ('.env','config/providers.json'))
         assert not any(name.startswith(('vault/','.venv/')) for name in names)
+        assert b'PROCESS_FILES' in archive.read('tools/rescue_installation.py')
     namespace['unpack'](tmp_path/'payload')
     with zipfile.ZipFile(output.with_suffix('.zip')) as archive:
         assert archive.namelist()==[output.name] and archive.read(output.name)==output.read_bytes()
@@ -81,3 +82,54 @@ def test_changed_embedded_package_is_rejected_before_extracting(tmp_path):
     with pytest.raises(ValueError,match='alterado'):
         launcher.unpack(tmp_path/'payload',base64.b64encode(b'damaged'),'0'*64)
     assert not (tmp_path/'payload').exists()
+
+
+def test_real_backup_under_update_lock_never_reads_the_locked_control_file(tmp_path,monkeypatch):
+    import sqlite3
+    from tools import rescue_installation as rescue
+    source,root,private=installation(tmp_path)
+    manifest=source/'tools/interface_update_manifest.json'
+    manifest.write_text(json.dumps({**json.loads(manifest.read_text()),'revision':'fixed-lock-fixture'}))
+    lock=root/'.cronos-local/updater/supervisor.lock'
+    copy=rescue.copy_file
+    attempts=[]
+    def mandatory_windows_lock(origin,destination):
+        attempts.append(origin)
+        if origin==lock:
+            error=PermissionError('The process cannot access the locked byte');error.winerror=33;raise error
+        return copy(origin,destination)
+    monkeypatch.setattr(rescue,'copy_file',mandatory_windows_lock)
+    db=root/'vault/.cronos/memory.sqlite3'
+    db.unlink()
+    with sqlite3.connect(db) as memory:
+        memory.execute('PRAGMA journal_mode=WAL')
+        memory.execute('CREATE TABLE notes(text)')
+        memory.execute('INSERT INTO notes VALUES(?)',('Memoria salva antes da atualizacao',));memory.commit()
+        saved=launcher.prepare(root,source,updater,lambda selected:rescue.snapshot(selected,tmp_path/'backups'))
+    assert lock.is_file() and lock not in attempts
+    report=json.loads((saved/'RELATORIO.json').read_text())
+    assert str(lock) in report['excluded'] and report['complete']
+    assert (saved/'instalacao/.env').read_bytes()==private['.env']
+    assert (saved/'instalacao/config/providers.json').read_bytes()==private['config/providers.json']
+    assert not (saved/'instalacao/.cronos-local/updater/supervisor.lock').exists()
+    with sqlite3.connect(saved/'instalacao/vault/.cronos/memory.sqlite3') as backup:
+        assert backup.execute('SELECT text FROM notes').fetchone()[0]=='Memoria salva antes da atualizacao'
+    assert (root/'cronos/app.py').read_text()=='new=True\n'
+
+
+def test_locked_user_data_is_not_silently_omitted_or_marked_as_a_success(tmp_path,monkeypatch):
+    from tools import rescue_installation as rescue
+    source,root,private=installation(tmp_path)
+    copy=rescue.copy_file
+    def locked_private_file(origin,destination):
+        if origin==root/'config/providers.json':
+            error=PermissionError('Private file locked');error.winerror=33;raise error
+        return copy(origin,destination)
+    monkeypatch.setattr(rescue,'copy_file',locked_private_file)
+    original=(root/'cronos/app.py').read_bytes()
+    with pytest.raises((OSError,ValueError)):
+        launcher.prepare(root,source,updater,lambda selected:rescue.snapshot(selected,tmp_path/'backups'))
+    assert (root/'cronos/app.py').read_bytes()==original
+    assert all((root/name).read_bytes()==data for name,data in private.items())
+    assert not (root/'.cronos-local/data-launcher/installed.json').exists()
+    assert (next((tmp_path/'backups').iterdir())/'INCOMPLETO.txt').is_file()

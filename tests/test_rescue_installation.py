@@ -119,3 +119,26 @@ def test_bat_embeds_the_verified_helper_and_has_no_network(tmp_path):
     header = raw.split('\n# CRONOS_RESCUE_PYTHON\n')[0]
     assert len(header.splitlines()[4]) < 8000
     assert not any(term in header.lower() for term in ('https://', 'invoke-webrequest', 'downloadstring', ' pip '))
+
+
+def test_sqlite_snapshot_closes_both_handles_before_reporting_success(tmp_path,monkeypatch):
+    source=tmp_path/'notes.sqlite3';destination=tmp_path/'copy.sqlite3'
+    with sqlite3.connect(source) as db:
+        db.execute('CREATE TABLE notes(text)');db.execute('INSERT INTO notes VALUES(?)',('Memoria nova',))
+    db.close()
+    connections=[];connect=sqlite3.connect
+    def tracked(*args,**kwargs):
+        connection=connect(*args,**kwargs);connections.append(connection);return connection
+    monkeypatch.setattr(rescue.sqlite3,'connect',tracked)
+    result=rescue.copy_file(source,destination)
+    assert result['sqlite_snapshot'] and len(connections)==2
+    for connection in connections:
+        with pytest.raises(sqlite3.ProgrammingError,match='closed'):connection.execute('SELECT 1')
+
+
+def test_a_user_file_with_the_same_lock_name_is_still_backed_up(tmp_path):
+    root=installation(tmp_path)
+    note=root/'vault/Temas/supervisor.lock';note.write_text('Arquivo do usuario, nao um mutex do iniciador.')
+    backup,report=rescue.snapshot(root,tmp_path/'backups')
+    assert (backup/'instalacao/vault/Temas/supervisor.lock').read_text()==note.read_text()
+    assert report['complete'] and str(note) not in report['excluded']

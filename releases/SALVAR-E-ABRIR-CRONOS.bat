@@ -14,6 +14,7 @@ Never overlays a release, imports Cronos, installs dependencies or edits setting
 This file is embedded into SALVAR-E-ABRIR-CRONOS.bat for one-file distribution.
 """
 from datetime import datetime
+from contextlib import closing
 import hashlib
 import json
 import os
@@ -30,6 +31,9 @@ from uuid import uuid4
 SKIP = {'.venv', 'venv', 'node_modules', '.git', '__pycache__', '.pytest_cache', '.mypy_cache', '.ruff_cache'}
 # Backups and dependency caches are not the user's live data.
 SKIP_LOCAL = {'manual-updates', 'backups', 'cache'}
+# This mutex is held by the updater during the snapshot. Reading its locked
+# byte on Windows raises WinError 33. It is recreated at startup, not user data.
+PROCESS_FILES = {'.cronos-local/updater/supervisor.lock'}
 PATH_KEYS = {'CRONOS_VAULT', 'CRONOS_PERSONALITY', 'CRONOS_PROVIDERS_FILE'}
 
 
@@ -88,8 +92,8 @@ def copy_file(source, target):
         with source.open('rb') as src: is_sqlite = src.read(16) == b'SQLite format 3\0'
     if is_sqlite:
         # A consistent online backup also includes committed WAL transactions.
-        with sqlite3.connect(source.as_uri() + '?mode=ro', uri=True, timeout=5) as src:
-            with sqlite3.connect(target) as dst:
+        with closing(sqlite3.connect(source.as_uri() + '?mode=ro', uri=True, timeout=5)) as src:
+            with closing(sqlite3.connect(target)) as dst:
                 deadline = time.monotonic() + 20
                 def progress(*_):
                     if time.monotonic() > deadline: raise TimeoutError('Feche o Cronos e tente novamente; a copia do banco esta ocupada.')
@@ -122,6 +126,8 @@ def snapshot(root, backup_parent=None):
     entries = {}; skipped = []; missing = []
     (backup / 'INCOMPLETO.txt').write_text('Backup em andamento. Somente RELATORIO.json com complete=true confirma a conclusao.\n', encoding='utf-8')
     def copy_tree(source, target, live_root):
+        if source.relative_to(live_root).as_posix().casefold() in PROCESS_FILES:
+            skipped.append(str(source)); return
         if not source.exists(): missing.append(str(source)); return
         if not regular(source):
             raise ValueError('Ha um link/junction na pasta selecionada. Copie o destino real separadamente; backup interrompido sem alterar a origem.')
@@ -136,7 +142,12 @@ def snapshot(root, backup_parent=None):
                     if main.is_file(): skipped.append(str(child)); continue
                 copy_tree(child, target / child.name, live_root)
         elif source.is_file():
-            entry = copy_file(source, target)
+            try:
+                entry = copy_file(source, target)
+            except OSError as exc:
+                if getattr(exc, 'winerror', None) in {32, 33}:
+                    raise ValueError('Um arquivo de dados ainda esta em uso: ' + str(source.relative_to(live_root)) + '. Feche o Cronos e tente novamente. O backup nao foi concluido e o codigo nao foi atualizado.') from None
+                raise
             entries[str(target.relative_to(backup))] = entry
             if len(entries) % 200 == 0: print('Arquivos copiados e conferidos:', len(entries), flush=True)
     try:
