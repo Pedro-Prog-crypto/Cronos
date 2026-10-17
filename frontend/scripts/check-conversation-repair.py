@@ -12,10 +12,10 @@ audio=io.BytesIO()
 with wave.open(audio,'wb') as f:
     f.setnchannels(1);f.setsampwidth(2);f.setframerate(16000)
     f.writeframes(b''.join(struct.pack('<h',int(1500*math.sin(i*2*math.pi*220/16000))) for i in range(320000)))
-WAV=audio.getvalue();spoken=[];systems=[];opened=[]
+WAV=audio.getvalue();spoken=[];systems=[];images=[];opened=[]
 class Chat:
     async def reply(self,system,messages):
-        systems.append(system)
+        systems.append(system);images.append(bool(messages[-1].get("image")))
         return {'reply':'C:\\Users\\Pedro\\vault\\Temas\\mentalista.md\nSenhor, a captura mostra campos sobrepostos.\n```python\nprint("private-code")\n```\n\nResumo para memória: O usuário falou sobre O Mentalista.', 'topics':[], 'tool_calls':[]}
 class Vision:
     async def reply(self,system,messages):
@@ -54,14 +54,14 @@ async def main(base,app):
           window.sharedFixture=canvas.captureStream(2);return window.sharedFixture;};""")
         await page.goto(base+'/')
         await page.get_by_role('button',name='Ver minha tela',exact=True).click()
-        await page.get_by_role('button',name='Compartilhar tela',exact=True).click()
-        await expect(page.locator('.kind-screen img')).to_be_visible()
-        assert not app.state.engine.screen_observations
+        await page.get_by_role('button',name='Compartilhar tela inteira',exact=True).click()
+        widget=page.get_by_role('region',name='Acompanhamento da tela',exact=True)
+        await expect(widget).to_contain_text('TELA INTEIRA · AO VIVO')
+        await page.get_by_role('button',name='Mostrar tela acompanhada',exact=True).click()
+        await expect(widget.locator('img')).to_be_visible()
+        assert not app.state.engine.screen_observations and app.state.live_screen.frame
         assert await page.evaluate('displayCalls[0].audio===false')
-        await page.get_by_role('button',name='Analisar',exact=True).click()
-        await expect(page.locator('.analysis-result')).to_contain_text('campos sobrepostos')
-        await page.get_by_role('button',name='Fechar análise',exact=True).click()
-        assert await page.evaluate('sharedFixture.getVideoTracks()[0].readyState')=='ended'
+        assert not spoken # Updating the capture must never trigger narration.
         async def command(text):
             await page.get_by_role('button',name='ENTENDIMENTO DE LINGUAGEM',exact=True).click()
             await page.locator('.phrase-card').click()
@@ -69,7 +69,10 @@ async def main(base,app):
             await page.get_by_role('button',name='Enviar mensagem',exact=True).click()
         await command('O que está errado na captura compartilhada?')
         await page.wait_for_function("()=>!document.querySelector('.reference-mic.thinking')")
-        assert any('CAPTURA COMPARTILHADA' in system and 'campos sobrepostos' in system for system in systems)
+        assert images[-1] and any('Acompanhamento da tela inteira ativado' in system for system in systems)
+        await page.get_by_role('button',name='Parar de ver a tela',exact=True).click()
+        assert await page.evaluate('sharedFixture.getVideoTracks()[0].readyState')=='ended'
+        assert app.state.live_screen.frame is None
         await page.wait_for_timeout(1500)
         assert spoken and all('private-code' not in text and 'O usuário falou' not in text and 'Users' not in text and 'Resumo' not in text for text in spoken),spoken
         await command('Cronos, tocar música Nada pra Fazer')

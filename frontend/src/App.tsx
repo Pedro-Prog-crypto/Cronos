@@ -7,6 +7,8 @@ import {useCronosVoice,useMicrophone} from './hooks/useCronosVoice';
 import {api,jsonApi,getToken,onConnection,ApiError,streamChat} from './api';
 
 import {MemorySpiral,MemoryGraph} from './components/MemorySpiral';
+import {ScreenMonitor,type ScreenMonitorHandle} from './components/ScreenMonitor';
+import {screenCommand} from './screenCommands';
 import {AnalysisPanel,AnalysisKind} from './components/AnalysisPanel';
 import {AnswerCards,HolographicCard,MovableCardFrame} from './components/HolographicCards';
 import {localCommand} from './commands';
@@ -51,6 +53,7 @@ export default function App(){
   const lastAnswer=useRef<{question:string;source:'text'|'transcription';reply:string}|null>(null);
   const sendRef=useRef<(text:string,audio?:Blob)=>Promise<void>>(async()=>{});
   const commandRef=useRef<(text:string)=>boolean>(()=>false),eyeAnnouncement=useRef(false);
+  const screenMonitor=useRef<ScreenMonitorHandle>(null);
   const music=useRef<MusicHandle>(null);
   const [musicPlaying,setMusicPlaying]=useState(false),[filmPlaying,setFilmPlaying]=useState(false);
   const mediaPlaying=musicPlaying||filmPlaying;
@@ -144,10 +147,10 @@ export default function App(){
   useEffect(()=>{if(!connected)return;const timer=setInterval(()=>{if(prefsRef.current?.auto_index!==false&&!document.hidden&&!live.current.busy&&!live.current.recording&&!live.current.transcribing)setGraphRevision(value=>value+1);},60000);return()=>clearInterval(timer);},[connected]);
   const openAnalysis=(kind:AnalysisKind)=>{restoreWindow('analysis:'+kind);if(autoVoice&&config?.fish_speech_configured)voice.prepare();setAnalyses(previous=>previous.includes(kind)?previous:[...previous,kind]);setEyeOpen(false);setModule(null);setChatOpen(false);};
   const runCommand=(text:string)=>{
+    const screenAction=screenCommand(text);if(screenAction){screenMonitor.current?.[screenAction]();return true;}
     if(studioActive&&studioHandle.current?.handle(text))return true;
     const site=studioCommand(text);if(site){restoreWindow('studio');if(!studio||site.brief)setStudio({brief:site.brief,request:Date.now()});setEyeOpen(false);setModule(null);setChatOpen(false);return true;}
     const attachment=text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-    if(/\b(?:ver|veja|ve|olh\w*|enxerg\w*|analis\w*|compartilh\w*|captur\w*)\b/.test(attachment)&&/\b(?:minha|a) tela\b/.test(attachment)){openAnalysis('screen');return true;}
     if(/\b(?:analis\w*|examin\w*|abr\w*|envi\w*|carreg\w*)\b/.test(attachment)&&/\b(?:imagem|foto|fotografia|arquivo|zip|codigo)\b/.test(attachment)){
       openAnalysis(/\b(?:imagem|foto|fotografia)\b/.test(attachment)?'image':'document');return true;
     }
@@ -194,7 +197,7 @@ export default function App(){
     const turnLatency=latency.current;
     const version=++turnVersion.current,controller=new AbortController();chatAbort.current=controller;
     try{
-      let question=text;let previewIntro='';let voiced=false,introText='',replyDelivered=false,voiceAllowed=!audio||!prefsRef.current?.called_only;let finishSpeech:((text:string)=>void)|null=null;
+      let question=text;let previewIntro='';let voiced=false,introText='',replyDelivered=false,voiceAllowed=!audio;let finishSpeech:((text:string)=>void)|null=null;
       const intro=(reply:string)=>{
         if(version!==turnVersion.current||controller.signal.aborted||!voiceAllowed)return;previewIntro=reply;if(!audio||question!==text)setDisplayTurn({question,source,reply});
         if(version!==turnVersion.current||controller.signal.aborted||!voiceAllowed||voiced||!autoVoice||!config?.fish_speech_configured)return;
@@ -221,7 +224,7 @@ export default function App(){
         voiceAllowed=true;if(audio)turnLatency.recognition_ms=Math.round(performance.now()-turnLatency.started);
         if(runCommand(recognized)){controller.abort();return;}
         applyCardRequest(recognized);question=recognized;setDisplayTurn({question,source,reply:previewIntro});
-      },audio);if(version!==turnVersion.current||controller.signal.aborted)return;if(result.ignored){setDisplayTurn(null);setNotice('');return;}if(!voiced)turnLatency.chat_ms=Math.round(performance.now()-turnLatency.started);saveLatency(turnLatency);session.current=result.session_id;lastAnswer.current={question:result.recognized_text||text,source,reply:result.reply};if(result.recognized_text)applyCardRequest(result.recognized_text);setDisplayTurn({question:result.recognized_text||text,source,reply:result.reply});setGraphRevision(value=>value+1);
+      },audio);if(version!==turnVersion.current||controller.signal.aborted)return;if(result.ignored){setDisplayTurn(null);setNotice('');return;}if(audio&&!voiceAllowed&&result.recognized_text){if(runCommand(result.recognized_text))return;voiceAllowed=true;}if(!voiced)turnLatency.chat_ms=Math.round(performance.now()-turnLatency.started);saveLatency(turnLatency);session.current=result.session_id;lastAnswer.current={question:result.recognized_text||text,source,reply:result.reply};if(result.recognized_text)applyCardRequest(result.recognized_text);setDisplayTurn({question:result.recognized_text||text,source,reply:result.reply});setGraphRevision(value=>value+1);
       setTools(old=>[...old,...(result.tool_results||[])]);
       const filmResult=result.tool_results?.find((r:any)=>r.name==='stremio_search'&&r.status==='completed');if(filmResult?.result){setStremio(filmResult.result);setModule(null);setChatOpen(false);}
       const mediaResult=result.tool_results?.find((r:any)=>r.name==='music_search'&&r.status==='completed');if(mediaResult?.result){music.current?.load(mediaResult.result);}
@@ -276,7 +279,8 @@ export default function App(){
       <Suspense fallback={<div className="panel-loading">Abrindo Olho de Deus…</div>}><WorldMap query={placeQuery} onError={message=>tell(message,true)} onReady={worldReady}/></Suspense>
     </div></WindowSurface>}
     {!eyeActive&&!moduleActive&&<><button className="reference-attachment" aria-label="Analisar imagem" title="Analisar imagem" onClick={()=>openAnalysis('image')}><ImagePlus size={16}/></button><button className="reference-attachment files" aria-label="Analisar ZIP ou código" title="Analisar ZIP ou código" onClick={()=>openAnalysis('document')}><FileArchive size={16}/></button></>}
-    {!eyeActive&&!moduleActive&&<button className="reference-screen" aria-label="Ver minha tela" title="Ver minha tela" onClick={()=>openAnalysis('screen')}><MonitorUp size={16}/></button>}
+    {!eyeActive&&!moduleActive&&<button className="reference-screen" aria-label="Ver minha tela" title="Ver minha tela" onClick={()=>screenMonitor.current?.start()}><MonitorUp size={16}/></button>}
+    <ScreenMonitor ref={screenMonitor} sessionId={()=>session.current} onSession={id=>{session.current=id;}}/>
     {analyses.map(kind=><WindowSurface key={kind} minimized={minimizedWindows.includes('analysis:'+kind)||eyeActive||moduleActive}><AnalysisPanel key={kind} kind={kind} onMinimize={()=>minimizeWindow('analysis:'+kind)} sessionId={session.current} onClose={()=>setAnalyses(previous=>previous.filter(item=>item!==kind))} onBusy={active=>setAnalysisTasks(previous=>active?[...previous.filter(item=>item!==kind),kind]:previous.filter(item=>item!==kind))} onResult={(reply,result)=>{if(result?.session_id)session.current=result.session_id;lastAnswer.current={question:kind==='screen'?'Captura da tela':kind==='image'?'Análise de imagem':'Análise de arquivo',source:'text',reply};if(autoVoice&&config?.fish_speech_configured){analysisSpeechQueue.current.push(reply);setAnalysisSpeechRevision(value=>value+1);}}}/></WindowSurface>)}
     <button className={`reference-mic ${microphone.starting?'starting':microphone.transcribing?'transcribing':busy?'thinking':voice.isGenerating?'generating':voice.isSpeaking?'speaking':microphone.recording?'recording':''}`} aria-pressed={microphone.recording} title={microphone.starting?'Abrindo microfone':microphone.transcribing?'Transcrevendo':busy?'Aguardando Gemini':voice.isGenerating?'Preparando voz':voice.isSpeaking?'Falando — diga Cronos para interromper':microphone.recording?'Microfone ligado':'Microfone desligado'} aria-label={microphone.recording?'Desligar microfone':'Ligar microfone'} onClick={handleMic} ><Mic size={16}/></button>
     {!studio&&!eyeOpen&&!module&&<button className="studio-entry" onClick={()=>{restoreWindow('studio');setStudio({brief:'',request:Date.now()});}}><Code2 size={15}/>ESTÚDIO DE SITES</button>}

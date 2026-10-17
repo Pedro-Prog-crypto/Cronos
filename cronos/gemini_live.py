@@ -40,6 +40,8 @@ async def turn(client,model,system,messages,thinking_budget=0):
         if audio is None:
             await session.send_client_content(turns=turns,turn_complete=True)
         else:
+            if messages[-1].get('image'):
+                image=messages[-1]['image'];turns.append({'role':'user','parts':[{'text':'Captura atual compartilhada pelo senhor; use somente se relevante à pergunta falada.'},{'inline_data':{'mime_type':image['mime_type'],'data':image['data']}}]})
             if turns:await session.send_client_content(turns=turns,turn_complete=False)
             await session.send_realtime_input(activity_start=types.ActivityStart())
             for offset in range(0,len(audio),8192):

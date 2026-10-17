@@ -82,6 +82,25 @@ if os.getenv('STUDIO_TEST_FALLBACK') == '1':
    return await super().reply(system,messages)
  studio_service.make_provider=lambda config: ReserveBuilder(config.provider)
  app=create_app(settings,vision_provider=vision_fixture)
+elif os.getenv('STUDIO_TEST_ENGINEERING') == '1':
+ sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'tests'))
+ from test_studio_engineering import shop_files
+ class EngineeringBuilder(Builder):
+  async def reply(self,system,messages):
+   if 'EXATAMENTE três direções' in system:return await super().reply(system,messages)
+   if not messages[-1]['content'].lstrip().startswith('{'):
+    calls['chat']=calls.get('chat',0)+1;calls['screen_context']=bool(messages[-1].get('image'))
+    return {'reply':'Senhor, a captura atual está disponível para a pergunta solicitada.','topics':[],'tool_calls':[]}
+   calls['site']+=1
+   import re
+   files=shop_files()
+   data=json.loads(messages[-1]['content'])
+   photos=[a for a in data.get('assets',[]) if a['purpose']=='image']
+   if photos:files['index.html']=files['index.html'].replace('</main>','<figure><img src="assets/'+photos[0]['name']+'" alt="Fotografia ilustrativa do teste"><figcaption>Imagem ilustrativa do teste, CC0.</figcaption></figure></main>')
+   files['index.html']=re.sub(r'<form\b[^>]*data-studio-form="booking"[\s\S]*?</form>','',files['index.html'])
+   await asyncio.sleep(.3)
+   return {'reply':json.dumps({'summary':'Senhor, catálogo fictício para verificar as interações internas. Nenhum pagamento real.','files':files})}
+ app=create_app(settings,EngineeringBuilder(),vision_provider=vision_fixture)
 elif os.getenv('STUDIO_TEST_BACKGROUND') == '1':
  class BackgroundBuilder(Builder):
   pending=''
@@ -100,6 +119,25 @@ elif os.getenv('STUDIO_TEST_BACKGROUND') == '1':
  app=create_app(settings,BackgroundBuilder(),vision_provider=vision_fixture)
 else:
  app=create_app(settings,Builder(),vision_provider=vision_fixture)
+if os.getenv('STUDIO_TEST_LIVE_SCREEN') == '1':
+ from contextlib import asynccontextmanager
+ previous_lifespan=app.router.lifespan_context
+ @asynccontextmanager
+ async def screen_lifespan(application):
+  async with previous_lifespan(application):
+   def fake_screen():
+    from PIL import Image
+    import io
+    calls['screen_captures']=calls.get('screen_captures',0)+1
+    output=io.BytesIO();Image.new('RGB',(800,450),(15,calls['screen_captures']%255,70)).save(output,'PNG');return output.getvalue()
+   application.state.live_screen.capture=fake_screen
+   yield
+ app.router.lifespan_context=screen_lifespan
+ @app.post('/fixture/reset-live-screen')
+ async def reset_live_screen():
+  await app.state.live_screen.close()
+  calls['screen_context']=False
+  return {'active':False}
 if os.getenv('STUDIO_TEST_SCREEN') == '1':
  @app.post('/fixture/recover-retry')
  async def fixture_recover():

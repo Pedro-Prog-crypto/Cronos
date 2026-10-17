@@ -57,12 +57,15 @@
   add('Navegação interna',[...document.querySelectorAll('a[href^="#"]')].every(a=>a.hash.length>1&&document.getElementById(decodeURIComponent(a.hash.slice(1)))),'Destinos dos links verificados no DOM real.');
   add('Campos identificados',[...document.querySelectorAll('input:not([hidden]),textarea,select')].every(input=>input.type==='hidden'||input.labels?.length||input.getAttribute('aria-label')),'Labels ou nome acessível nos campos.');
   const forms=[...document.querySelectorAll('form[data-studio-form]')];
-  add('Formulários conectados no navegador',forms.length>=2&&forms.every(form=>form.dataset.runtimeBound==='true'),'Adaptador instalado; testes adversos do backend aparecem separadamente.');
+  add('Formulários conectados no navegador',(config?.requiredForms||['contact','booking']).every(kind=>forms.some(form=>form.dataset.studioForm===kind))&&forms.every(form=>form.dataset.runtimeBound==='true'),'Exigidos: '+(config?.requiredForms||['contact','booking']).join(', ')+'. Encontrados: '+forms.map(form=>form.dataset.studioForm+': '+(form.dataset.runtimeBound==='true'?'conectado':'sem adaptador')).join('; ')+'. Testes do backend aparecem separadamente.');
   let invalid=true;for(const form of forms){const email=form.querySelector('input[type="email"]');if(email){const old=email.value;email.value='email-invalido';invalid=invalid&&!email.checkValidity();email.value=old;}}
-  add('E-mail inválido bloqueado pelo navegador',invalid&&forms.some(form=>form.querySelector('input[type="email"]')),'Validação HTML nativa; nenhum dado foi enviado.');
+  if(forms.length)add('E-mail inválido bloqueado pelo navegador',invalid&&forms.some(form=>form.querySelector('input[type="email"]')),'Validação HTML nativa; nenhum dado foi enviado.');
   add('Sem erros JavaScript observados',errors.length===0,errors.join('; ')||'Nenhum erro capturado desde a abertura desta prévia.');
   if(window.__studioModel)add('Modelo 3D carregado',window.__studioModelState==='ready'&&Boolean(document.querySelector('[data-studio-model] canvas')),'Observação do visualizador no navegador; não valida precisão técnica do produto.');
-  parent.postMessage({studio:config.channel,type:'test-result',id,viewport:w,checks},'*');
+  if(typeof window.__studioFeatureTests==='function'){
+   try{checks.push(...await window.__studioFeatureTests());}catch{add('Interações do pedido',false,'O teste dos componentes não terminou. Revise o site; não houve envio de formulário.');}
+  }
+  parent.postMessage({studio:config.channel,type:'test-result',id,viewport:w,checks:checks.slice(0,64)},'*');
  }
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install);else install();
 })();

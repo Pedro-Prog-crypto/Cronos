@@ -37,7 +37,7 @@ def capture_screen():
     if sys.platform != "win32":
         raise ValueError("Captura da tela disponível somente no Windows local.")
     from PIL import ImageGrab
-    with ImageGrab.grab() as image:
+    with ImageGrab.grab(all_screens=True) as image:
         image.thumbnail((1600, 1600))
         output = io.BytesIO()
         image.convert("RGB").save(output, format="PNG")

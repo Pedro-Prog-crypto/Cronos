@@ -95,7 +95,7 @@ class Revision(Strict):
 
 class BrowserReport(Revision):
     viewport: int = Field(ge=300, le=3000)
-    checks: list[dict] = Field(max_length=20)
+    checks: list[dict] = Field(max_length=64)
 
 
 class Form(Strict):
@@ -305,12 +305,22 @@ def install_studio(app, authenticate):
     async def save_files(identifier: str, body: FileEdit):
         item = mutable(identifier)
         if item['revision'] != body.base_revision: raise HTTPException(409, 'A versão mudou. Reabra o projeto antes de salvar para não sobrescrever outra edição.')
-        try: report = await asyncio.to_thread(validate, body.files, [a['name'] for a in item['assets'] if a['purpose'] != 'reference'])
+        contract=service().store.revision(item)['report'].get('engineering_plan')
+        try: report = await asyncio.to_thread(validate, body.files, [a['name'] for a in item['assets'] if a['purpose'] != 'reference'],required_forms=contract['forms'] if contract else None)
         except ValueError as exc: raise HTTPException(422, str(exc)) from None
         item = mutable(identifier)
         if item['revision'] != body.base_revision: raise HTTPException(409, 'A versão mudou durante a verificação. Reabra o projeto antes de salvar.')
         if not report['passed']: raise HTTPException(422, {'message': 'A versão foi preservada; corrija as verificações que falharam.', 'report': report})
         report['backend'] = await asyncio.to_thread(backend_checks)
+        from .engineering import review as engineering_review
+        contract=service().store.revision(item)['report'].get('engineering_plan')
+        if contract:
+            report['engineering_plan']=contract
+            report['dependencies']=[{'name':item['label'],'status':'unavailable','detail':item['detail']} for item in contract['dependencies']]
+            report['requirements']=engineering_review(body.files,contract)
+            if any(c['status']=='failed' for c in report['requirements']):
+                report['passed']=False
+                raise HTTPException(422, {'message':'A edição removeu uma função contratada ou quebrou seu componente. A versão anterior foi preservada.', 'report':report})
         report['origin'] = 'edited'
         item = mutable(identifier)
         if item['revision'] != body.base_revision: raise HTTPException(409, 'Outra versão foi salva durante os testes. Reabra o projeto antes de salvar.')
@@ -396,8 +406,16 @@ def install_studio(app, authenticate):
     @app.post('/studio/projects/{identifier}/checks', dependencies=auth)
     async def checks(identifier: str):
         item = project(identifier); current = service().store.revision(item)
-        report = await asyncio.to_thread(validate, current['files'], [a['name'] for a in item['assets'] if a['purpose'] != 'reference'])
+        contract=current['report'].get('engineering_plan')
+        report = await asyncio.to_thread(validate, current['files'], [a['name'] for a in item['assets'] if a['purpose'] != 'reference'],required_forms=contract['forms'] if contract else None)
         report['backend'] = await asyncio.to_thread(backend_checks)
+        from .engineering import review as engineering_review
+        contract=current['report'].get('engineering_plan')
+        if contract:
+            report['engineering_plan']=contract
+            report['requirements']=engineering_review(current['files'],contract)
+            report['dependencies']=current['report'].get('dependencies',[])
+            report['passed']=report['passed'] and not any(c['status']=='failed' for c in report['requirements'])
         latest = project(identifier)
         if latest['revision'] != item['revision']: raise HTTPException(409, 'A versão mudou durante os testes. Abra a nova prévia para verificá-la.')
         latest['checks'] = report; service().store.save(latest)

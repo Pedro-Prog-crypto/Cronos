@@ -93,6 +93,9 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         app.state.registry = create_registry(settings, app.state.memory, app.state.monitor, app.state.windows, app.state.missions, app.state.prospects, updates=app.state.updater)
         app.state.engine = Engine(settings, app.state.memory, app.state.registry, provider)
         app.state.vision_provider = vision_provider
+        from cronos.live_screen import LiveScreen
+        app.state.live_screen=LiveScreen()
+        app.state.engine.live_screen=app.state.live_screen
         app.state.features = Features(app)
         app.state.panels = PanelState(app)
         from cronos.studio.service import Studio
@@ -117,6 +120,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         try:
             yield
         finally:
+            await app.state.live_screen.close()
             if app.state.studio is not None: await app.state.studio.close()
             update_task.cancel()
             with suppress(asyncio.CancelledError):await update_task
@@ -139,6 +143,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
             await app.state.windows.close()
 
     app = FastAPI(title="Cronos", version="0.5.0", lifespan=lifespan, docs_url=None, redoc_url=None)
+    from cronos.live_screen import install as install_live_screen
     from cronos.voice_interrupt import install_interrupt
     install_interrupt(app,settings,local_recognizer)
     static = Path(__file__).parent / "static"
@@ -242,6 +247,8 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 "fish_speech_configured": bool(settings.fish_key and settings.fish_model) and settings.privacy_mode == "online",
                 "custom_voice_configured": bool(settings.fish_reference),
                 "personality_available": settings.personality.is_file()}
+
+    install_live_screen(app,authenticate)
 
     @app.post("/chat", dependencies=[Depends(authenticate)])
     async def chat(body: ChatInput, request: Request):

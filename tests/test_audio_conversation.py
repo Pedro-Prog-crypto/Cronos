@@ -57,7 +57,8 @@ def test_missing_transcript_does_not_save_placeholder_or_execute_tools(settings)
         assert event['type']=='error' and event['status']==502
 
 
-def test_native_audio_preserves_history_and_delivers_input_transcript(settings):
+@pytest.mark.parametrize('with_screen',[False,True])
+def test_native_audio_preserves_history_and_delivers_input_transcript(settings,with_screen):
     sent=[];configs=[];recognized=[]
     raw=json.dumps({'tool_calls':[],'reply':'Resposta completa.','topics':[]})
     class Session:
@@ -73,14 +74,15 @@ def test_native_audio_preserves_history_and_delivers_input_transcript(settings):
     async def run():
         async def sink(text):recognized.append(text)
         token=transcript_sink.set(sink)
-        try:return await gemini_live.turn(NS(aio=NS(live=NS(connect=connect))),settings.gemini_live_model,'persona',[{'role':'user','content':'Mensagem anterior'},{'role':'assistant','content':'Resposta anterior'},{'role':'user','content':'Pergunta falada','audio_pcm':b'\0\0'*5000}])
+        try:return await gemini_live.turn(NS(aio=NS(live=NS(connect=connect))),settings.gemini_live_model,'persona',[{'role':'user','content':'Mensagem anterior'},{'role':'assistant','content':'Resposta anterior'},{'role':'user','content':'Pergunta falada','audio_pcm':b'\0\0'*5000,**({'image':{'mime_type':'image/jpeg','data':'aW1hZ2U='}} if with_screen else {})}])
         finally:transcript_sink.reset(token)
     result=asyncio.run(run())
     assert result['recognized_text']=='Quem foi Sócrates?' and recognized==['Quem foi Sócrates?']
     assert configs[0].thinking_config.thinking_budget==0
     assert configs[0].input_audio_transcription is not None
     assert configs[0].realtime_input_config.automatic_activity_detection.disabled
-    assert sent[0][1]['turn_complete'] is False and len(sent[0][1]['turns'])==2
+    assert sent[0][1]['turn_complete'] is False and len(sent[0][1]['turns'])==2+with_screen
+    if with_screen:assert sent[0][1]['turns'][-1]['parts'][-1]['inline_data']['mime_type']=='image/jpeg'
     packets=[kw['audio'] for _,kw in sent if 'audio' in kw]
     assert b''.join(packet.data for packet in packets)==b'\0\0'*5000
     assert all(packet.mime_type=='audio/pcm;rate=16000' for packet in packets)

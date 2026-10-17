@@ -259,3 +259,28 @@ No Chromium, uma criação foi concluída em partes enquanto minimizada, com áu
 real de teste tocando; restauração preservou o elemento de áudio, o projeto e os
 campos. As integrações e fontes desse teste são controladas, sem cobrança. Isso
 não comprova disponibilidade permanente ou cota nas contas reais do usuário.
+
+
+## Contrato de construção e componentes funcionais
+
+O gerador monta um `engineering_plan` a partir do pedido e do briefing, sem chamada paga adicional. Busca, filtros por categoria, ordenação e carrinho de demonstração têm critérios verificáveis e componentes internos em `features.js`. Isso não impõe disposição, paleta ou textos: a IA continua criando a composição. No painel Verificações é possível consultar o plano, os requisitos e as conexões pendentes. A revisão não aceita ausência de controle, IDs duplicados, preços inválidos, opções de filtro sem categoria correspondente ou quantidade de itens inferior à pedida. A interpretação é limitada ao registro de capacidades documentado em `engineering.py`; o briefing integral continua disponível ao modelo, e funções fora desse registro exigem revisão específica.
+
+Projetos complexos deixam de receber um corte artificial de 12/10/5 mil caracteres como se fosse teto de qualidade. Mantêm-se os limites de segurança de 180 mil caracteres por arquivo e a continuação de entrega. O reparo recebe todos os arquivos completos da tentativa anterior, em vez de apenas os primeiros 40 mil caracteres do JSON. Há uma correção por integração, com reserva e versão anterior preservadas.
+
+Revisões de aparência preservam os requisitos aprovados; remoção explícita no pedido altera o plano. Os formulários variam conforme o negócio e o pedido: não é obrigatório colocar reservas numa loja. Projetos antigos conservam seu contrato anterior. A prévia espera o ticket da revisão correta antes de testar, evitando usar o HTML de uma versão com os critérios de outra.
+
+Os componentes locais aceitam até 200 itens por coleção e até oito coleções sem aninhamento; carrinho trabalha com uma coleção. O carrinho soma centavos, limita a 99 unidades, oferece aumentar, diminuir e remover; é uma demonstração em memória da página. Não há checkout conectado, persistência entre visitas, conta, estoque ou frete reais. Pedidos acima do limite são informados antes de gastar cota, sem reduzir a quantidade silenciosamente. Dependências externas ficam explícitas no resumo e no relatório; preço premium não comprova qualidade, segurança ou funcionamento comercial.
+
+Os testes da prévia exercem busca por nome e sem resultado, categoria, ordenação crescente/decrescente e adicionar/diminuir/remover do carrinho com total observado no DOM. Restauram os valores dos filtros e o carrinho do usuário. O mesmo runtime é incluído na exportação. Testes de sintaxe/estrutura antes de salvar e de comportamento no navegador são complementares; aparência, conversão e regras específicas do cliente ainda precisam de avaliação.
+
+## Tela inteira acompanhada em silêncio
+
+O botão principal Ver minha tela e os comandos “Cronos, veja minha tela” / “acompanhe minha tela” iniciam uma sessão explícita. No Windows local, Pillow captura o conjunto de monitores sem seletor de aba/janela, aproximadamente uma vez por segundo, em JPEG reduzido a até 1600 px e sem metadados. A interface mantém um indicador e um botão de parada; a miniatura só aparece quando expandida. Não há nova dependência, gravação em disco, áudio capturado ou solicitação periódica a uma IA.
+
+A captura mais recente é anexada à pergunta na conversa atual, inclusive no transporte Gemini Live com áudio. O modelo recebe instrução de responder ao pedido e não narrar a tela espontaneamente. A análise usa a IA configurada e depende de suporte a imagens; não cria visão para um modelo exclusivamente textual. Capturas velhas, de outra sessão ou recebidas depois da parada são descartadas. Esse acompanhamento fornece contexto visual; não concede controle adicional de mouse/teclado ou autorização para executar instruções vistas na imagem.
+
+“Cronos, pare de ver minha tela” ou o botão de parada limpa o buffer e encerra a captura. Minimizar o estúdio, música ou outros painéis não encerra a sessão. Fechar a aplicação/reiniciar o servidor também encerra. Um heartbeat de 20 segundos mantém a sessão: se a conexão desaparecer por dois minutos, o servidor limpa a captura, impedindo um acompanhamento órfão após fechar o navegador.
+
+Quando a captura local não está disponível, o botão Compartilhar tela inteira usa `getDisplayMedia` com vídeo de 1 fps e sem áudio; é preciso selecionar Tela inteira na permissão obrigatória do navegador. Não é possível suprimir esse seletor num navegador sem a captura local. O compartilhamento do navegador alimenta o mesmo buffer em RAM; a miniatura não exige uma chamada de visão paga. O painel específico Ver minha tela dentro do Estúdio conserva a análise de uma captura para revisão de projeto.
+
+Validação: testes de sessão, autorização, expiração, cancelamento durante captura, isolamento entre conversas, imagem atual na pergunta escrita/áudio, ausência de imagens no histórico e limpeza na parada. O teste Chromium usa desktop e IA injetados para verificar a interface sem capturar a máquina de ninguém. Não certifica a API real de imagem, o driver de vídeo ou a captura no notebook Windows do usuário.

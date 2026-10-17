@@ -90,7 +90,8 @@ def parse_bundle(result):
     return normalize(files), payload['summary']
 
 
-def validate(files, assets=(), *, run_syntax=True):
+def validate(files, assets=(), *, run_syntax=True, required_forms=None):
+    required_forms = {'contact','booking'} if required_forms is None else set(required_forms)
     if set(files) != FILES or any(not isinstance(v, str) or len(v) > 180_000 or '\0' in v for v in files.values()):
         raise InvalidProject('Arquivos ou limites inválidos.')
     doc = Document()
@@ -103,7 +104,7 @@ def validate(files, assets=(), *, run_syntax=True):
     check('Estilos e interações ligados ao HTML',doc.stylesheets==1 and doc.app_scripts==1,'O documento deve carregar styles.css como stylesheet e app.js uma vez; arquivos soltos não estilizam o site exportado.')
     check('Documento responsivo', doc.lang and doc.viewport and doc.title and 'main' in doc.tags, 'Idioma, título, viewport e conteúdo principal presentes; o layout ainda precisa de inspeção no navegador.')
     check('Imagens e recursos', all(img.get('alt') is not None for img in doc.images) and all(not ASSET.fullmatch(r) or r[7:] in assets for r in doc.resources), 'Texto alternativo e arquivos locais existentes.')
-    check('Formulários conectados', set(doc.forms) >= {'contact', 'booking'} and all(f in {'contact', 'booking'} for f in doc.forms), 'Contato e solicitação de horário usam o runtime do estúdio.')
+    check('Formulários conectados', set(doc.forms) >= required_forms and all(f in {'contact', 'booking'} for f in doc.forms), 'Formulários do plano usam o runtime do estúdio; tipos extras não são permitidos.')
     contracts = True
     allowed_fields = {'name', 'email', 'phone', 'message', 'date', 'time', 'service', 'consent', 'company'}
     for kind, inputs in zip(doc.forms, doc.form_fields):
@@ -114,7 +115,8 @@ def validate(files, assets=(), *, run_syntax=True):
         if kind == 'booking': contracts = contracts and fields_by_name.get('date', {}).get('type') == 'date' and fields_by_name.get('time', {}).get('type') == 'time'
     check('Contrato de cada formulário', contracts, 'Cada formulário tem seus próprios campos, tipos de e-mail/data/horário e consentimento compatíveis com o servidor.')
     fields = {i.get('name') for i in doc.inputs}
-    check('Campos de atendimento', {'name', 'email', 'message', 'date', 'time', 'service', 'consent'} <= fields, 'Campos necessários para contato e agendamento presentes.')
+    needed_fields=({'name','email','message','consent'} if 'contact' in required_forms else set())|({'name','email','date','time','service','consent'} if 'booking' in required_forms else set())
+    check('Campos de atendimento', needed_fields <= fields, 'Campos necessários para contato e agendamento presentes.')
     if doc.models:
         check('Modelo 3D conectado', doc.models == 1 and any(name.endswith('.glb') for name in assets), 'O visualizador precisa de um GLB fornecido e um único ponto data-studio-model.')
     if doc.procedural:
