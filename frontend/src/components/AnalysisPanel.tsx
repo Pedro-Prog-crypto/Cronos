@@ -18,7 +18,7 @@ export function AnalysisPanel({kind,onClose,onBusy,onResult}:{kind:AnalysisKind;
   if(objectUrl.current)URL.revokeObjectURL(objectUrl.current);objectUrl.current='';setPreview('');
   try{
    if(kind==='image'&&!['image/png','image/jpeg'].includes(file.type))throw new Error('Escolha uma imagem PNG ou JPEG.');
-   if(file.size>2*1024*1024)throw new Error('Escolha um arquivo de até 2 MiB.');
+   if(file.size>30*1024*1024)throw new Error('Escolha um arquivo de até 30 MiB.');
    let bytes:Blob=file;
    if(kind==='image'){
     bytes=await(await api('/vision/preview',{method:'POST',headers:{'Content-Type':'application/octet-stream'},body:file,signal:request.signal})).blob();
@@ -48,7 +48,7 @@ export function AnalysisPanel({kind,onClose,onBusy,onResult}:{kind:AnalysisKind;
  return <section ref={movement.ref} onPointerDown={e=>{movement.onPointerDown(e);scroll.onPointerDown(e);}} onPointerMove={e=>{movement.onPointerMove(e);scroll.onPointerMove(e);}} onPointerUp={e=>{movement.onPointerUp(e);scroll.onPointerUp(e);}} onPointerCancel={e=>{movement.onPointerCancel(e);scroll.onPointerCancel(e);}} onKeyDown={movement.onKeyDown} className={`analysis-panel kind-${kind} movable-surface ${active?'is-scanning':''}`} role="region" aria-label={kind==='image'?'Análise de imagem':'Análise de arquivo'}>
   <header data-drag-handle tabIndex={0} title="Arraste para mover o painel"><ScanLine size={16}/><strong>{active?'ANALISANDO':phase==='done'?'ANÁLISE CONCLUÍDA':kind==='image'?'ANÁLISE DE IMAGEM':'ANÁLISE DE ARQUIVO'}</strong><button onClick={onClose} aria-label="Fechar análise"><X size={16}/></button></header>
   <div className="analysis-viewport">
-   {preview?<img src={preview} alt={`Imagem selecionada: ${name}`}/>:files.length?<div className="analysis-file-list"><FileArchive size={30}/><b>{name}</b>{files.map(file=><span key={file.name}>{file.name}{file.truncated?' · trecho':''}</span>)}{skipped>0&&<small>{skipped} arquivo(s) ignorado(s), incluindo binários e configurações privadas.</small>}{truncated&&<small>Análise limitada a trechos: até 24 mil caracteres.</small>}</div>:<button className="analysis-pick" onClick={()=>fileInput.current?.click()}>{kind==='image'?<ImagePlus size={35}/>:<FileArchive size={35}/>}<span>{phase==='loading'?'LENDO ARQUIVO…':kind==='image'?'Escolher imagem':'Escolher ZIP ou código'}</span><small>Até 2 MiB</small></button>}
+   {preview?<img src={preview} alt={`Imagem selecionada: ${name}`}/>:files.length?<div className="analysis-file-list"><FileArchive size={30}/><b>{name}</b>{files.map(file=><span key={file.name}>{file.name}{file.truncated?' · trecho':''}</span>)}{skipped>0&&<small>{skipped} arquivo(s) ignorado(s), incluindo binários e configurações privadas.</small>}{truncated&&<small>Análise limitada a trechos: até 24 mil caracteres.</small>}</div>:<button className="analysis-pick" onClick={()=>fileInput.current?.click()}>{kind==='image'?<ImagePlus size={35}/>:<FileArchive size={35}/>}<span>{phase==='loading'?'LENDO ARQUIVO…':kind==='image'?'Escolher imagem':'Escolher ZIP ou código'}</span><small>Até 30 MiB</small></button>}
    {active&&<div className="analysis-scan" aria-hidden="true"/>}
    <i className="analysis-corner top-left"/><i className="analysis-corner bottom-right"/>
   </div>

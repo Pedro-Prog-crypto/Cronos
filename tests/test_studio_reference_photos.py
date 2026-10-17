@@ -72,7 +72,7 @@ def test_preview_and_export_embed_photo_but_cannot_send_dynamic_remote_image_req
     async def fixture(url):calls.append(url);return data
     monkeypatch.setattr(photos,'download',fixture)
     with TestClient(create_app(settings,Builder())) as client:
-        item=client.post('/studio/projects',headers=AUTH,json={'name':'Teste de fotos','category':'restaurante','create_from_template':True}).json()
+        item=client.post('/studio/projects',headers=AUTH,json={'name':'Teste de fotos','category':'restaurante','create_from_template':True,'design':'supplied'}).json()
         preview=client.post('/studio/projects/'+item['id']+'/preview',headers=AUTH).json()
         response=client.get(preview['url'])
         assert data in response.text and calls

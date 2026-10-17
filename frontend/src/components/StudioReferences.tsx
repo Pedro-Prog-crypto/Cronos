@@ -2,8 +2,8 @@ import React,{useEffect,useState} from 'react';
 
 export type TemplateReference={remote_images?:boolean;id:string;name:string;category:string;description:string;template_type:string;price_range:[number,number];features:string[];sample_images:string[];sample_texts:Record<string,string>;color_scheme:Record<string,string>;layout:string;notice?:string};
 export type PricingTier={id:string;name:string;price_range:[number,number];type:string;features:string[];['3d']:boolean};
-export type ReferenceSettings={reference_id:string;tier:string;template:string;model_type:string};
-export const defaultReferenceSettings:ReferenceSettings={reference_id:'',tier:'reference',template:'premium',model_type:'auto'};
+export type ReferenceSettings={reference_id:string;tier:string;template:string;model_type:string;design:string};
+export const defaultReferenceSettings:ReferenceSettings={reference_id:'',tier:'reference',template:'premium',model_type:'auto',design:'curated'};
 const brl=(n:number)=>n.toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0});
 export const referenceType=(kind:string)=>kind==='3d'?'3D':kind==='2d_enhanced'?'2D Avançado':'2D';
 
@@ -27,11 +27,12 @@ export function ReferenceOptions({references,tiers,value,onChange}:{references:T
  return <div className="ss-reference-options">
   <label>Referência do catálogo<select aria-label="Referência do catálogo" value={reference.id} onChange={e=>update('reference_id',e.target.value)}>{references.map(r=><option key={r.id} value={r.id}>{r.name} · {referenceType(r.template_type)}</option>)}</select></label>
   <div className="ss-ref-estimate"><b>{brl(range[0])} — {brl(range[1])}</b><span>{referenceType(is3d?'3d':selectedTier?.type||reference.template_type)} · proposta estimada</span></div>
-  <p>{reference.description}</p>
+  <p>{value.design==='curated'&&!is3d?'Composições por categoria, com conteúdo e navegação próprios. Essencial, Editorial e Autoral mudam a organização do restaurante; os exemplos são estudos para personalizar.':reference.description}</p>
   <label>Faixa de projeto<select aria-label="Faixa de projeto" value={value.tier} onChange={e=>update('tier',e.target.value)}><option value="reference">Faixa da referência escolhida</option>{tiers.map(t=><option key={t.id} value={t.id}>{t.name} · {brl(t.price_range[0])}–{brl(t.price_range[1])}</option>)}</select></label>
-  <label>Template enviado<select aria-label="Template enviado" value={value.template} onChange={e=>update('template',e.target.value)}><option value="basic">Basic · 2D</option><option value="standard">Standard · 2D Avançado</option><option value="premium">Premium · categoria / 3D</option></select></label>
+  <label>Origem do exemplo<select aria-label="Origem do exemplo" value={value.design} onChange={e=>update('design',e.target.value)}><option value="curated">Novas composições · por categoria</option><option value="supplied">Arquivos originais recebidos · legado</option></select></label>
+  <label>Composição<select aria-label="Template enviado" value={value.template} onChange={e=>update('template',e.target.value)}><option value="basic">Essencial · leitura direta</option><option value="standard">Editorial · conteúdo em primeiro plano</option><option value="premium">Autoral · identidade da categoria</option></select></label>
   {is3d&&<label>Modelo procedural<select aria-label="Modelo procedural" value={value.model_type} onChange={e=>update('model_type',e.target.value)}><option value="auto">Automático pela categoria</option><option value="earbuds">Fones com estojo</option><option value="airplane">Avião comercial</option><option value="hotel">Edifício com andares</option></select></label>}
-  <div className="ss-ref-palette" aria-label="Esquema de cores">{Object.entries(reference.color_scheme).map(([name,color])=><span key={name} style={{backgroundColor:color}} title={name+': '+color}><i>{name}</i></span>)}</div>
+  {(value.design==='supplied'||is3d)&&<div className="ss-ref-palette" aria-label="Esquema de cores">{Object.entries(reference.color_scheme).map(([name,color])=><span key={name} style={{backgroundColor:color}} title={name+': '+color}><i>{name}</i></span>)}</div>}
   <details><summary>Recursos, textos e imagens enviados</summary><ul>{reference.features.map(f=><li key={f}>{f}</li>)}</ul><p>Recursos descritos na referência; pagamentos, integrações e dados reais precisam de implementação e configuração específicas.</p>{Object.entries(reference.sample_texts).map(([key,text])=><p key={key}><b>{key.replaceAll('_',' ')}:</b> {text}</p>)}<div className="ss-ref-images">{reference.sample_images.map((src,index)=><a key={src} href={src} target="_blank" rel="noopener noreferrer">{reference.remote_images===false?'Fonte da imagem '+(index+1):<img src={src} alt={'Exemplo '+(index+1)+' da referência'} loading="lazy" referrerPolicy="no-referrer"/>}</a>)}</div><p>{reference.notice}</p></details>
  </div>;
 }

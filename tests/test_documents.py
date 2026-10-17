@@ -27,7 +27,7 @@ def test_zip_is_read_only_and_private_files_are_excluded():
     assert 'dont_send_me' not in str(redacted) and 'print(1)' in str(redacted)
 
 
-@pytest.mark.parametrize('files',[{'../escape.py':'print(1)'},{'big.py':'x'* (2*1024*1024+1)}, {f'{i}.py':'x' for i in range(121)}])
+@pytest.mark.parametrize('files',[{'../escape.py':'print(1)'},{'big.py':'x'* (30*1024*1024+1)}, {f'{i}.py':'x' for i in range(501)}])
 def test_zip_limits_and_paths_are_enforced(files):
     with pytest.raises(ValueError):inspect_document('project.zip',packed(files))
 

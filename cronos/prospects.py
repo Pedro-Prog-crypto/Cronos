@@ -149,8 +149,20 @@ class Prospector:
                 async with httpx.AsyncClient(timeout=28,follow_redirects=False,headers={'User-Agent':'Cronos/0.5 (https://github.com/Pedro-Prog-crypto/Cronos)'}) as client:
                     await asyncio.sleep(max(0,1.1-(time.monotonic()-self.last_geocode)))
                     self.last_geocode=time.monotonic()
-                    locations=await fetch_json(client,'GET','https://nominatim.openstreetmap.org/search',params={'q':args.city+', Brasil','countrycodes':'br','format':'jsonv2','addressdetails':1,'limit':5,'featureType':'city'})
-                    locations=[p for p in locations if p.get('address',{}).get('country_code')=='br' and (p.get('addresstype') in {'city','town','municipality','village'} or any(p.get('address',{}).get(k) for k in ('city','town','municipality','village')))]
+                    from cronos.municipalities import lookup
+                    local=lookup(args.city)
+                    location_note=None
+                    try:
+                        async with asyncio.timeout(8):
+                            locations=await fetch_json(client,'GET','https://nominatim.openstreetmap.org/search',params={'q':args.city+', Brasil','countrycodes':'br','format':'jsonv2','addressdetails':1,'limit':5,'featureType':'city'})
+                        if not isinstance(locations,list):raise ValueError('Location format')
+                        locations=[p for p in locations if isinstance(p,dict) and isinstance(p.get('address'),dict) and p['address'].get('country_code')=='br' and (p.get('addresstype') in {'city','town','municipality','village'} or any(p.get('address',{}).get(k) for k in ('city','town','municipality','village')))]
+                        if not locations and local:locations=[local]
+                    except (httpx.HTTPError,HTTPException,TimeoutError,ValueError,KeyError,TypeError,AttributeError):
+                        if not local:raise HTTPException(502,'O serviço de localização não respondeu e esse nome não correspondeu à base local de municípios. Confira cidade e UF.') from None
+                        locations=[local]
+                    if locations and locations[0].get('local_fallback'):
+                        location_note='Localização pela base local de municípios; busca de negócios em um raio de 15 km do centro. Não cobre todo o território municipal.'
                     if not locations:raise HTTPException(404,'Não encontrei essa cidade no Brasil. Informe cidade e estado, por exemplo: Manaus, AM.')
                     # Multiple municipalities must be disambiguated instead of silently selecting one.
                     names={p.get('display_name','') for p in locations}
@@ -175,23 +187,69 @@ class Prospector:
                             region='';area=f'(around:15000,{float(place["lat"])},{float(place["lon"])})'
                         tag={'hotel':'tourism','loja':'shop','barbearia':'shop','academia':'leisure','imobiliaria':'office','servicos':'office'}.get(args.category,'amenity')
                         cuisine_filter=f'["cuisine"~"{cuisine}"]' if cuisine else ''
-                        query=f'[out:json][timeout:20];{region}nwr["{tag}"~"^({amenity})$"]["name"]{cuisine_filter}{area};out tags center 100;'
+                        query=f'[out:json][timeout:8];{region}nwr["{tag}"~"^({amenity})$"]["name"]{cuisine_filter}{area};out tags center 100;'
                         raw=None
-                        for endpoint in ('https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://overpass.private.coffee/api/interpreter'):
+                        source_errors=[]
+                        source_deadline=time.monotonic()+32
+                        for endpoint in ('https://overpass-api.de/api/interpreter',):
+                            for method in ('POST','GET'):
+                                if time.monotonic()>=source_deadline:break
+                                try:
+                                    async with asyncio.timeout(min(10,max(.1,source_deadline-time.monotonic()))):
+                                        data=await fetch_json(client,method,endpoint,**({'data':{'data':query}} if method=='POST' else {'params':{'data':query}}))
+                                    if not isinstance(data,dict) or data.get('remark') or not isinstance(data.get('elements'),list):raise ValueError('Map format')
+                                    raw=data;break
+                                except (httpx.HTTPError,HTTPException,TimeoutError,ValueError):
+                                    source_errors.append(urlsplit(endpoint).hostname+' '+method)
+                            if raw is not None:break
+                        discovery_source='overpass';poi_responded=False
+                        if raw is None:
+                            # A bounded, user-triggered amenity search, not an exhaustive
+                            # download, grid scan or background municipality sweep.
                             try:
-                                async with asyncio.timeout(12):
-                                    data=await fetch_json(client,'POST',endpoint,data={'data':query})
-                                if data.get('remark'):continue
-                                raw=data;break
-                            except (httpx.HTTPError,HTTPException,TimeoutError):continue
-                        if raw is None:raise HTTPException(502,'As fontes de negócios não responderam. Tente mais tarde. Os servidores alternativos também foram consultados; nenhum resultado foi inventado.')
+                                await asyncio.sleep(max(0,1.1-(time.monotonic()-self.last_geocode)))
+                                self.last_geocode=time.monotonic()
+                                south,north,west,east=map(float,place['boundingbox'])
+                                term=amenity.split('|')[0]
+                                async with asyncio.timeout(10):
+                                    points=await fetch_json(client,'GET','https://nominatim.openstreetmap.org/search',params={
+                                        'q':'['+term+'] '+args.city+', Brasil','countrycodes':'br','format':'jsonv2','addressdetails':1,'extratags':1,
+                                        'limit':min(args.limit,20),'bounded':1,'viewbox':f'{west},{north},{east},{south}'})
+                                if not isinstance(points,list):raise ValueError('Business search format')
+                                elements=[];valid_business_seen=False
+                                for point in points:
+                                    if not isinstance(point,dict) or point.get('address',{}).get('country_code')!='br':continue
+                                    if point.get('class',point.get('category'))!=tag or not re.fullmatch(amenity,point.get('type','')):continue
+                                    if point.get('osm_type') not in {'node','way','relation'} or not str(point.get('osm_id','')).isdigit():continue
+                                    valid_business_seen=True
+                                    extra=point.get('extratags') or {};address=point.get('address') or {}
+                                    tags={**extra,tag:point['type'],'name':point.get('name') or point.get('display_name','').split(',')[0],
+                                          'addr:street':address.get('road',''),'addr:housenumber':address.get('house_number',''),'addr:suburb':address.get('suburb','')}
+                                    if cuisine and not re.search(cuisine,tags.get('cuisine','')):continue
+                                    elements.append({'type':point['osm_type'],'id':point['osm_id'],'tags':tags})
+                                poi_responded=not points or valid_business_seen
+                                if elements:raw={'elements':elements};discovery_source='nominatim'
+                            except (httpx.HTTPError,HTTPException,TimeoutError,ValueError,KeyError,TypeError,AttributeError):pass
+                        if raw is None:
+                            for endpoint in ('https://overpass.kumi.systems/api/interpreter','https://overpass.private.coffee/api/interpreter'):
+                                for method in ('POST','GET'):
+                                    if time.monotonic()>=source_deadline:break
+                                    try:
+                                        async with asyncio.timeout(min(10,max(.1,source_deadline-time.monotonic()))):
+                                            data=await fetch_json(client,method,endpoint,**({'data':{'data':query}} if method=='POST' else {'params':{'data':query}}))
+                                        if not isinstance(data,dict) or data.get('remark') or not isinstance(data.get('elements'),list):raise ValueError('Map format')
+                                        raw=data;break
+                                    except (httpx.HTTPError,HTTPException,TimeoutError,ValueError):continue
+                                if raw is not None:break
+                        if raw is None and poi_responded:raw={'elements':[]};discovery_source='nominatim'
+                        if raw is None:raise HTTPException(502,'As fontes de negócios não responderam. A cidade foi localizada, mas os servidores de mapas falharam em POST/GET. Use Tentar pesquisa novamente ou Google Places se estiver configurado. Nenhum resultado foi inventado.')
                         if raw.get('remark'):raise HTTPException(502,'A pesquisa do mapa foi interrompida. Tente uma categoria mais específica.')
                         leads=[lead for item in raw.get('elements',[]) if item.get('type') in {'node','way','relation'} and (lead:=osm_lead(item,city))]
-                        attribution='© colaboradores do OpenStreetMap (ODbL). A cobertura varia por cidade; não é uma lista de todos os negócios.'
+                        attribution='© colaboradores do OpenStreetMap (ODbL). '+('Consulta pontual pelo Nominatim, até 20 resultados.' if discovery_source=='nominatim' else 'Consulta pelo Overpass.')+' A cobertura varia por cidade; não é uma lista de todos os negócios.'
                     unique={}
                     for lead in leads:
                         key=(lead['name'].casefold(),lead.get('address'));unique.setdefault(key,lead)
-                    report={'id':str(uuid4()),'city':city,'category':args.category,'source':args.source,'created_at':datetime.now(timezone.utc).isoformat(),'cached':False,'leads':list(unique.values())[:args.limit],'attribution':attribution,'coverage':('Pesquisa em um raio de 15 km do centro informado; ' if args.source=='osm' and place.get('osm_type')=='node' else '')+'Amostra de até 100 registros no mapa ou 20 no Google Places. Não realiza varredura nacional nem confirma interesse em contratar.','warnings':['Porte desconhecido não significa pequeno. Site não informado não significa inexistente.']}
+                    report={'id':str(uuid4()),'city':city,'category':args.category,'source':args.source,'discovery_source':discovery_source if args.source=='osm' else 'google','created_at':datetime.now(timezone.utc).isoformat(),'cached':False,'leads':list(unique.values())[:args.limit],'attribution':attribution,'location_note':location_note,'coverage':('Pesquisa em um raio de 15 km do centro informado; ' if args.source=='osm' and place.get('osm_type')=='node' else '')+'Amostra de até 100 registros no mapa ou 20 no Google Places. Não realiza varredura nacional nem confirma interesse em contratar.','warnings':['Porte desconhecido não significa pequeno. Site não informado não significa inexistente.']}
                     if len(self.reports)>=8:
                         oldest=next(iter(self.reports));self.reports.pop(oldest)
                         self.cache={k:v for k,v in self.cache.items() if v[1]!=oldest}

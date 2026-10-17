@@ -168,7 +168,7 @@ def normalize(files, *, model='', notice=True):
     return {'index.html': html, 'styles.css': css, 'app.js': js}
 
 
-def template_site(category, name, *, reference='', tier='reference', model='auto', template='premium', brief=''):
+def template_site(category, name, *, reference='', tier='reference', model='auto', template='premium', brief='', design='curated', assets=()):
     from .generator import Site3DGenerator
     identifier = reference_id(category, brief, reference)
     ref = REFERENCE_SITES[identifier]
@@ -196,6 +196,9 @@ def template_site(category, name, *, reference='', tier='reference', model='auto
                      color_scheme=ref.color_scheme, sample_texts={k: escape(v.replace('[NOME]', name), quote=True) for k, v in ref.sample_texts.items()}, features=ref.features[:3])
         generated['app.js'] = ''  # Scene code is injected from the trusted supplied module, not model-authored JS.
         return normalize(generated, model=model)
+    if design=='curated':
+        from ..designs import site
+        return site(category,name,template=template,assets=assets)
     if template in {'basic', 'standard'}:
         html = (ROOT / 'templates' / (template + '.html')).read_text()
         html = html.replace('R$[PREÇO],-[PREÇO]', price_text)

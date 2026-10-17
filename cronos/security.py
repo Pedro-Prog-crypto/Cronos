@@ -1,3 +1,4 @@
+from cronos.upload_limits import MAX_UPLOAD_BYTES,MAX_UPLOAD_JSON_BYTES
 """Barreiras da aplicação local. Não substituem isolamento e segurança do Windows."""
 import asyncio
 import ipaddress
@@ -128,7 +129,7 @@ class SecurityMiddleware:
             state=read_json(updater.folder/'status.json',{})
             if state.get('phase') in {'queued','installing','testing'}:
                 return await JSONResponse({'detail':'Atualização em andamento. Aguarde a verificação e recarregue a página.'},503)(scope,receive,send)
-        limit = 12 * 1024 * 1024 if path.startswith('/studio/projects/') and path.endswith('/assets') else 1024 * 1024 if path.startswith('/studio/projects/') and path.endswith('/files') else 10 * 1024 * 1024 if path == '/voice/transcribe' else 2 * 1024 * 1024 if path == '/chat/audio/stream' else 3 * 1024 * 1024 if path in {'/vision/analyze','/documents/preview','/documents/analyze'} else 2 * 1024 * 1024 if path == '/vision/preview' else 3 * 1024 * 1024 if re.fullmatch(r'/studio/projects/[a-f0-9-]{36}/screen-review',path) else 256 * 1024
+        limit = MAX_UPLOAD_JSON_BYTES if path.startswith('/studio/projects/') and path.endswith('/assets') else 1024 * 1024 if path.startswith('/studio/projects/') and path.endswith('/files') else 10 * 1024 * 1024 if path == '/voice/transcribe' else 2 * 1024 * 1024 if path == '/chat/audio/stream' else MAX_UPLOAD_JSON_BYTES if path in {'/vision/analyze','/documents/preview','/documents/analyze'} else MAX_UPLOAD_BYTES if path == '/vision/preview' else MAX_UPLOAD_JSON_BYTES if re.fullmatch(r'/studio/projects/[a-f0-9-]{36}/screen-review',path) else 256 * 1024
         try:
             length = int(headers.get('content-length', '0'))
             if length < 0:

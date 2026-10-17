@@ -123,7 +123,7 @@ def test_image_consent_validation_and_no_hidden_tools(configured):
 
 
 def test_large_image_rejected_before_cloud_call():
-    output=io.BytesIO();Image.new('RGB',(3000,3000),'white').save(output,format='PNG')
+    output=io.BytesIO();Image.new('RGB',(7000,6000),'white').save(output,format='PNG')
     with pytest.raises(ValueError): normalize_image(output.getvalue())
     with pytest.raises(ValueError): normalize_image(b'x'*(2*1024**2+1))
 
@@ -216,6 +216,6 @@ def test_local_preview_validates_before_display_without_external_provider(config
         with Image.open(io.BytesIO(preview.content)) as image:
             assert image.size==(10,10)
         assert not provider.calls
-        oversized=io.BytesIO();Image.new('RGB',(3000,3000)).save(oversized,format='PNG')
+        oversized=io.BytesIO();Image.new('RGB',(7000,6000)).save(oversized,format='PNG')
         assert client.post('/vision/preview',headers=AUTH,content=oversized.getvalue()).status_code==422
         assert client.post('/vision/preview',content=image_bytes()).status_code==401

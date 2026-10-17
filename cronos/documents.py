@@ -1,5 +1,6 @@
 """Bounded, read-only inspection of explicitly chosen text/code and ZIP files."""
 import asyncio
+import codecs
 import base64
 import io
 import json
@@ -15,8 +16,10 @@ from typing import Literal
 from cronos.providers import ProviderError, make_provider
 from cronos.usage import request_scope
 
-MAX_RAW = 2 * 1024 * 1024
-MAX_EXPANDED = 6 * 1024 * 1024
+from cronos.upload_limits import MAX_UPLOAD_BYTES,MAX_BASE64_CHARS
+
+MAX_RAW = MAX_UPLOAD_BYTES
+MAX_EXPANDED = 90 * 1024 * 1024
 MAX_TEXT = 24000
 TEXT_EXTENSIONS = {'.txt','.md','.py','.js','.ts','.tsx','.jsx','.json','.html','.css','.csv','.xml','.yaml','.yml','.toml','.sql','.sh','.bat','.ps1','.c','.cpp','.h','.java','.rs','.go'}
 PRIVATE = {'api_keys.json','credentials.json','token.json','fish_audio.json','ai_council.json','providers.json'}
@@ -39,36 +42,38 @@ def redact(text):
 
 def inspect_document(name, raw):
     if not safe_name(name) or len(name)>240:raise ValueError('Nome de arquivo inválido.')
-    if not raw or len(raw)>MAX_RAW:raise ValueError('Envie um arquivo de até 2 MiB.')
+    if not raw or len(raw)>MAX_RAW:raise ValueError('Envie um arquivo de até 30 MiB.')
     files=[];skipped=[];remaining=MAX_TEXT
-    def add(filename,data):
+    def add(filename,data,original_size=None):
         nonlocal remaining
         if private(filename) or PurePosixPath(filename).suffix.lower() not in TEXT_EXTENSIONS or b'\0' in data[:8192]:
             skipped.append(filename);return
-        try:text=data.decode('utf-8-sig')
+        data=data[:MAX_TEXT*4+4]
+        try:text=codecs.getincrementaldecoder('utf-8-sig')().decode(data,final=False)
         except UnicodeDecodeError:
             skipped.append(filename);return
         text=redact(text)
         snippet=text[:remaining];remaining-=len(snippet)
-        files.append({'name':filename,'text':snippet,'truncated':len(text)>len(snippet)})
+        files.append({'name':filename,'text':snippet,'truncated':len(text)>len(snippet) or (original_size is not None and original_size>len(data))})
     if name.lower().endswith('.zip'):
         try:
             with zipfile.ZipFile(io.BytesIO(raw)) as package:
                 entries=package.infolist()
-                if len(entries)>120:raise ValueError('ZIP com mais de 120 entradas. Selecione uma pasta menor do projeto.')
+                if len(entries)>500:raise ValueError('ZIP com mais de 500 entradas. Selecione uma pasta menor do projeto.')
                 expanded=0
                 for entry in entries:
                     if not safe_name(entry.filename) or stat.S_ISLNK(entry.external_attr>>16):raise ValueError('ZIP contém caminho inválido ou link simbólico.')
                     if entry.is_dir():continue
                     expanded+=entry.file_size
-                    if expanded>MAX_EXPANDED or entry.file_size>MAX_RAW:raise ValueError('ZIP excede o limite de 6 MiB descompactado ou 2 MiB por arquivo.')
+                    if expanded>MAX_EXPANDED or entry.file_size>MAX_RAW:raise ValueError('ZIP excede o limite de 90 MiB descompactado ou 30 MiB por arquivo.')
                     if entry.flag_bits&1:raise ValueError('ZIP protegido por senha não é aceito.')
                     if private(entry.filename) or PurePosixPath(entry.filename).suffix.lower() not in TEXT_EXTENSIONS:
                         skipped.append(entry.filename);continue
-                    add(entry.filename,package.read(entry))
+                    with package.open(entry) as stream:
+                        add(entry.filename,stream.read(MAX_TEXT*4+4) if remaining else b'',entry.file_size)
         except (zipfile.BadZipFile,NotImplementedError,RuntimeError,OSError) as exc:
             raise ValueError('ZIP inválido ou com compressão não suportada.') from exc
-    else:add(name,raw)
+    else:add(name,raw,len(raw))
     if not files or not any(f['text'].strip() for f in files):raise ValueError('Nenhum texto UTF-8 ou código legível encontrado. Credenciais e arquivos binários são ignorados.')
     return {'name':name,'files':files,'skipped':skipped,'characters':MAX_TEXT-remaining,'truncated':any(f['truncated'] for f in files)}
 
@@ -76,7 +81,7 @@ def inspect_document(name, raw):
 class Document(BaseModel):
     model_config=ConfigDict(extra='forbid')
     name:str=Field(min_length=1,max_length=240)
-    data_base64:str=Field(min_length=1,max_length=2_800_000)
+    data_base64:str=Field(min_length=1,max_length=MAX_BASE64_CHARS)
 
 
 class Analysis(Document):

@@ -60,14 +60,17 @@ class ProviderPool:
             self.project['active_provider'] = identifier
             self.event(self.project, 'provider', 'IA ativa: ' + identifier + '. As demais integrações configuradas permanecem de reserva, sem chamadas paralelas.')
             try:
-                result = await asyncio.wait_for(self.adapters[identifier].reply(system, messages), self.timeout)
+                result = await asyncio.wait_for(getattr(self.adapters[identifier],'reply_structured',self.adapters[identifier].reply)(system, messages), self.timeout)
                 if transform is not None: result = transform(result)
             except asyncio.CancelledError:
                 raise  # Explicit cancellation never starts another provider.
             except (ProviderError, TimeoutError, httpx.HTTPError, OSError, ValueError) as exc:
                 # No raw server response, prompt or credential reaches the event log.
                 quota = isinstance(exc, ProviderError) and exc.status == 429
-                reason = 'limite de uso (HTTP 429)' if quota else 'sem resposta utilizável nesta tentativa'
+                reason = 'limite de uso (HTTP 429)' if quota else {400:'requisição rejeitada (HTTP 400)',401:'chave rejeitada (HTTP 401)',403:'acesso negado (HTTP 403)',404:'modelo ou endereço indisponível (HTTP 404)',422:'parâmetros incompatíveis (HTTP 422)'}.get(getattr(exc,'http_status',None) or getattr(exc,'status',None),'sem resposta utilizável nesta tentativa')
+                if getattr(exc,'kind',None)=='output_limit':reason='código interrompido pelo limite de saída do modelo'
+                elif getattr(exc,'kind',None)=='format':reason='resposta incompleta ou formato JSON inválido'
+                elif isinstance(exc,(TimeoutError,httpx.TimeoutException)):reason='tempo de resposta esgotado'
                 self.reject(reason, cooldown=0 if isinstance(exc, ValueError) else 60)
                 await asyncio.sleep(0)
                 continue

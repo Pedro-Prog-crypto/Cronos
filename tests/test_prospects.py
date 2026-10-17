@@ -139,4 +139,4 @@ def test_restaurant_source_failover(settings,monkeypatch):
         result=client.post('/prospects/search',headers=AUTH,json={'city':'Manaus, AM'})
         assert result.status_code==200,result.text
         assert len(result.json()['leads'])==3
-        assert seen[-2:]==['overpass-api.de','overpass.kumi.systems']
+        assert 'overpass-api.de' in seen and seen[-1]=='overpass.kumi.systems'

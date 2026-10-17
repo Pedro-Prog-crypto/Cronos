@@ -86,7 +86,8 @@ def parse_bundle(result):
     if set(files) != FILES or any(not isinstance(v, str) or len(v) > 180_000 for v in files.values()):
         raise InvalidProject('O pacote deve conter somente index.html, styles.css e app.js, até 180 mil caracteres por arquivo.')
     if not isinstance(payload.get('summary'), str) or len(payload['summary']) > 4000: raise InvalidProject('Resumo do projeto ausente ou grande demais.')
-    return files, payload['summary']
+    from .bundle_format import normalize
+    return normalize(files), payload['summary']
 
 
 def validate(files, assets=(), *, run_syntax=True):

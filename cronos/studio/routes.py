@@ -1,3 +1,4 @@
+from cronos.upload_limits import MAX_BASE64_CHARS
 import asyncio
 import base64
 import json
@@ -33,6 +34,7 @@ class NewProject(Strict):
     model_type: Literal['auto', 'earbuds', 'airplane', 'hotel'] = 'auto'
     template: Literal['basic', 'standard', 'premium'] = 'premium'
     create_from_template: bool = False
+    design: Literal['curated','supplied'] = 'curated'
     @field_validator('category')
     @classmethod
     def category_allowed(cls, value):
@@ -56,7 +58,7 @@ class Retry(Strict):
 
 class ScreenReview(Strict):
     revision: int = Field(ge=0)
-    image_base64: str = Field(min_length=4,max_length=2_800_000)
+    image_base64: str = Field(min_length=4,max_length=MAX_BASE64_CHARS)
     prompt: str = Field(default='Analise o site visível e indique como corrigir os problemas de apresentação.',min_length=3,max_length=3000)
     provider: str = Field(default='',max_length=64)
     consent: Literal[True]
@@ -75,7 +77,7 @@ class OpportunityCreate(Strict):
 class Asset(Strict):
     name: str = Field(min_length=1, max_length=180)
     purpose: Literal['image', 'reference', 'model'] = 'image'
-    data_base64: str = Field(min_length=4, max_length=11_200_000)
+    data_base64: str = Field(min_length=4, max_length=MAX_BASE64_CHARS)
 
 
 class FileEdit(Strict):

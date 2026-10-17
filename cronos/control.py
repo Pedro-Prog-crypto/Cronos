@@ -1,3 +1,4 @@
+from cronos.upload_limits import MAX_BASE64_CHARS
 """Rotas da bancada de módulos e contratos para a interface futura."""
 import asyncio
 import base64
@@ -28,7 +29,7 @@ class Execute(Input):
 
 
 class Vision(Input):
-    image_base64: str = Field(min_length=1, max_length=3_000_000)
+    image_base64: str = Field(min_length=1, max_length=MAX_BASE64_CHARS)
     prompt: str = Field(default="Descreva a imagem e explique o que consegue observar, separando fatos de hipóteses.", min_length=1, max_length=3000)
     consent: Literal[True]
 

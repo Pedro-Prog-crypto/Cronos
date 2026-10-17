@@ -4,7 +4,7 @@ Abra pelo botão **ESTÚDIO DE SITES** ou diga **“Cronos, abrir estúdio de si
 
 ## Início e oportunidades
 
-O Estúdio abre em **Início**, com atalhos para **Criar um site com IA**, **Explorar negócios** e os projetos recentes. **Modelos prontos** é uma área separada para os exemplos fornecidos, sem chamadas de IA. Não confunda o exemplo inicial com uma versão personalizada salva.
+O Estúdio abre em **Início**, com atalhos para **Criar um site com IA**, **Explorar negócios** e os projetos recentes. **Modelos prontos** mostra novas composições locais por categoria, com miniaturas renderizadas das páginas reais e sem chamadas de IA. Os materiais antigos continuam na opção **Arquivos originais recebidos · legado**. Não confunda o exemplo inicial com uma versão personalizada salva.
 
 Em **Oportunidades no Brasil**, pesquise uma cidade e categoria. A busca não gera projetos. Escolha a faixa e clique em **Criar proposta com IA** no estabelecimento desejado: o servidor confere o resultado da pesquisa, cria um projeto e inicia ideias → escolha pelo Cronos → fotografias opcionais → código → verificações. O painel mostra etapas e tempo real, sem percentual inventado. Enquanto a primeira versão não existe, mostra o andamento em vez da página demonstrativa. O clique pode consumir cota das APIs de texto; imagens geradas por IA continuam opcionais, com confirmação separada.
 
@@ -46,7 +46,7 @@ Envie referências em **Imagens e 3D**. A análise visual usa as integrações c
 
 Para seguir uma imagem específica, escolha **Seguir minha referência** e selecione o arquivo no campo **Imagem de referência**. No modo autônomo, referências antigas não são enviadas.
 
-Imagens próprias são normalizadas e perdem EXIF, com até 2 MiB por envio. A busca no Wikimedia Commons mostra miniatura, dimensões, orientação, autor e licença. O filtro distingue horizontal, vertical e quadrada pelas dimensões recebidas, sem inventar formatos. Na criação, a busca opcional tenta obter uma foto horizontal e outra vertical; falhas são registradas sem apresentar ilustração como fotografia real. A fonte externa pode ficar indisponível. A foto do exemplo LASTRO é identificada como demonstração e não é enviada automaticamente à criação personalizada.
+Imagens próprias são normalizadas e perdem EXIF, com até 30 MiB por envio. A busca no Wikimedia Commons mostra miniatura, dimensões, orientação, autor e licença. O filtro distingue horizontal, vertical e quadrada pelas dimensões recebidas, sem inventar formatos. Na criação, a busca opcional tenta obter uma foto horizontal e outra vertical; falhas são registradas sem apresentar ilustração como fotografia real. A fonte externa pode ficar indisponível. A foto do exemplo LASTRO é identificada como demonstração e não é enviada automaticamente à criação personalizada.
 
 **Geração opcional de imagens:** integrações de texto OpenAI que já usam exatamente `https://api.openai.com/v1`, com chave configurada, podem ser usadas com `gpt-image-1` pela API oficial de imagens. Há formatos horizontal 1536×1024 e vertical 1024×1536, uma imagem por pedido, qualidade média, sem repetição automática. A API pode cobrar créditos separados da assinatura ChatGPT, exigir acesso ao modelo e recusar a chamada. Provedores compatíveis de texto, como Mistral, não são tratados como geradores de imagem automaticamente. Nenhuma chave ou integração é criada, modificada ou exposta por esta função.
 
@@ -70,7 +70,7 @@ No projeto, abra **Ver minha tela**:
 2. O Estúdio volta à **Prévia**. Enquadre o problema e clique em **Capturar este site**.
 3. Confira a imagem e descreva o que precisa observar. Escolha **Analisar captura**, para receber observações sem alterar os arquivos, ou **Corrigir site com esta captura**, para analisar e pedir uma nova versão do código.
 
-Também pode **Enviar captura** PNG/JPEG até 2 MiB. **Capturar Windows local** usa o servidor do Cronos instalado no próprio Windows; não captura o computador do visitante se o servidor estiver em outra máquina. O compartilhamento pelo navegador depende de suporte e contexto seguro, como localhost/HTTPS, e sempre exige a escolha do usuário.
+Também pode **Enviar captura** PNG/JPEG até 30 MiB. **Capturar Windows local** usa o servidor do Cronos instalado no próprio Windows; não captura o computador do visitante se o servidor estiver em outra máquina. O compartilhamento pelo navegador depende de suporte e contexto seguro, como localhost/HTTPS, e sempre exige a escolha do usuário.
 
 Não há envio contínuo de tela, vídeo ou áudio. Só o quadro confirmado é enviado à integração de visão; pode conter informações de outras janelas, por isso confira o enquadramento. Os pixels não são adicionados aos recursos, ao banco ou à exportação. Somente as observações ficam no projeto, associadas à versão vista. Parar o compartilhamento, fechar o Estúdio ou trocar de projeto/versão encerra a captura local.
 
@@ -94,7 +94,7 @@ Isso não equivale a auditoria de segurança, certificação de acessibilidade o
 
 ## 3D e desempenho
 
-O visualizador é carregado só em projetos com um **GLB 2.0 autocontido**, até 8 MiB, sem extensões obrigatórias, URIs externas ou geometria acima do limite leve. Há rotação, zoom, teclado, restauração da câmera e separação dos objetos existentes. Ele não cria um modelo fiel de um Buds nem inventa componentes internos: um modelo adequado e seus direitos de uso precisam ser fornecidos. Há um modelo ativo por projeto para preservar versões anteriores. Além do GLB, os três modelos procedurais enviados funcionam sem arquivo externo, com bibliotecas locais e controles próprios. Os dois modos não são ativados simultaneamente.
+O visualizador é carregado só em projetos com um **GLB 2.0 autocontido**, até 30 MiB, sem extensões obrigatórias, URIs externas ou geometria acima do limite leve. Há rotação, zoom, teclado, restauração da câmera e separação dos objetos existentes. Ele não cria um modelo fiel de um Buds nem inventa componentes internos: um modelo adequado e seus direitos de uso precisam ser fornecidos. Há um modelo ativo por projeto para preservar versões anteriores. Além do GLB, os três modelos procedurais enviados funcionam sem arquivo externo, com bibliotecas locais e controles próprios. Os dois modos não são ativados simultaneamente.
 
 Three.js fica no recurso do visualizador, fora do carregamento inicial da aplicação. A renderização ocorre por interação/redimensionamento, sem loop contínuo; a densidade de pixels é limitada. A prévia usa tamanho real disponível para manter cliques e leitura. Os testes ajustam a largura do documento para observar celular e desktop. A cena principal pausa durante o estúdio.
 
@@ -148,3 +148,25 @@ A integração completa está documentada em **INTEGRACAO-MISTRAL-3D.md**. As c�
 ## Correção do bloqueio de banco temporário no Windows
 
 O erro `[WinError 32]` em `Temp/cronos-forms-test-*/test.sqlite3` ocorria porque o contexto de transação SQLite não fecha automaticamente a conexão. A verificação de formulários agora fecha explicitamente todas as conexões antes de remover sua pasta temporária. O mesmo fechamento se aplica aos formulários exportados, à leitura dos envios de teste e às transações dos projetos, inclusive em falhas de inicialização, gravação ou conflito. Os testes retêm os objetos de conexão para impedir que a coleta de memória esconda o defeito e verificam o fechamento antes da limpeza. Não é necessário apagar bancos, memórias, projetos ou integrações.
+
+## Compatibilidade e diagnóstico das integrações
+
+O Estúdio solicita um único objeto JSON para código, propostas e análise de tela. Os adaptadores continuam aceitando o envelope antigo, sem exigir JSON escapado dentro de outro JSON. A conversa e a memória mantêm seu formato anterior. Modelos compatíveis que rejeitam explicitamente `response_format` ou `max_tokens` recebem uma requisição corrigida, com no máximo duas negociações de parâmetros; 401, 403, 404 e 429 não repetem essa negociação.
+
+O limite de saída configurado em um adaptador compatível é respeitado. Gemini 2.5 Flash usa orçamento de raciocínio zero nessa tarefa estruturada, deixando a saída disponível para os arquivos. Truncamento, chave rejeitada, modelo ausente, parâmetros incompatíveis e verificação de código recusada aparecem como motivos diferentes. Cada integração ainda depende de chave válida, modelo disponível e cota. Nenhum teste local cria créditos.
+
+Estilos e scripts inline podem ser separados localmente nos três arquivos antes da validação. Essa organização não libera rede, comandos ou execução no computador: o código reorganizado passa pelas mesmas verificações e pela prévia isolada. Projetos rejeitados mantêm sua última versão.
+
+## Pesquisa de cidades com reservas
+
+Uma base local de mais de 5.500 centros municipais brasileiros, com identificação de UF e licença incluída, permite continuar quando o geocodificador externo falha. Nesse caso a pesquisa fica limitada a 15 km do centro e informa essa cobertura. Municípios homônimos exigem UF.
+
+A busca tenta Overpass com POST e GET e uma consulta pontual de estabelecimentos pelo Nominatim como reserva, com limite de até 20 resultados, intervalo entre requisições e cache de 30 minutos. Outros servidores de mapa são tentados se necessário. Não há varredura automática de municípios nem busca contínua ao digitar. Google Places pode ser escolhido explicitamente quando sua chave está configurada; pode consumir cota ou gerar cobrança.
+
+Uma resposta vazia é diferente de uma fonte indisponível. A página mantém a cidade digitada e oferece **Tentar pesquisa novamente**. Dados são sempre atribuídos à fonte pública. Site ausente no cadastro não confirma inexistência de site nem interesse em contratar.
+
+## Uploads de 30 MiB
+
+Fotos, referências, capturas, arquivos de texto/código, ZIP e GLB aceitam até **30 MiB por arquivo** (31.457.280 bytes). O limite de transporte JSON considera a expansão do base64. Imagens são reduzidas a 1600–1800 px e perdem metadados; não são enviadas à IA em resolução integral. Há um limite separado de 40 milhões de pixels para proteger a decodificação. GLB mantém limites de geometria e recursos externos.
+
+ZIP é inspecionado sem executar ou extrair código: até 500 entradas, 90 MiB descompactados e 30 MiB por entrada. Configurações privadas, credenciais e binários são ignorados. A análise textual continua limitada a trechos de até 24 mil caracteres no total e informa truncamento; aceitar 30 MiB não significa enviar o conteúdo inteiro ao modelo.

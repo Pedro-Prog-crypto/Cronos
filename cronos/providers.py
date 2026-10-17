@@ -20,10 +20,12 @@ def record_gemini_error(status,message):
 
 
 class ProviderError(Exception):
-    def __init__(self,message,status=None):
+    def __init__(self,message,status=None,*,kind=None):
         super().__init__(message)
         self.retryable = status in {429, 502, 503, 504}
         self.status=status if status in {429,502,503,504} else 503
+        self.http_status=status if isinstance(status,int) and 400<=status<=599 else None
+        self.kind=kind
 
 
 def quota_details(response):
@@ -110,12 +112,38 @@ def parse_completed_reply(raw: str) -> dict:
         raise ProviderError('O modelo enviou uma resposta incompleta ou inválida. Nenhuma ferramenta foi executada.',502) from None
 
 
+STRUCTURED_RULES = 'Retorne somente o objeto JSON solicitado pelo sistema. Sem envelope de conversa, memória ou ferramentas; sem Markdown.'
+
+
+def parse_structured_reply(raw):
+    """Studio accepts a direct object or the older conversation envelope locally."""
+    if not isinstance(raw,str):raise ProviderError('Resposta estruturada sem texto.',502,kind='format')
+    text=re.sub(r'^```(?:json)?\s*|\s*```$','',raw.strip(),flags=re.I)
+    try:
+        value=json.loads(text)
+        if not isinstance(value,dict) or value.get('tool_calls') not in (None,[]):raise ValueError()
+        if isinstance(value.get('reply'),str):return parse_completed_reply(text)
+        if isinstance(value.get('reply'),dict):
+            value=value['reply']
+            if value.get('tool_calls') not in (None,[]):raise ValueError()
+        if not any(key in value for key in ('files','directions','issues')):raise ValueError()
+        return {'reply':json.dumps(value,ensure_ascii=False),'tool_calls':[],'topics':[]}
+    except (ValueError,TypeError):
+        raise ProviderError('A integração retornou JSON incompleto ou sem o objeto solicitado.',502,kind='format') from None
+
+
 class Gemini:
     cooldowns = {}
     def __init__(self, settings: Settings):
         self.settings = settings
 
     async def reply(self, system, messages):
+        return await self._reply(system,messages)
+
+    async def reply_structured(self, system, messages):
+        return await self._reply(system,messages,structured=True)
+
+    async def _reply(self, system, messages, *, structured=False):
         if self.settings.privacy_mode != 'online':
             raise ProviderError("Modo local: Gemini está desabilitado. Selecione um modelo Ollama local.")
         key = self.settings.gemini_key.strip()
@@ -138,11 +166,12 @@ class Gemini:
                         f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
                         headers={"x-goog-api-key": key},
                         json={
-                            "systemInstruction": {"parts": [{"text": system + "\n" + OUTPUT_RULES}]},
+                            "systemInstruction": {"parts": [{"text": system + "\n" + (STRUCTURED_RULES if structured else OUTPUT_RULES)}]},
                             "contents": [{"role": "model" if m["role"] == "assistant" else "user",
                                           "parts": [{"text": m["content"]}] + ([{"inlineData": {"mimeType": m["image"]["mime_type"], "data": m["image"]["data"]}}] if m.get("image") else [])} for m in messages],
                             "generationConfig": {"responseMimeType": "application/json",
-                                                 **({"maxOutputTokens": self.settings.output_tokens} if self.settings.output_tokens else {})},
+                                                 **({"maxOutputTokens": self.settings.output_tokens} if self.settings.output_tokens else {}),
+                                                 **({"thinkingConfig":{"thinkingBudget":0}} if structured and model.startswith("gemini-2.5-flash") else {})},
                         },
                     )
                     try:metadata=response.json().get('usageMetadata',{})
@@ -162,9 +191,9 @@ class Gemini:
                     raise ProviderError("Gemini não retornou uma resposta. Tente uma mensagem curta de teste.")
                 candidate = candidates[0]
                 if candidate.get("finishReason") == "MAX_TOKENS":
-                    raise ProviderError("Gemini atingiu o limite de saída. Reduza a mensagem ou o contexto da conversa.")
+                    raise ProviderError("Gemini atingiu o limite de saída. Reduza a mensagem ou o contexto da conversa.",502,kind="output_limit")
                 raw = "".join(p.get("text", "") for p in candidate["content"]["parts"])
-                try:return parse_completed_reply(raw)
+                try:return parse_structured_reply(raw) if structured else parse_completed_reply(raw)
                 except ProviderError as exc:
                     record_gemini_error(502,str(exc))
                     raise
@@ -220,6 +249,12 @@ class Ollama:
         self.settings = settings
 
     async def reply(self, system, messages):
+        return await self._reply(system,messages)
+
+    async def reply_structured(self, system, messages):
+        return await self._reply(system,messages,structured=True)
+
+    async def _reply(self, system, messages, *, structured=False):
         from cronos.integrations import checked_url
         from cronos.security import local_endpoint, SecurityError
         base = checked_url(self.settings.ollama_url)
@@ -233,12 +268,12 @@ class Ollama:
                 response = await client.post(base + "/api/chat", json={
                     "model": self.settings.ollama_model, "stream": False, "format": "json",
                     **({"options": {"num_predict": self.settings.output_tokens}} if self.settings.output_tokens else {}),
-                    "messages": [{"role": "system", "content": system + "\n" + OUTPUT_RULES},
+                    "messages": [{"role": "system", "content": system + "\n" + (STRUCTURED_RULES if structured else OUTPUT_RULES)},
                                  *[{k: v for k, v in message.items() if k != 'image'} |
                                    ({'images': [message['image']['data']]} if message.get('image') else {}) for message in messages]],
                 })
                 response.raise_for_status()
-                return parse_completed_reply(response.json()["message"]["content"])
+                return (parse_structured_reply if structured else parse_completed_reply)(response.json()["message"]["content"])
         except (httpx.HTTPError, KeyError, ValueError) as exc:
             raise ProviderError("Ollama indisponível; confira o serviço e o modelo instalado.") from exc
 

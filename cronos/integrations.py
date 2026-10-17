@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
-from cronos.providers import Gemini, Ollama, OUTPUT_RULES, ProviderError, parse_completed_reply
+from cronos.providers import Gemini, Ollama, OUTPUT_RULES, ProviderError, parse_completed_reply, parse_structured_reply, STRUCTURED_RULES
 
 
 class ProviderSpec(BaseModel):
@@ -56,6 +56,12 @@ class CompatibleProvider:
         self.spec = spec
 
     async def reply(self, system, messages):
+        return await self._reply(system,messages)
+
+    async def reply_structured(self, system, messages):
+        return await self._reply(system,messages,structured=True)
+
+    async def _reply(self, system, messages, *, structured=False):
         spec = self.spec
         key = os.getenv(spec.key_env, "").strip() if spec.key_env else ""
         if spec.key_env and not key:
@@ -80,18 +86,32 @@ class CompatibleProvider:
             path = "/messages"
             headers = {"x-api-key": key, "anthropic-version": "2023-06-01"}
             payload = {"model": spec.model, "max_tokens": spec.max_output_tokens or 8192,
-                       "system": system + "\n" + OUTPUT_RULES, "messages": wire_messages}
+                       "system": system + "\n" + (STRUCTURED_RULES if structured else OUTPUT_RULES), "messages": wire_messages}
         else:
             path = "/chat/completions"
             headers = {"Authorization": "Bearer " + key} if key else {}
             payload = {"model": spec.model,
-                       "messages": [{"role": "system", "content": system + "\n" + OUTPUT_RULES}, *wire_messages],
+                       "messages": [{"role": "system", "content": system + "\n" + (STRUCTURED_RULES if structured else OUTPUT_RULES)}, *wire_messages],
                        "response_format": {"type": "json_object"}}
             if spec.max_output_tokens:
                 payload["max_tokens"] = spec.max_output_tokens
         try:
             async with httpx.AsyncClient(timeout=spec.timeout_seconds) as client:
                 response = await client.post(base + path, headers=headers, json=payload)
+                # Some compatible APIs reject JSON mode or the legacy token field.
+                # Negotiate only an explicit unsupported parameter on HTTP 400/422.
+                for _ in range(2):
+                    if not structured or response.status_code not in {400,422}:break
+                    try:
+                        error=response.json().get('error',{});error=json.dumps(error).lower()
+                    except (ValueError,TypeError):break
+                    unsupported=any(term in error for term in ('unsupported','not supported','not allowed','unknown parameter','unrecognized','does not support'))
+                    if not unsupported:break
+                    if 'response_format' in error and 'response_format' in payload:payload.pop('response_format')
+                    elif 'max_tokens' in error and 'max_tokens' in payload:payload['max_completion_tokens']=payload.pop('max_tokens')
+                    else:break
+                    await response.aclose()
+                    response=await client.post(base+path,headers=headers,json=payload)
                 response.raise_for_status()
                 data = response.json()
                 if spec.kind == "anthropic":
@@ -99,7 +119,9 @@ class CompatibleProvider:
                     raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip())
                 else:
                     raw = data["choices"][0]["message"]["content"]
-                return parse_completed_reply(raw)
+                finish=data.get('stop_reason') if spec.kind=='anthropic' else data['choices'][0].get('finish_reason')
+                if structured and finish in {'length','max_tokens'}:raise ProviderError('O modelo atingiu o limite de saída do código.',502,kind='output_limit')
+                return (parse_structured_reply if structured else parse_completed_reply)(raw)
         except httpx.HTTPStatusError as exc:
             status = exc.response.status_code
             reason = {401: "chave rejeitada", 403: "acesso negado", 404: "modelo ou endpoint indisponível",

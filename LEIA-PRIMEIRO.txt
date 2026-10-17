@@ -26,6 +26,9 @@ ESTUDIO REORGANIZADO
 A tela Inicio separa criar com IA, encontrar negocios e retomar projetos.
 Em Oportunidades, pesquise e clique em Criar proposta com IA no negocio escolhido.
 So esse clique inicia ideias, imagens opcionais, construcao e verificacoes. Pode consumir cota das APIs.
-Clicar novamente reabre a proposta salva. Os modelos enviados continuam em Modelos prontos, sem IA.
+Clicar novamente reabre a proposta salva. Modelos prontos mostra novos estudos de composição, sem IA. Os antigos estão na opção Arquivos originais recebidos.
 A criacao autonoma compara a estrutura com projetos recentes; repetir apenas com outras cores, textos ou imagens gera um pedido de correcao. Isso nao certifica qualidade artistica ou exclusividade mundial.
 As reservas de IA acompanham as etapas. Suas APIs e memorias continuam na instalacao anterior.
+
+NOVO: fotos, ZIP, texto/código e GLB aceitam até 30 MiB por arquivo.
+Imagens são reduzidas; ZIP e textos grandes têm limites de análise descritos em docs/STUDIO_DE_SITES.md.

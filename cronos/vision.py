@@ -4,17 +4,19 @@ import io
 import warnings
 
 from PIL import Image, UnidentifiedImageError
+from cronos.upload_limits import MAX_UPLOAD_BYTES,MAX_IMAGE_PIXELS
 
 
 def normalize_image(raw):
-    if not raw or len(raw) > 2 * 1024 * 1024:
-        raise ValueError("Envie PNG/JPEG de até 2 MiB.")
+    if not raw or len(raw) > MAX_UPLOAD_BYTES:
+        raise ValueError("Envie PNG/JPEG de até 30 MiB.")
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("error", Image.DecompressionBombWarning)
             with Image.open(io.BytesIO(raw)) as image:
-                if image.format not in {"PNG", "JPEG"} or image.width * image.height > 6_000_000:
-                    raise ValueError("Use PNG/JPEG com até seis milhões de pixels.")
+                if image.format not in {"PNG", "JPEG"} or image.width * image.height > MAX_IMAGE_PIXELS:
+                    raise ValueError("Use PNG/JPEG com até 40 milhões de pixels.")
+                if image.format=="JPEG":image.draft("RGB",(1600,1600))
                 image.load()
                 image.thumbnail((1600, 1600))
                 # Remove EXIF/metadados; nenhuma imagem é gravada no disco.

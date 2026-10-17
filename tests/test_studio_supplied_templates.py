@@ -50,7 +50,7 @@ def test_full_catalog_has_all_source_references_prices_images_and_palettes():
 @pytest.mark.parametrize('identifier', list(REFERENCE_SITES))
 def test_every_reference_builds_a_complete_valid_site(identifier):
     ref = REFERENCE_SITES[identifier]
-    files = template_site(ref.category, 'Negócio de teste', reference=identifier)
+    files = template_site(ref.category, 'Negócio de teste', reference=identifier,design='supplied')
     report = validate(files)
     assert report['passed'], report['checks']
     assert len(files) == 3 and 'data-studio-form="contact"' in files['index.html']
@@ -84,7 +84,7 @@ def test_four_price_tiers_and_category_estimates_are_explicit_and_consistent():
     assert (quote('imobiliaria','Site 3D')['min'],quote('imobiliaria','Site 3D')['max']) == (7000,15000)
     assert get_reference_site('hotel')['name'] == 'Hotel Standard'
     assert not quote('personalizado','Loja de vasos',tier='economy')['has_3d']
-    assert 'R$1.000–R$4.000' in template_site('restaurante','Teste',tier='standard',template='standard')['index.html']
+    assert 'R$1.000–R$4.000' in template_site('restaurante','Teste',tier='standard',template='standard',design='supplied')['index.html']
 
 
 def test_all_three_complete_procedural_models_and_generator_methods_remain_available(tmp_path):
@@ -168,7 +168,7 @@ def test_local_mode_does_not_load_the_reference_photos(settings):
         listing=client.get('/studio/catalog',headers=AUTH).json()
         assert not any(c['remote_images'] for c in listing['categories'])
         assert all(not ref['remote_images'] for c in listing['categories'] for ref in c['references'])
-        item=new(client,category='restaurante')
+        item=new(client,category='restaurante',design='supplied')
         preview=client.post('/studio/projects/'+item['id']+'/preview',headers=AUTH,json={}).json()
         response=client.get(preview['url'])
         assert 'https://images.unsplash.com' not in response.headers['content-security-policy']
