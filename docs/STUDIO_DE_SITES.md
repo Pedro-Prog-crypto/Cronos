@@ -218,4 +218,3 @@ fonte de áudio/vídeo e seletor de compartilhamento de teste. Houve reproduçã
 real de WAV/MP4 no Chromium e passagem pelo backend autenticado. As contas
 Gemini/Fish do usuário, as fontes externas e o Windows físico não foram testados
 neste ambiente. As tentativas externas foram bloqueadas pelo proxy da nuvem.
-
