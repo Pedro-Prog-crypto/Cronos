@@ -1,4 +1,4 @@
-"""Public music catalog and an internal, official YouTube player."""
+"""Public music metadata and direct audio/video playback inside Cronos."""
 import json
 import asyncio
 import threading
@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse
 from pathlib import Path
 
 METADATA_LOCK=threading.BoundedSemaphore(1)
+SEARCH_LOCK=threading.BoundedSemaphore(1)
 CACHE={}
 
 VIDEO = re.compile(r'^[A-Za-z0-9_-]{11}$')
@@ -77,7 +78,7 @@ class QuietLogger:
 def metadata_search(query):
     # Same search library as the original assistant, metadata only: no download,
     # no cookies, no extraction of restricted streams and no browser subprocess.
-    if not METADATA_LOCK.acquire(blocking=False):return []
+    if not SEARCH_LOCK.acquire(blocking=False):return []
     try:
         import yt_dlp
         options={'quiet':True,'no_warnings':True,'skip_download':True,'extract_flat':True,
@@ -90,7 +91,7 @@ def metadata_search(query):
             if VIDEO.fullmatch(ident):tracks.append({'id':ident,'title':str(item.get('title') or 'Vídeo do YouTube')[:250]})
             if len(tracks)>=8:break
         return tracks
-    finally:METADATA_LOCK.release()
+    finally:SEARCH_LOCK.release()
 
 
 CATALOG_LOCK=threading.BoundedSemaphore(1)
@@ -190,12 +191,16 @@ def select_media(info,clip):
     audios.sort(key=lambda f:(f.get('language_preference') or 0,f.get('ext')=='m4a',0<(f.get('abr') or 0)<=160,f.get('abr') or 0),reverse=True)
     combined=[f for f in formats if has(f,'acodec') and has(f,'vcodec') and 0<(f.get('height') or 0)<=480 and (f.get('fps') or 30)<=30]
     combined.sort(key=lambda f:(f.get('language_preference') or 0,f.get('ext')=='mp4',str(f.get('vcodec','')).startswith('avc'),f.get('height') or 0),reverse=True)
-    videos=[f for f in formats if has(f,'vcodec') and not has(f,'acodec') and 0<(f.get('height') or 0)<=480 and (f.get('fps') or 30)<=30 and not str(f.get('vcodec','')).startswith('av01')]
+    videos=[f for f in formats if has(f,'vcodec') and not has(f,'acodec') and 0<(f.get('height') or 0)<=1440 and (f.get('fps') or 30)<=30 and not str(f.get('vcodec','')).startswith('av01')]
     videos.sort(key=lambda f:(f.get('ext')=='mp4',str(f.get('vcodec','')).startswith('avc'),f.get('height') or 0),reverse=True)
     if not clip and (audios or combined):
         return {'audio_url':(audios or combined)[0]['url'],'video_url':None,'title':str(info.get('title') or 'Música')[:250]}
-    if combined:return {'video_url':combined[0]['url'],'audio_url':None,'title':str(info.get('title') or 'Clipe')[:250]}
-    if videos and audios:return {'video_url':videos[0]['url'],'audio_url':audios[0]['url'],'title':str(info.get('title') or 'Clipe')[:250]}
+    if combined or (videos and audios):
+        choices={int(f['height']):{'height':int(f['height']),'video_url':f['url'],'audio_url':None} for f in reversed(combined)}
+        for f in sorted(videos,key=lambda f:(f.get('ext')=='mp4',str(f.get('vcodec','')).startswith('avc')),reverse=True):
+            if audios:choices.setdefault(int(f['height']),{'height':int(f['height']),'video_url':f['url'],'audio_url':audios[0]['url']})
+        preferred=max((h for h in choices if h<=480),default=min(choices))
+        return {**choices[preferred],'qualities':[choices[h] for h in sorted(choices)],'title':str(info.get('title') or 'Clipe')[:250]}
     raise ValueError('A fonte não forneceu um formato de áudio/vídeo compatível com o player interno.')
 
 
@@ -213,23 +218,27 @@ def resolve_native(ident,clip):
 
 
 def install_native_music(app,authenticate):
+    from cronos.media_streams import MediaTickets
+    tickets=MediaTickets();tickets.install(app)
+    app.state.media_tickets=tickets
     @app.get('/music/player',include_in_schema=False)
     async def player():
         if app.state.engine.settings.privacy_mode=='local':raise HTTPException(403,'Música online está desativada no modo local.')
         return FileResponse(Path(__file__).parent/'static'/'music-player.html')
 
     @app.get('/music/resolve',dependencies=[Depends(authenticate)])
-    async def resolve(id:str=Query(pattern=r'^[A-Za-z0-9_-]{11}$'),video:bool=False,native:bool=True):
+    async def resolve(id:str=Query(pattern=r'^[A-Za-z0-9_-]{11}$'),video:bool=False,native:bool=True,refresh:bool=False):
         if app.state.engine.settings.privacy_mode=='local':raise HTTPException(403,'Música online está desativada no modo local.')
         # Match the original native media approach; embedding is never a
         # fallback for resolution failure. The legacy route is opt-in only.
         if not native:return {'player':'official','id':id,'video':video}
         key=(id,video);cached=MEDIA_CACHE.get(key)
-        if cached and time.monotonic()-cached[0]<240:return cached[1]
-        try:result=await asyncio.wait_for(asyncio.to_thread(resolve_native,id,video),25)
+        try:result=cached[1] if not refresh and cached and time.monotonic()-cached[0]<240 else await asyncio.wait_for(asyncio.to_thread(resolve_native,id,video),90)
         except RuntimeError as exc:raise HTTPException(409,str(exc)) from None
         except ValueError as exc:raise HTTPException(502,str(exc)) from None
         except Exception:raise HTTPException(502,'Não consegui preparar o fluxo de mídia. Confira a instalação de yt-dlp, a conexão e a disponibilidade do vídeo. Nenhuma aba externa foi aberta.') from None
         if len(MEDIA_CACHE)>=8:MEDIA_CACHE.pop(next(iter(MEDIA_CACHE)))
         MEDIA_CACHE[key]=(time.monotonic(),result)
-        return result
+        def wire(value):
+            return {k:tickets.issue(v) if k in {'audio_url','video_url'} and v else v for k,v in value.items() if k!='qualities'}
+        return {**wire(result),'qualities':[wire(q) for q in result.get('qualities',[])]}

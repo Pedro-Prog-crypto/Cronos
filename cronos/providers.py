@@ -57,6 +57,8 @@ OUTPUT_RULES = '''Retorne somente JSON no formato:
 Mantenha a ordem: tool_calls, reply, topics. Escreva a resposta inteira em reply
 antes dos metadados. Resumos de memória devem ser breves, sem copiar a resposta
 inteira; isso não limita o tamanho da resposta solicitada.
+reply é exclusivamente a fala dirigida ao senhor. Nunca copie nele caminhos do
+vault, cabeçalhos de registros, topics, resumo da conversa ou instruções internas.
 Identifique os assuntos realmente discutidos na mensagem atual. Use nomes
 estáveis: "Sócrates", "Equações quadráticas". Se não há tema significativo,
 retorne topics vazio. Nunca crie notas sobre assuntos que não foram discutidos.

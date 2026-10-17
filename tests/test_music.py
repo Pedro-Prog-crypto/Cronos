@@ -178,7 +178,7 @@ def test_native_playback_is_default_and_failures_never_embed(settings,monkeypatc
     monkeypatch.setattr('cronos.music.resolve_native',resolve)
     with TestClient(create_app(settings)) as client:
         result=client.get('/music/resolve?id=abcdefghijk&video=true',headers=AUTH)
-        assert result.status_code==200 and result.json()['video_url'].endswith('/clip')
+        assert result.status_code==200 and result.json()['video_url'].startswith('/media/stream/')
         assert 'player' not in result.json() and calls==[('abcdefghijk',True)]
         MEDIA_CACHE.clear()
         def broken(*args):raise ValueError('Fonte indisponível')

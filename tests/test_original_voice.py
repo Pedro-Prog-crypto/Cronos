@@ -58,7 +58,7 @@ def test_local_recognizer_reuses_model_and_decodes_pcm(monkeypatch):
     monkeypatch.setattr('cronos.recognition.wake.verify_model',lambda:Path('local-model'))
     output=io.BytesIO()
     with wave.open(output,'wb') as writer:
-        writer.setnchannels(1);writer.setsampwidth(2);writer.setframerate(16000);writer.writeframes(b'\0\0'*1600)
+        writer.setnchannels(1);writer.setsampwidth(2);writer.setframerate(16000);writer.writeframes(b'\x00\x02'*1600)
     service=LocalRecognizer()
     service.prepare()
     assert service.transcribe(output.getvalue())=='abrir cronos'
@@ -80,7 +80,7 @@ def test_unclear_local_speech_is_not_sent_as_a_guessed_question(monkeypatch,text
     monkeypatch.setattr('cronos.recognition.wake.verify_model',lambda:Path('local-model'))
     output=io.BytesIO()
     with wave.open(output,'wb') as writer:
-        writer.setnchannels(1);writer.setsampwidth(2);writer.setframerate(16000);writer.writeframes(b'\0\0'*1600)
+        writer.setnchannels(1);writer.setsampwidth(2);writer.setframerate(16000);writer.writeframes(b'\x00\x02'*1600)
     with pytest.raises(ValueError,match='não foi enviada à IA'):LocalRecognizer().transcribe(output.getvalue())
 
 

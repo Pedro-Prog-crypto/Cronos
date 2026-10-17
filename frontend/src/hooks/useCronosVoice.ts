@@ -2,6 +2,7 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 import {api,getToken} from '../api';
 import {routeVoiceOutput} from '../audio/outputDevice';
 import {playPCM} from '../audio/playPCM';
+import {spokenText} from '../audio/spokenText';
 import captureWorkletUrl from '../audio/capture.worklet.js?worker&url';
 import vadWasmUrl from '@echogarden/fvad-wasm/fvad.wasm?url';
 import {createSpeechDetector} from '../audio/speechDetector.js';
@@ -58,7 +59,7 @@ export function useCronosVoice({preferences,streaming,onSpeechStart,onSpeechEnd,
     audioLevelSource.current=0;setIsSpeaking(false);setIsGenerating(false);callbacks.current.onSpeechEnd?.();
   },[]);
   const speak=useCallback(async(text:string,turn_id?:string,continuation?:Promise<string>,completeFile=false)=>{
-    stop();const current=generation.current;setIsGenerating(true);
+    text=spokenText(text);stop();if(!text)return;const current=generation.current;setIsGenerating(true);
     try {
       if((prefs.current?.voice_volume??1)<=0)throw new Error('O volume da voz está em zero. Aumente no painel Síntese de voz e tente novamente.');
       // Web Audio ativado no gesto do usuário; nunca simular fala se houver falha.
@@ -73,7 +74,7 @@ export function useCronosVoice({preferences,streaming,onSpeechStart,onSpeechEnd,
       // Start the next synthesis as soon as the final reply arrives, while
       // the introduction is still playing. Keep one playback/cancellation session.
       let tail=continuation?.then(rest=>{
-        const parts=speechChunks(rest,360);
+        const parts=speechChunks(spokenText(rest),360);
         return {parts,first:parts.length?fetchChunk(parts[0]):null};
       });
       const waitTail=async()=>{

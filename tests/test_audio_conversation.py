@@ -12,7 +12,7 @@ from test_backend import settings,AUTH
 def wav():
     out=io.BytesIO()
     with wave.open(out,'wb') as w:
-        w.setnchannels(1);w.setsampwidth(2);w.setframerate(16000);w.writeframes(b'\x00\x00'*3200)
+        w.setnchannels(1);w.setsampwidth(2);w.setframerate(16000);w.writeframes(b'\x00\x02'*3200)
     return out.getvalue()
 
 
@@ -21,7 +21,7 @@ def test_audio_is_recognized_and_answered_once_and_actual_question_is_saved(sett
         calls=0
         async def reply(self,system,messages):
             self.calls+=1
-            assert messages[-1]['audio_pcm']==b'\0\0'*3200
+            assert messages[-1]['audio_pcm']==b'\x00\x02'*3200
             return {'recognized_text':'Quem foi Sócrates?','reply':'Sócrates foi um filósofo grego.','topics':[{'title':'Sócrates','summary':'Filósofo grego.'}],'tool_calls':[]}
     provider=Provider()
     with TestClient(create_app(replace(settings,gemini_transport='live'),provider)) as client:

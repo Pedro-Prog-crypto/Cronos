@@ -1,5 +1,6 @@
 """Cinemeta metadata and a narrow, validated link to the user's installed Stremio."""
 import json
+import asyncio
 import os
 import re
 import sys
@@ -30,6 +31,41 @@ class Selection(BaseModel):
     kind:Literal['movie','series']='movie'
     season:int|None=Field(default=None,ge=0,le=200)
     episode:int|None=Field(default=None,ge=1,le=20000)
+
+
+class Streams(Selection):
+    # A standard Stremio addon manifest explicitly supplied by the user. No
+    # account, cookie, browser history or installed-addon credentials are read.
+    addon:str=Field(min_length=12,max_length=2000)
+
+
+async def addon_streams(body):
+    from cronos.studio.network import public_fetch,public_target
+    parsed,_,_,_=await asyncio.to_thread(public_target,body.addon)
+    if parsed.scheme!='https' or not parsed.path.endswith('/manifest.json') or parsed.query or parsed.fragment:
+        raise ValueError('Cole o endereço HTTPS do manifest.json de um complemento que ofereça mídia autorizada.')
+    if body.kind=='series' and (body.season is None or body.episode is None):
+        raise ValueError('Escolha temporada e episódio para consultar as fontes da série.')
+    ident=body.id if body.kind=='movie' else f'{body.id}:{body.season}:{body.episode}'
+    link=body.addon[:-len('/manifest.json')]+f'/stream/{body.kind}/{quote(ident,safe="")}.json'
+    response=await asyncio.to_thread(public_fetch,link,max_bytes=1_000_000,accept='application/json')
+    if response['status']!=200:raise ValueError('O complemento não conseguiu fornecer fontes para este título.')
+    try:data=json.loads(response['body'])
+    except (ValueError,TypeError):raise ValueError('O complemento não retornou uma lista de fontes válida.') from None
+    if not isinstance(data,dict) or not isinstance(data.get('streams'),list):raise ValueError('Lista de fontes inválida.')
+    items=[]
+    for source in data['streams'][:30]:
+        if not isinstance(source,dict):continue
+        url=source.get('url')
+        if not isinstance(url,str):continue  # Torrents/external-page links require the Stremio app.
+        try:
+            p,_,_,_=await asyncio.to_thread(public_target,url,max_length=16000)
+            if p.scheme!='https':continue
+        except ValueError:continue
+        items.append({'name':str(source.get('name') or 'Fonte direta')[:100],
+                      'title':str(source.get('title') or 'Reproduzir aqui')[:250],'url':url})
+        if len(items)>=8:break
+    return items
 
 
 def protocol_registered(platform=None):
@@ -103,8 +139,17 @@ def install_stremio(app,authenticate):
     auth=[Depends(authenticate)]
     @app.get('/stremio/status',dependencies=auth)
     async def status():
-        return {'protocol_registered':protocol_registered(app.state.windows.platform),'internal_player':False,
+        return {'protocol_registered':protocol_registered(app.state.windows.platform),'internal_player':True,'requires_direct_source':True,
                 'scope':'Abre títulos e episódios no Stremio instalado, sem ler conta, senha ou lista de complementos.'}
+    @app.post('/stremio/streams',dependencies=auth)
+    async def streams(body:Streams):
+        if app.state.engine.settings.privacy_mode!='online' or not app.state.panels.preferences.web_enabled:
+            raise HTTPException(403,'Consulta online desativada nas permissões.')
+        try:items=await addon_streams(body)
+        except (ValueError,OSError) as exc:
+            raise HTTPException(502,'Não foi possível obter fontes. Confira o manifest.json e o acesso ao complemento. Nenhuma conta ou chave foi alterada.') from None
+        return {'streams':[{'name':i['name'],'title':i['title'],'url':app.state.media_tickets.issue(i['url'])} for i in items],
+                'message':None if items else 'Este complemento não forneceu mídia HTTPS direta compatível. Fontes torrent, páginas externas ou conteúdo protegido precisam do aplicativo Stremio.'}
     @app.post('/stremio/search',dependencies=auth)
     async def catalog(body:Search):
         if app.state.engine.settings.privacy_mode!='online':raise HTTPException(403,'Catálogo online desativado no modo local.')

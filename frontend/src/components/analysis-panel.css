@@ -20,3 +20,4 @@
 .analysis-panel[data-panning=true]{user-select:none;cursor:grabbing}
 
 .analysis-panel.kind-document{left:8%;right:auto}
+.reference-screen{position:fixed;z-index:30;bottom:24px;left:calc(50% + 84px);width:36px;height:36px;display:grid;place-items:center;border:1px solid #31ddff;border-radius:50%;color:#7aeaff;background:#031823d9}.reference-screen:hover{box-shadow:0 0 12px #1bd9ff70}.analysis-panel.kind-screen{left:auto;right:8%}

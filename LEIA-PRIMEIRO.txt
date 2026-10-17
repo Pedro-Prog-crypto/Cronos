@@ -1,5 +1,11 @@
 CRONOS COMPLETO — UM PACOTE
 
+NESTA ATUALIZACAO
+Ver minha tela fica ao lado do microfone: compartilhe uma janela, confira a captura e clique em Analisar. Depois converse sobre ela; mudancas na tela precisam de nova captura.
+A voz filtra caminhos, codigo e rodapes de memoria. A captura de pergunta e bloqueada enquanto musica/video toca; clicar no microfone pausa a midia para conversar.
+O player de musica oferece nova tentativa apos falha. No Stremio, reproducao interna precisa de uma fonte HTTPS direta de um complemento fornecido pelo senhor; o catalogo sozinho nao fornece videos nem importa sua conta.
+APIs, memorias, integracoes, projetos e o limite de 30 MiB continuam preservados.
+
 1. Extraia TODO o ZIP.
 2. Abra ABRIR-CRONOS.bat.
 

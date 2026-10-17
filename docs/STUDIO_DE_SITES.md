@@ -170,3 +170,52 @@ Uma resposta vazia é diferente de uma fonte indisponível. A página mantém a 
 Fotos, referências, capturas, arquivos de texto/código, ZIP e GLB aceitam até **30 MiB por arquivo** (31.457.280 bytes). O limite de transporte JSON considera a expansão do base64. Imagens são reduzidas a 1600–1800 px e perdem metadados; não são enviadas à IA em resolução integral. Há um limite separado de 40 milhões de pixels para proteger a decodificação. GLB mantém limites de geometria e recursos externos.
 
 ZIP é inspecionado sem executar ou extrair código: até 500 entradas, 90 MiB descompactados e 30 MiB por entrada. Configurações privadas, credenciais e binários são ignorados. A análise textual continua limitada a trechos de até 24 mil caracteres no total e informa truncamento; aceitar 30 MiB não significa enviar o conteúdo inteiro ao modelo.
+# Conversa, visão e reprodução de mídia
+
+A atualização mantém os uploads de 30 MiB, APIs cadastradas, personalidade,
+projetos e memória. Não apaga notas antigas que possam conter um erro de IA.
+
+No palco principal, **Ver minha tela** fica ao lado do microfone. O comando
+“Cronos, veja minha tela” abre o mesmo painel. Clique em Compartilhar tela,
+escolha uma janela/aba, confira o quadro e clique em Analisar. Só esse quadro
+é enviado à integração de visão disponível, sem áudio nem vídeo contínuo.
+As observações ficam por dez minutos na RAM, associadas à conversa atual;
+os pixels não são salvos. Perguntas seguintes podem consultar essa observação,
+mas mudanças na tela exigem nova captura. Fechar o painel encerra o compartilhamento.
+O Estúdio continua com seu próprio fluxo de captura e correção de versão.
+
+A síntese recebe texto limpo antes da divisão em trechos: blocos de código,
+URLs, prefixos de caminhos e rodapés identificados como memória não são lidos.
+Código solicitado permanece visível. Registros antigos continuam preservados;
+resumos da IA não devem ser apresentados como prova do que o senhor disse.
+Silêncio digital é rejeitado antes de chamar a IA. Isso não identifica pessoas
+nem distingue com certeza uma voz real de um diálogo da televisão.
+
+Músicas usam áudio/vídeo direto no player do Cronos. A busca de metadados tem
+seu próprio bloqueio e não impede resolver a faixa encontrada por outra fonte.
+O navegador recebe um endereço temporário local, com suporte a busca de posição,
+sem iframe ou abertura externa automática. Há nova tentativa para fluxo expirado.
+O seletor de resolução mostra apenas os formatos entregues pela fonte, começando
+por até 480p quando disponível. Não há conversão de vídeo em tempo real.
+Falhas do catálogo, exigência de autenticação, DRM ou indisponibilidade do
+provedor continuam podendo impedir uma reprodução.
+
+Enquanto música/vídeo está tocando, o áudio captado não é enviado como pergunta.
+Clicar no microfone pausa a reprodução para conversar; F4 mantém o controle
+de ligar/desligar o microfone. A palavra de interrupção também pausa a mídia.
+O detector de palavra depende do modelo português local já instalado.
+
+O painel Stremio permite escolher título/episódio e abrir explicitamente o app
+instalado, ou consultar um complemento cujo endereço HTTPS `manifest.json`
+seja fornecido pelo senhor. Fontes HTTPS diretas compatíveis podem ser tocadas
+dentro do Cronos. A conta e os complementos instalados não são importados
+automaticamente; o endereço fornecido fica somente nessa sessão. Torrents,
+páginas externas, HLS que o navegador não suporte e conteúdo protegido exigem
+o aplicativo ou outra fonte compatível. O catálogo Cinemeta não é uma fonte de vídeo.
+
+Validação desta atualização: testes de backend e navegador com IA, catálogo,
+fonte de áudio/vídeo e seletor de compartilhamento de teste. Houve reprodução
+real de WAV/MP4 no Chromium e passagem pelo backend autenticado. As contas
+Gemini/Fish do usuário, as fontes externas e o Windows físico não foram testados
+neste ambiente. As tentativas externas foram bloqueadas pelo proxy da nuvem.
+

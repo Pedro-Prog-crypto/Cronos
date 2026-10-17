@@ -1,7 +1,7 @@
 import {UpdateNotice} from './components/UpdateNotice';
 /** @license SPDX-License-Identifier: Apache-2.0 */
 import React,{Suspense,lazy,useCallback,useEffect,useRef,useState} from 'react';
-import {Mic,X,Send,ImagePlus,FileArchive,Code2} from 'lucide-react';
+import {Mic,X,Send,ImagePlus,FileArchive,Code2,MonitorUp} from 'lucide-react';
 import {IntegratedNeuralStage} from './components/IntegratedNeuralStage';
 import {useCronosVoice,useMicrophone} from './hooks/useCronosVoice';
 import {api,jsonApi,getToken,onConnection,ApiError,streamChat} from './api';
@@ -51,6 +51,8 @@ export default function App(){
   const sendRef=useRef<(text:string,audio?:Blob)=>Promise<void>>(async()=>{});
   const commandRef=useRef<(text:string)=>boolean>(()=>false),eyeAnnouncement=useRef(false);
   const music=useRef<MusicHandle>(null);
+  const [musicPlaying,setMusicPlaying]=useState(false),[filmPlaying,setFilmPlaying]=useState(false);
+  const mediaPlaying=musicPlaying||filmPlaying;
   const [stremio,setStremio]=useState<StremioRequest|null>(null);
   const studioHandle=useRef<SiteStudioHandle>(null);
   const [studio,setStudio]=useState<{brief:string;request:number}|null>(null);
@@ -63,7 +65,7 @@ export default function App(){
   const saveLatency=useCallback((value:any)=>{const {started,armed,...metrics}=value;void jsonApi('/panels/latency',metrics).catch(()=>{});},[]);
   const tell=useCallback((message:string,isError=false)=>{setNotice(message);setError(isError);},[]);
   const voice=useCronosVoice({preferences:panelPrefs,streaming:Boolean(config?.fish_pcm_streaming),onSpeechStart:metrics=>{const current=latency.current;if(current?.armed&&metrics?.turn_id===current.turn_id){current.armed=false;saveLatency({...current,...metrics,first_audio_ms:Math.round(performance.now()-current.started)});}},onError:message=>{if(latency.current)latency.current.armed=false;tell(message,true);}});
-  const microphone=useMicrophone(useCallback((text,metrics)=>{recognition.current=metrics;if(!text.trim()){tell('Não consegui entender a fala. Tente novamente.',true);return;}if(commandRef.current(text))return;if(prefsRef.current?.called_only&&!/\b(?:cronos|kronos|chronos)\b/i.test(text))return;setChatOpen(false);void sendRef.current(text);},[tell]),useCallback(message=>tell(message,true),[tell]),Boolean(config?.direct_audio_chat)||config?.transcription_provider==='vosk',busy||analysisBusy||updateBusy||voice.isSpeaking||voice.isGenerating||(pageHidden&&panelPrefs?.background_processing===false),panelPrefs,config?.direct_audio_chat?async(audio,metrics)=>{recognition.current=metrics;await sendRef.current('Pergunta por voz',audio);}:undefined,config?.local_voice_interrupt?{active:busy||voice.isSpeaking||voice.isGenerating,onKeyword:()=>bargeIn.current(),wakeOnly:Boolean(panelPrefs?.called_only)}:undefined);
+  const microphone=useMicrophone(useCallback((text,metrics)=>{recognition.current=metrics;if(!text.trim()){tell('Não consegui entender a fala. Tente novamente.',true);return;}if(commandRef.current(text))return;if(prefsRef.current?.called_only&&!/\b(?:cronos|kronos|chronos)\b/i.test(text))return;setChatOpen(false);void sendRef.current(text);},[tell]),useCallback(message=>tell(message,true),[tell]),Boolean(config?.direct_audio_chat)||config?.transcription_provider==='vosk',busy||analysisBusy||updateBusy||mediaPlaying||voice.isSpeaking||voice.isGenerating||(pageHidden&&panelPrefs?.background_processing===false),panelPrefs,config?.direct_audio_chat?async(audio,metrics)=>{recognition.current=metrics;await sendRef.current('Pergunta por voz',audio);}:undefined,config?.local_voice_interrupt?{active:mediaPlaying||busy||voice.isSpeaking||voice.isGenerating,onKeyword:()=>bargeIn.current(),wakeOnly:Boolean(panelPrefs?.called_only)}:undefined);
   const state=voice.isSpeaking?'SPEAKING':microphone.capturing?'LISTENING':moduleActivity;
   const audioLevelSource=voice.isSpeaking?voice.audioLevelSource:microphone.audioLevelSource;
   const live=useRef({busy:false,recording:false,transcribing:false,speaking:false,generating:false,module:null as string|null,announce:false,fish:false});
@@ -135,6 +137,7 @@ export default function App(){
     if(studio&&studioHandle.current?.handle(text))return true;
     const site=studioCommand(text);if(site){setStudio({brief:site.brief,request:Date.now()});setEyeOpen(false);setModule(null);setChatOpen(false);return true;}
     const attachment=text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    if(/\b(?:ver|veja|ve|olh\w*|enxerg\w*|analis\w*|compartilh\w*|captur\w*)\b/.test(attachment)&&/\b(?:minha|a) tela\b/.test(attachment)){openAnalysis('screen');return true;}
     if(/\b(?:analis\w*|examin\w*|abr\w*|envi\w*|carreg\w*)\b/.test(attachment)&&/\b(?:imagem|foto|fotografia|arquivo|zip|codigo)\b/.test(attachment)){
       openAnalysis(/\b(?:imagem|foto|fotografia)\b/.test(attachment)?'image':'document');return true;
     }
@@ -159,15 +162,18 @@ export default function App(){
   const selectNote=useCallback(async(path:string)=>{if(eyeOpen){setEyeOpen(false);return;}try{setNote(await jsonApi(`/memory/note?path=${encodeURIComponent(path)}`));}catch(error){tell('Não foi possível abrir essa nota.',true);}},[eyeOpen,tell]);
   const worldReady=()=>{if(eyeAnnouncement.current){eyeAnnouncement.current=false;if(config?.fish_speech_configured)void voice.speak('Ampliando sua perspectiva. Olho de Deus aberto.');}};
   interrupt.current=()=>{if(studio)studioHandle.current?.handle('fechar estúdio de sites');analysisSpeechQueue.current=[];setAnalyses([]);spokenCards.current=false;setStremio(null);setProspect(null);music.current?.stop();latency.current=null;turnVersion.current++;chatAbort.current?.abort();voice.stop();microphone.cancelCapture();eyeAnnouncement.current=false;pendingAlerts.current.clear();setBusy(false);inFlight.current=false;setModule(null);setEyeOpen(false);setNote(null);setChatOpen(false);setShowSpokenCards(false);setNotice('');};
-  bargeIn.current=()=>{analysisSpeechQueue.current=[];latency.current=null;turnVersion.current++;chatAbort.current?.abort();voice.stop();microphone.cancelCapture();pendingAlerts.current.clear();setBusy(false);inFlight.current=false;setNotice('');};
-  useEffect(()=>{const key=(event:KeyboardEvent)=>{if(event.key==='F4'&&!event.altKey&&!event.ctrlKey&&!event.metaKey){event.preventDefault();if(!event.repeat)handlers.current.mic();return;}if(event.key==='Escape'){if(!live.current.speaking&&!live.current.generating&&!live.current.busy&&music.current?.exitView()){event.preventDefault();return;}event.preventDefault();interrupt.current();}};window.addEventListener('keydown',key);return()=>{window.removeEventListener('keydown',key);chatAbort.current?.abort();};},[]);
+  bargeIn.current=()=>{music.current?.pause();window.dispatchEvent(new Event('cronos:listen'));analysisSpeechQueue.current=[];latency.current=null;turnVersion.current++;chatAbort.current?.abort();voice.stop();microphone.cancelCapture();pendingAlerts.current.clear();setBusy(false);inFlight.current=false;setNotice('');};
+  useEffect(()=>{const key=(event:KeyboardEvent)=>{if(event.key==='F4'&&!event.altKey&&!event.ctrlKey&&!event.metaKey){event.preventDefault();if(!event.repeat)handlers.current.f4();return;}if(event.key==='Escape'){if(!live.current.speaking&&!live.current.generating&&!live.current.busy&&music.current?.exitView()){event.preventDefault();return;}event.preventDefault();interrupt.current();}};window.addEventListener('keydown',key);return()=>{window.removeEventListener('keydown',key);chatAbort.current?.abort();};},[]);
   useEffect(()=>{if(!notice)return;const timer=setTimeout(()=>setNotice(''),8000);return()=>clearTimeout(timer);},[notice]);
 
   const autoMic=useRef(false);
   useEffect(()=>{if(connected&&!autoMic.current){autoMic.current=true;if(prefsRef.current?.device_auto_connect!==false)void microphone.start();}},[connected,microphone.start]);
   const handleMic=()=>{
     if(!connected){tell('A conexão automática ainda não está disponível.',true);return;}
-    setChatOpen(false);setShowSpokenCards(false);void microphone.toggle();
+    setChatOpen(false);setShowSpokenCards(false);
+    if(mediaPlaying){music.current?.pause();window.dispatchEvent(new Event('cronos:listen'));microphone.cancelCapture();void microphone.start();return;}
+    if(!microphone.recording){music.current?.pause();window.dispatchEvent(new Event('cronos:listen'));}
+    void microphone.toggle();
   };
   const sendText=async(value:string,source:'text'|'transcription'='text',audio?:Blob)=>{
     const text=value.trim();if(!text||inFlight.current)return;if(!audio&&runCommand(text)){setDraft('');return;}
@@ -232,7 +238,7 @@ export default function App(){
   const openModule=(index:number)=>{setAnalyses([]);setEyeOpen(false);setChatOpen(false);setNote(null);setModule(moduleIds[index]);setModuleActivity('IDLE');};
   useEffect(()=>{document.documentElement.dataset.cronosPanel=module||studio?'true':'false';return()=>{delete document.documentElement.dataset.cronosPanel;};},[module,studio]);
   const closeModule=()=>{(iframe.current?.contentWindow as (Window & {cronosPanelClose?:()=>void})|null)?.cronosPanelClose?.();setModule(null);setModuleActivity('IDLE');setGraphRevision(value=>value+1);if(connected)void jsonApi('/status').then(setConfig).catch(()=>{});};
-  const handlers=useRef({mic:handleMic,module:openModule});handlers.current={mic:handleMic,module:openModule};
+  const handlers=useRef({mic:handleMic,f4:()=>{},module:openModule});handlers.current={mic:handleMic,f4:()=>{if(microphone.recording)microphone.stop();else handleMic();},module:openModule};
   const stageMic=useCallback(()=>handlers.current.mic(),[]);
   const stageModule=useCallback((index:number)=>handlers.current.module(index),[]);
   const activeAlerts=monitor?.alerts||[];
@@ -248,13 +254,14 @@ export default function App(){
       <Suspense fallback={<div className="panel-loading">Abrindo Olho de Deus…</div>}><WorldMap query={placeQuery} onError={message=>tell(message,true)} onReady={worldReady}/></Suspense>
     </div>}
     {!eyeOpen&&!module&&<><button className="reference-attachment" aria-label="Analisar imagem" title="Analisar imagem" onClick={()=>openAnalysis('image')}><ImagePlus size={16}/></button><button className="reference-attachment files" aria-label="Analisar ZIP ou código" title="Analisar ZIP ou código" onClick={()=>openAnalysis('document')}><FileArchive size={16}/></button></>}
-    {!eyeOpen&&!module&&analyses.map(kind=><AnalysisPanel key={kind} kind={kind} onClose={()=>setAnalyses(previous=>previous.filter(item=>item!==kind))} onBusy={active=>setAnalysisTasks(previous=>active?[...previous.filter(item=>item!==kind),kind]:previous.filter(item=>item!==kind))} onResult={reply=>{lastAnswer.current={question:kind==='image'?'Análise de imagem':'Análise de arquivo',source:'text',reply};if(autoVoice&&config?.fish_speech_configured){analysisSpeechQueue.current.push(reply);setAnalysisSpeechRevision(value=>value+1);}}}/>)}
+    {!eyeOpen&&!module&&<button className="reference-screen" aria-label="Ver minha tela" title="Ver minha tela" onClick={()=>openAnalysis('screen')}><MonitorUp size={16}/></button>}
+    {!eyeOpen&&!module&&analyses.map(kind=><AnalysisPanel key={kind} kind={kind} sessionId={session.current} onClose={()=>setAnalyses(previous=>previous.filter(item=>item!==kind))} onBusy={active=>setAnalysisTasks(previous=>active?[...previous.filter(item=>item!==kind),kind]:previous.filter(item=>item!==kind))} onResult={(reply,result)=>{if(result?.session_id)session.current=result.session_id;lastAnswer.current={question:kind==='screen'?'Captura da tela':kind==='image'?'Análise de imagem':'Análise de arquivo',source:'text',reply};if(autoVoice&&config?.fish_speech_configured){analysisSpeechQueue.current.push(reply);setAnalysisSpeechRevision(value=>value+1);}}}/>)}
     <button className={`reference-mic ${microphone.starting?'starting':microphone.transcribing?'transcribing':busy?'thinking':voice.isGenerating?'generating':voice.isSpeaking?'speaking':microphone.recording?'recording':''}`} aria-pressed={microphone.recording} title={microphone.starting?'Abrindo microfone':microphone.transcribing?'Transcrevendo':busy?'Aguardando Gemini':voice.isGenerating?'Preparando voz':voice.isSpeaking?'Falando — diga Cronos para interromper':microphone.recording?'Microfone ligado':'Microfone desligado'} aria-label={microphone.recording?'Desligar microfone':'Ligar microfone'} onClick={handleMic} ><Mic size={16}/></button>
     {!studio&&!eyeOpen&&!module&&<button className="studio-entry" onClick={()=>setStudio({brief:'',request:Date.now()})}><Code2 size={15}/>ESTÚDIO DE SITES</button>}
     {studio&&<Suspense fallback={<div className="panel-loading">Abrindo Estúdio de Sites…</div>}><SiteStudio ref={studioHandle} initial={studio} onClose={()=>setStudio(null)} onSpeak={text=>{if(autoVoice&&config?.fish_speech_configured){analysisSpeechQueue.current.push(text);setAnalysisSpeechRevision(v=>v+1);}}}/></Suspense>}
-    {stremio&&<Suspense fallback={<div className="panel-loading">Abrindo Stremio…</div>}><StremioPanel key={JSON.stringify(stremio)} initial={stremio} onClose={()=>setStremio(null)}/></Suspense>}
+    {stremio&&<Suspense fallback={<div className="panel-loading">Abrindo Stremio…</div>}><StremioPanel key={JSON.stringify(stremio)} initial={stremio} onPlayback={setFilmPlaying} onClose={()=>setStremio(null)}/></Suspense>}
     {prospect&&<Suspense fallback={<div className="panel-loading">Abrindo prospecção…</div>}><ProspectPanel key={prospect.city+'|'+prospect.category+'|'+(prospect.report?.id||'')} initial={prospect} onClose={()=>setProspect(null)} onAsk={text=>{setProspect(null);void sendText(text);}}/></Suspense>}
-    <MusicPlayer ref={music} onTalk={async()=>{voice.stop();microphone.cancelCapture();await microphone.start();}} local={config?.privacy_mode==='local'} onError={message=>tell(message,true)}/>
+    <MusicPlayer ref={music} onPlayback={setMusicPlaying} onTalk={async()=>{voice.stop();microphone.cancelCapture();await microphone.start();}} local={config?.privacy_mode==='local'} onError={message=>tell(message,true)}/>
     {notice&&error&&<div className="scene-notice" role="status">{notice}</div>}
     {note&&<section className="note-window" aria-label="Nota Obsidian"><button onClick={()=>setNote(null)} aria-label="Fechar nota"><X size={18}/></button><pre>{note.content}</pre></section>}
     {displayTurn?.reply&&showSpokenCards&&!chatOpen&&!module&&!eyeOpen&&<AnswerCards reply={displayTurn.reply} layout={cardLayout}/>}

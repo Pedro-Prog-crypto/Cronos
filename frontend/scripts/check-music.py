@@ -37,7 +37,7 @@ async def main(mp4):
     await r.fulfill(json={'player':'official','id':'abcdefghijk'});return
    assert 'native=true' in r.request.url
    clip='video=true' in r.request.url
-   await r.fulfill(json={'audio_url':'https://rr1.googlevideo.com/audio','video_url':'https://rr1.googlevideo.com/video' if clip else None,'title':'Nada pra Fazer'})
+   await r.fulfill(json={'audio_url':'/media/stream/audio','video_url':'/media/stream/video' if clip else None,'title':'Nada pra Fazer'})
   await page.route('**/music/resolve?*',resolve)
   async def stream(r,content,mime):
    import re
@@ -46,8 +46,8 @@ async def main(mp4):
     start=int(match[1]);end=min(len(content)-1,int(match[2]) if match[2] else len(content)-1)
     await r.fulfill(status=206,body=content[start:end+1],content_type=mime,headers={'Accept-Ranges':'bytes','Content-Range':f'bytes {start}-{end}/{len(content)}'})
    else:await r.fulfill(body=content,content_type=mime,headers={'Accept-Ranges':'bytes'})
-  await page.route('https://rr1.googlevideo.com/audio',lambda r:stream(r,WAV,'audio/wav'))
-  await page.route('https://rr1.googlevideo.com/video',lambda r:stream(r,mp4,'video/mp4'))
+  await page.route('**/media/stream/audio',lambda r:stream(r,WAV,'audio/wav'))
+  await page.route('**/media/stream/video',lambda r:stream(r,mp4,'video/mp4'))
   await page.route('**/music-test.wav',lambda r:stream(r,WAV,'audio/wav'))
   await page.route('https://www.youtube-nocookie.com/embed/**',lambda r:r.fulfill(body='<html><body>Official player fixture</body></html>',content_type='text/html'))
   await page.route('https://www.youtube.com/iframe_api',lambda r:r.fulfill(body='''window.YT={Player:function(frame,options){const a=new Audio('/music-test.wav');this.playVideo=()=>a.play();this.pauseVideo=()=>a.pause();this.seekTo=n=>a.currentTime=n;this.setVolume=n=>a.volume=n/100;this.getCurrentTime=()=>a.currentTime;this.getDuration=()=>Number.isFinite(a.duration)?a.duration:0;this.destroy=()=>a.pause();a.onplaying=()=>options.events.onStateChange({data:1});a.onpause=()=>options.events.onStateChange({data:2});a.onended=()=>options.events.onStateChange({data:0});setTimeout(()=>options.events.onReady(),0);}};window.onYouTubeIframeAPIReady();''',content_type='text/javascript'))

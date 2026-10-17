@@ -28,7 +28,8 @@ REPORT={'windows':{'build':19045,'edition':'Professional'},'running_as_admin':Tr
 class FakeProvider:
     def __init__(self): self.calls=[]
     async def reply(self,system,messages):
-        self.calls.append((system,messages))
+        from copy import deepcopy
+        self.calls.append((system,deepcopy(messages)))
         if 'Em reply, escreva uma string JSON' in system:
             return {'reply':json.dumps({'title':'Plano','steps':[{'title':'Pesquisar','done':True},{'title':'Revisar'}]}),'topics':[]}
         return {'reply':'Olá. Resposta ou análise simulada.','topics':[]}

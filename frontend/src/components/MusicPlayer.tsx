@@ -2,14 +2,19 @@ import React,{forwardRef,useEffect,useImperativeHandle,useRef,useState} from 're
 import {api} from '../api';
 import {musicCommand} from '../musicCommands';
 import './MusicPlayer.css';
-export type MusicHandle={handle:(text:string)=>boolean;stop:()=>void;exitView:()=>boolean;load:(result:any)=>void};
+export type MusicHandle={handle:(text:string)=>boolean;stop:()=>void;pause:()=>void;exitView:()=>boolean;load:(result:any)=>void};
 type Track={id:string;title:string};
-type Media={audio_url?:string|null;video_url?:string|null;title?:string;player?:'official';id?:string};
+type Media={audio_url?:string|null;video_url?:string|null;title?:string;player?:'official';id?:string;height?:number;qualities?:{height:number;video_url:string;audio_url?:string|null}[]};
 const time=(n:number)=>`${Math.floor(n/60)}:${String(Math.floor(n%60)).padStart(2,'0')}`;
 function officialPlayer(id:string){const url=new URL('/music/player',location.href);url.hostname=location.hostname==='localhost'?'127.0.0.1':'localhost';url.search=new URLSearchParams({id,parentOrigin:location.origin}).toString();return url;}
-export const MusicPlayer=forwardRef<MusicHandle,{local:boolean;onError:(message:string)=>void;onTalk?:()=>Promise<void>}>(({local,onError,onTalk},ref)=>{
+export const MusicPlayer=forwardRef<MusicHandle,{local:boolean;onError:(message:string)=>void;onTalk?:()=>Promise<void>;onPlayback?:(active:boolean)=>void}>(({local,onError,onTalk,onPlayback},ref)=>{
+ const playback=useRef(onPlayback);playback.current=onPlayback;
+ useEffect(()=>()=>playback.current?.(false),[]);
  const [visible,setVisible]=useState(false),[tracks,setTracks]=useState<Track[]>([]),[index,setIndex]=useState(0),[media,setMedia]=useState<Media|null>(null),[message,setMessage]=useState(''),[hz,setHz]=useState<number|null>(null);
  const [fullscreenActive,setFullscreenActive]=useState(false);
+ const [retry,setRetry]=useState(0);
+ const [failedMedia,setFailedMedia]=useState(false);
+ const restoreAt=useRef(0);
  const [expanded,setExpanded]=useState(false),[qualityHelp,setQualityHelp]=useState(false);
  const container=useRef<HTMLElement>(null);
  const fullscreen=async()=>{setExpanded(true);try{if(document.fullscreenElement){await document.exitFullscreen();return;}if(container.current?.requestFullscreen)await container.current.requestFullscreen();else setMessage('Este navegador não liberou tela cheia. O player está ampliado dentro do Cronos.');}catch{setMessage('Tela cheia não foi liberada pelo navegador. O player foi ampliado dentro do Cronos.');}};
@@ -19,7 +24,7 @@ export const MusicPlayer=forwardRef<MusicHandle,{local:boolean;onError:(message:
  const audio=useRef<HTMLAudioElement>(null),video=useRef<HTMLVideoElement>(null),official=useRef<HTMLIFrameElement>(null),context=useRef<AudioContext|null>(null),gain=useRef<GainNode|null>(null),request=useRef<AbortController|null>(null),generation=useRef(0);
  const playerCommand=(command:string,value?:number)=>official.current?.contentWindow?.postMessage({type:'cronos:music:command',command,value},officialPlayer('').origin);
  const primary=()=>media?.audio_url?audio.current:video.current;
- const pause=()=>{playerCommand('pause');audio.current?.pause();video.current?.pause();if(context.current?.state==='running')void context.current.suspend().then(()=>setState('Pausado')).catch(()=>{});};
+ const pause=()=>{playback.current?.(false);playerCommand('pause');audio.current?.pause();video.current?.pause();if(context.current?.state==='running')void context.current.suspend().then(()=>setState('Pausado')).catch(()=>{});};
  const talk=()=>{pause();if(onTalk)void onTalk().catch(()=>setMessage('Não foi possível ativar o microfone. Confira a permissão do navegador.'));};
  const clear=()=>{generation.current++;request.current?.abort();pause();if(context.current&&context.current.state!=='closed')void context.current.close().catch(()=>{});context.current=null;gain.current=null;setTracks([]);setIndex(0);setMedia(null);setHz(null);setElapsed(0);setDuration(0);setState('Em espera');};
  const stop=()=>{clear();setVisible(false);setExpanded(false);setQualityHelp(false);setMessage('');if(document.fullscreenElement===container.current)void document.exitFullscreen().catch(()=>{});};
@@ -32,7 +37,7 @@ export const MusicPlayer=forwardRef<MusicHandle,{local:boolean;onError:(message:
    if(video.current)await video.current.play();
   }catch{audio.current?.pause();video.current?.pause();setState('Clique para reproduzir');setMessage('Clique em Continuar para liberar o áudio. Se falhar novamente, escolha outro resultado.');}
  };
- const load=(result:any)=>{clear();setQuery(result.query||result.tracks?.[0]?.title||'');setVisible(true);setClip(Boolean(result.video));setTracks((result.tracks||[]).filter((t:any)=>/^[A-Za-z0-9_-]{11}$/.test(t.id)).slice(0,8));setMessage(result.message||'Preparando o player interno…');};
+ const load=(result:any)=>{clear();setRetry(v=>v+1);setQuery(result.query||result.tracks?.[0]?.title||'');setVisible(true);setClip(Boolean(result.video));setTracks((result.tracks||[]).filter((t:any)=>/^[A-Za-z0-9_-]{11}$/.test(t.id)).slice(0,8));setMessage(result.message||'Preparando o player interno…');};
  const search=async(value:string,similar=false,asClip=clip)=>{
   clear();setQuery(value);setClip(asClip);setVisible(true);setMessage('Buscando música ou clipe…');const id=generation.current,controller=new AbortController();request.current=controller;
   try{const result=await(await api('/music/search?'+new URLSearchParams({query:value,similar:String(similar),video:String(asClip)}),{signal:controller.signal})).json();if(id!==generation.current)return;setTracks(result.tracks);setMessage(result.message||'Preparando o player interno…');}
@@ -44,17 +49,17 @@ export const MusicPlayer=forwardRef<MusicHandle,{local:boolean;onError:(message:
   const oscillator=ctx.createOscillator(),level=ctx.createGain();gain.current=level;oscillator.frequency.value=value;level.gain.setValueAtTime(0,ctx.currentTime);level.gain.linearRampToValueAtTime(.025,ctx.currentTime+.1);oscillator.connect(level);level.connect(ctx.destination);oscillator.start();void ctx.resume().then(()=>setState('Reproduzindo tom'));
  };
  const next=(delta=1)=>{pause();setElapsed(0);setIndex(old=>Math.max(0,Math.min(tracks.length-1,old+delta)));};
- useImperativeHandle(ref,()=>({stop,exitView,load,handle(text){const command=musicCommand(text);if(!command)return false;
+ useImperativeHandle(ref,()=>({stop,pause,exitView,load,handle(text){const command=musicCommand(text);if(!command)return false;
   if(command.action==='search'){if(local){onError('Música online desativada no modo local.');return true;}void search(command.query,command.similar,Boolean(command.video));}
   else if(command.action==='frequency')frequency(command.hz);else if(command.action==='stop')stop();else if(command.action==='pause')pause();else if(command.action==='resume')void resume();else if(command.action==='next')next();else if(command.action==='previous')next(-1);return true;
  }}));
  const track=tracks[index];
  useEffect(()=>{
-  if(!track)return;let alive=true;const controller=new AbortController();setMedia(null);setState('Preparando mídia');setDuration(0);setElapsed(0);
-  void(async()=>{try{const result=await(await api('/music/resolve?'+new URLSearchParams({id:track.id,video:String(clip),native:'true'}),{signal:controller.signal})).json();if(result.player==='official')throw new Error('O servidor retornou o player antigo. Atualize o Cronos nesta mesma pasta para usar reprodução direta.');if(alive){setMedia(result);setMessage('');}}
-  catch(error:any){if(alive&&!controller.signal.aborted){setState('Mídia indisponível');setMedia(null);setMessage(error instanceof Error?error.message:'Não foi possível preparar o fluxo de mídia. Escolha outro resultado.');}}})();
+  if(!track)return;let alive=true;const controller=new AbortController();setMedia(null);setFailedMedia(false);setState('Preparando mídia');setDuration(0);setElapsed(0);
+  void(async()=>{try{const result=await(await api('/music/resolve?'+new URLSearchParams({id:track.id,video:String(clip),native:'true',refresh:String(retry>0)}),{signal:controller.signal})).json();if(result.player==='official')throw new Error('O servidor retornou o player antigo. Atualize o Cronos nesta mesma pasta para usar reprodução direta.');if(alive){setMedia(result);setMessage('');}}
+  catch(error:any){if(alive&&!controller.signal.aborted){setState('Mídia indisponível');setFailedMedia(true);setMedia(null);setMessage(error instanceof Error?error.message:'Não foi possível preparar o fluxo de mídia. Escolha outro resultado.');}}})();
   return()=>{alive=false;controller.abort();audio.current?.pause();video.current?.pause();};
- },[track?.id,clip]);
+ },[track?.id,clip,retry]);
  useEffect(()=>{if(audio.current)audio.current.volume=volume/100;if(video.current){video.current.volume=media?.audio_url?0:volume/100;video.current.muted=Boolean(media?.audio_url);}if(media)void resume();},[media]);
  useEffect(()=>{playerCommand('volume',volume);if(audio.current)audio.current.volume=volume/100;if(video.current)video.current.volume=media?.audio_url?0:volume/100;},[volume]);
  useEffect(()=>{
@@ -77,18 +82,21 @@ export const MusicPlayer=forwardRef<MusicHandle,{local:boolean;onError:(message:
  useEffect(()=>()=>{request.current?.abort();audio.current?.pause();video.current?.pause();if(context.current&&context.current.state!=='closed')void context.current.close().catch(()=>{});},[]);
  const progress=()=>{const main=primary();if(!main)return;setElapsed(main.currentTime);setDuration(Number.isFinite(main.duration)?main.duration:0);if(media?.audio_url&&video.current&&Math.abs(video.current.currentTime-main.currentTime)>.35)video.current.currentTime=main.currentTime;};
  const seek=(value:number)=>{playerCommand('seek',value);if(audio.current)audio.current.currentTime=value;if(video.current)video.current.currentTime=value;setElapsed(value);};
- const failed=()=>{if(!track)return;audio.current?.pause();video.current?.pause();setState('Mídia indisponível');setMedia(null);setMessage('O fluxo de mídia falhou ou expirou. Pesquise novamente ou escolha outro resultado. Nenhum player do YouTube foi aberto.');};
- const ended=()=>{if(index+1<tracks.length)next();else setState('Finalizado');};
+ const failed=()=>{if(!track)return;playback.current?.(false);audio.current?.pause();video.current?.pause();setFailedMedia(true);setState('Mídia indisponível');setMedia(null);setMessage('O fluxo de mídia falhou ou expirou. Pesquise novamente ou escolha outro resultado. Nenhum player do YouTube foi aberto.');};
+ const metadata=()=>{if(restoreAt.current){const at=restoreAt.current;if(audio.current)audio.current.currentTime=at;if(video.current)video.current.currentTime=at;restoreAt.current=0;}progress();};
+ const quality=(height:number)=>{const chosen=media?.qualities?.find(q=>q.height===height);if(!chosen)return;restoreAt.current=primary()?.currentTime||0;pause();setMedia(old=>old?{...old,...chosen}:old);};
+ const ended=()=>{playback.current?.(false);if(index+1<tracks.length)next();else setState('Finalizado');};
  if(!visible)return null;
  return <section ref={container} className={`music-player ${expanded?'music-expanded':''}`} aria-label="Música no Kronos"><header><strong>{hz?`${hz} Hz`:media?.title||track?.title||'MÚSICA E CLIPES'}</strong><button onClick={()=>setExpanded(v=>!v)} aria-label={expanded?'Reduzir player':'Maximizar player'}>{expanded?'▣':'□'}</button><button onClick={()=>void fullscreen()} aria-label={fullscreenActive?'Sair da tela cheia':'Tela cheia do Cronos'}>⛶</button><button onClick={talk} aria-label="Pausar música e falar com Cronos" title="Pausar música e falar com Cronos">🎙</button><button onClick={stop} aria-label="Fechar música">×</button></header>
   {!hz&&<form className="music-search" onSubmit={e=>{e.preventDefault();if(query.trim())void search(query,false,clip);}}><label>Buscar música, clipe ou colar link<input aria-label="Buscar música ou clipe" value={query} maxLength={240} onChange={e=>setQuery(e.target.value)} placeholder="Nome da música · cantor opcional · ou link"/></label><label><input type="checkbox" checked={clip} onChange={e=>setClip(e.target.checked)}/> Buscar clipe oficial</label><button disabled={!query.trim()}>Tocar aqui</button></form>}
 
   {media?.player==='official'&&<iframe ref={official} title="Player de música interno" src={officialPlayer(media.id||track.id).href} allow="autoplay; encrypted-media; fullscreen" allowFullScreen referrerPolicy="strict-origin-when-cross-origin"/>}
-  {media?.video_url&&<video ref={video} src={media.video_url} playsInline preload="metadata" onTimeUpdate={media.audio_url?undefined:progress} onLoadedMetadata={progress} onPlaying={()=>setState('Reproduzindo')} onPause={()=>setState('Pausado')} onEnded={media.audio_url?undefined:ended} onError={failed}/>}
-  {media?.audio_url&&<audio ref={audio} src={media.audio_url} preload="metadata" onTimeUpdate={progress} onLoadedMetadata={progress} onPlaying={()=>setState('Reproduzindo')} onPause={()=>setState('Pausado')} onEnded={ended} onError={failed}/>}
+  {media?.video_url&&<video ref={video} src={media.video_url} playsInline preload="metadata" onTimeUpdate={media.audio_url?undefined:progress} onLoadedMetadata={metadata} onPlaying={()=>{setState('Reproduzindo');playback.current?.(true);}} onPause={()=>{setState('Pausado');playback.current?.(false);}} onEnded={media.audio_url?undefined:ended} onError={failed}/>}
+  {media?.audio_url&&<audio ref={audio} src={media.audio_url} preload="metadata" onTimeUpdate={progress} onLoadedMetadata={metadata} onPlaying={()=>{setState('Reproduzindo');playback.current?.(true);}} onPause={()=>{setState('Pausado');playback.current?.(false);}} onEnded={ended} onError={failed}/>}
+  {!!media?.qualities?.length&&<label>Qualidade do clipe<select aria-label="Qualidade do clipe" value={media.height} onChange={e=>quality(Number(e.target.value))}>{media.qualities.map(q=><option key={q.height} value={q.height}>{q.height}p{q.height<=480?' · leve':''}</option>)}</select></label>}
   {(media?.player==='official'||media?.video_url)&&<div className="music-actions"><button onClick={()=>void fullscreen()}>{fullscreenActive?'Sair da tela cheia':'Tela cheia'}</button>{media?.player==='official'&&<button aria-expanded={qualityHelp} onClick={()=>{setQualityHelp(v=>!v);setExpanded(true);}}>Qualidade do vídeo</button>}</div>}
   {qualityHelp&&media?.player==='official'&&<p className="music-quality-help">No vídeo, clique na engrenagem ⚙ → Qualidade. Escolha Automática, 480p, 720p, 1080p ou 1440p quando aparecerem. O YouTube mostra as opções disponíveis para este vídeo e dispositivo; o Cronos não força uma resolução. Se travar, escolha Automática ou 480p.</p>}
-  {message&&<p role="status">{message}</p>}<div className="music-playback-status">{state}<span>{time(elapsed)} / {time(duration)}</span></div>
+  {message&&<p role="status">{message}</p>}{track&&!media&&failedMedia&&<button onClick={()=>setRetry(v=>v+1)}>Preparar música novamente</button>}<div className="music-playback-status">{state}<span>{time(elapsed)} / {time(duration)}</span></div>
   <div className="music-actions"><button aria-label="Música anterior" disabled={index<=0} onClick={()=>next(-1)}>⏮</button><button onClick={pause}>Pausar</button><button onClick={()=>void resume()}>Continuar</button><button aria-label="Próxima música" disabled={index+1>=tracks.length} onClick={()=>next()}>⏭</button><button onClick={stop}>Parar</button></div>
   {!!tracks.length&&<><label>Posição da música<input aria-label="Posição da música" type="range" min="0" max={duration||1} value={Math.min(elapsed,duration||1)} disabled={!duration} onChange={e=>seek(Number(e.target.value))}/></label><label>Volume · {volume}%<input aria-label="Volume da música" type="range" min="0" max="100" value={volume} onChange={e=>setVolume(Number(e.target.value))}/></label><label>Fila<select aria-label="Escolher música" value={index} onChange={e=>{pause();setIndex(Number(e.target.value));}}>{tracks.map((t,i)=><option key={t.id} value={i}>{t.title}</option>)}</select></label></>}
   {hz&&<label>Volume do tom<input type="range" min="0" max="0.08" step="0.001" defaultValue="0.025" onChange={e=>{if(gain.current&&context.current)gain.current.gain.setTargetAtTime(Number(e.target.value),context.current.currentTime,.05);}}/></label>}

@@ -10,7 +10,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from cronos.config import Settings
 from cronos.memory import Memory
@@ -37,6 +37,14 @@ class SpeechInput(BaseModel):
     text: str = Field(min_length=1, max_length=50000)
     reference_id: str | None = Field(default=None, max_length=128)
     speed: float | None = Field(default=None, ge=0.5, le=2.0)
+
+    @field_validator('text')
+    @classmethod
+    def spoken_prose(cls,value):
+        from cronos.spoken_text import speech_text
+        clean=speech_text(value)
+        if not clean:raise ValueError('Não há texto de conversa para falar. Código e registros ficam na tela.')
+        return clean
 
 
 class ApprovalInput(BaseModel):
@@ -323,8 +331,10 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
             size+=len(chunk)
             if size>2*1024*1024:raise HTTPException(413,'Áudio ultrapassa o limite de 2 MiB.')
             chunks.append(chunk)
-        from cronos.recognition import read_pcm
-        try:pcm=read_pcm(b''.join(chunks))
+        from cronos.recognition import read_pcm,check_signal
+        try:
+            pcm=read_pcm(b''.join(chunks))
+            check_signal(pcm)
         except ValueError as exc:raise HTTPException(422,str(exc)) from None
         return await conversation_stream(session_id or uuid4(),'Pergunta falada',request,pcm)
 
@@ -506,6 +516,10 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
             chunks.append(chunk)
         if not size:
             raise HTTPException(422, "Envie um arquivo de áudio no corpo da requisição.")
+        if request.headers.get('content-type','').split(';')[0]=='audio/wav':
+            from cronos.recognition import read_pcm,check_signal
+            try:check_signal(read_pcm(b''.join(chunks)))
+            except ValueError as exc:raise HTTPException(422,str(exc)) from None
         if settings.transcription_provider == 'vosk':
             try:
                 return {'text':await asyncio.to_thread(local_recognizer.transcribe,b''.join(chunks))}

@@ -98,7 +98,8 @@ class SecurityMiddleware:
             return await JSONResponse({'detail': 'Origin não autorizada.'}, 403)(scope, receive, send)
         path = scope.get('path', '')
         studio_preview = bool(re.fullmatch(r'/studio/preview/[A-Za-z0-9_-]{43}', path))
-        public = studio_preview or path in {'/', '/tests', '/world/view', '/music/player', '/connection', '/health', '/docs', '/docs/oauth2-redirect', '/redoc', '/openapi.json'} or path.startswith(('/static/', '/ui/', '/eye/', '/models/', '/events/'))
+        media_ticket = scope.get('method')=='GET' and bool(re.fullmatch(r'/media/stream/[A-Za-z0-9_-]{32}',path))
+        public = studio_preview or media_ticket or path in {'/', '/tests', '/world/view', '/music/player', '/connection', '/health', '/docs', '/docs/oauth2-redirect', '/redoc', '/openapi.json'} or path.startswith(('/static/', '/ui/', '/eye/', '/models/', '/events/'))
         preflight = scope.get('method') == 'OPTIONS' and bool(origin)
         if not public and not preflight:
             now = time.monotonic()

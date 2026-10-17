@@ -11,11 +11,11 @@ class PublicFetchError(ValueError):
     pass
 
 
-def public_target(url):
+def public_target(url, *, max_length=2000):
     try:
         p = urlsplit(url)
         if (p.scheme not in {'https', 'http'} or not p.hostname or p.username or p.password
-                or p.port not in {None, 80, 443} or len(url) > 2000
+                or p.port not in {None, 80, 443} or len(url) > max_length
                 or any(ord(c) < 33 for c in url) or '\\' in url): raise ValueError()
         host = p.hostname.encode('idna').decode('ascii')
         if host.lower() == 'localhost' or host.lower().endswith(('.local', '.localhost', '.internal')): raise ValueError()

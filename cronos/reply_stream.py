@@ -32,8 +32,10 @@ def ready_reply(raw):
 
 
 async def deliver(reply):
+    from cronos.spoken_text import conversation_text
     sink=reply_sink.get()
-    if sink is not None:await sink(reply)
+    cleaned=conversation_text(reply)
+    if sink is not None and cleaned:await sink(cleaned)
 
 
 def ready_intro(raw):
@@ -75,6 +77,9 @@ def ready_intro(raw):
         if escaped:segment=segment[:-1]
         segment=re.sub(r'\\u[0-9a-fA-F]{0,3}$','',segment)
         text=json.loads('"'+segment+'"',strict=False)
+        # A partial code fence cannot be safely split: its continuation would
+        # lose the opening fence and might be read as ordinary speech later.
+        if '```' in text or re.match(r'\s*(?:[A-Z]:[\\/]|/(?:home|workspace|tmp|Users)/|(?:Temas|Memorias|Conversas)/)',text):return None
         match=re.search(r'[.!?](?:\s|$)',text[:140])
         if match and any(char.isalnum() for char in text[:match.start()]):return text[:match.end()]
         if len(text)>=100:
@@ -86,8 +91,10 @@ def ready_intro(raw):
 
 intro_sink=ContextVar('intro_sink',default=None)
 async def deliver_intro(text):
+    from cronos.spoken_text import conversation_text
     sink=intro_sink.get()
-    if sink is not None:await sink(text)
+    cleaned=conversation_text(text)
+    if sink is not None and cleaned:await sink(cleaned)
 
 transcript_sink=ContextVar('transcript_sink',default=None)
 async def deliver_transcript(text):

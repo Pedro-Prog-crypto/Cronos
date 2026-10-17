@@ -5,7 +5,17 @@ import json
 import threading
 import wave
 import re
+from array import array
 from cronos import wake
+
+
+def check_signal(frames):
+    """Reject digital silence, not quiet voices. Browser VAD handles speech/noise."""
+    samples=array('h');samples.frombytes(frames)
+    import sys
+    if sys.byteorder!='little':samples.byteswap()
+    if not samples or max(map(abs,samples))<32 or sum(abs(v)>=12 for v in samples)<min(160,len(samples)//20):
+        raise ValueError('Não há sinal de voz suficiente nesta gravação. Nada foi enviado à IA; tente falar novamente.')
 
 
 def read_pcm(audio):
@@ -64,6 +74,7 @@ class LocalRecognizer:
 
     def transcribe(self,audio):
         frames=read_pcm(audio)
+        check_signal(frames)
         with self.lock:
             KaldiRecognizer=self._load()
             recognizer=KaldiRecognizer(self.model,16000);parts=[];confidences=[]

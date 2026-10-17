@@ -39,7 +39,10 @@ async def main():
   await page.locator('#chat-input').fill('Cronos, abrir a série Game of Thrones temporada 2 episódio 3')
   await page.get_by_role('button',name='Enviar mensagem').click()
   await expect(page.get_by_role('dialog',name='Filmes e séries no Stremio')).to_be_visible()
-  await expect(page.get_by_role('status')).to_contain_text('Solicitação enviada ao Stremio instalado.')
+  await expect(page.locator('.stremio-panel [role=status]')).to_contain_text('manifest.json')
+  assert opened==[]
+  await page.get_by_role('button',name='Abrir no Stremio',exact=True).click()
+  await expect(page.locator('.stremio-panel [role=status]')).to_contain_text('Solicitação enviada ao Stremio instalado.')
   assert searches==[{'query':'Game of Thrones','kind':'series','season':2,'episode':3}]
   assert opened==[{'id':'tt0944947','kind':'series','season':2,'episode':3}]
   await page.get_by_label('Episódio',exact=True).fill('4')
