@@ -1,5 +1,5 @@
 {
-  "revision": "7ba1953a248e761eeba15fb666ee5a87c2eef03f",
+  "revision": "7406d66e2a6f2616051da10b6533f20fbaf62c85",
   "files": {
     "cronos/app.py": "3f0cb9a427b73608cfe092bfd6a70049fc275bed6343bbb9a7bde023004bf927",
     "cronos/documents.py": "4ce1558e1f86644bfed8ae04539961e03e2dbf0d720ce985f7f5664f4db18711",
@@ -34,10 +34,10 @@
     "cronos/studio/provider_pool.py": "1105c0f4b2e9a0d4e0330e5fd1cdba85313029c5ff2b0236b849e335722fcc41",
     "cronos/studio/references.py": "e93a1c2f749146ea3cf7b313afedf3bf4caf8af5cf1ee2a5600dbc4237047ae3",
     "cronos/studio/restaurant.py": "6c70d4870f0dc1e6f417f74d50e9dbfe3e10a6619829c9419f4f5c774f5be9bb",
-    "cronos/studio/routes.py": "1f2960c94deb32a46e0c0f3ddb662b12b01b0166e20f96dedad18fbf159e1b43",
-    "cronos/studio/runtime.py": "3c8a74f6c32d8827e93f0f4c07b23754402a6574d666a19ef0800075ceb74bd7",
-    "cronos/studio/service.py": "dedb8bb0ee4bc943a3414d9b24a600d406a90822b415db487f9df5e872e6c051",
-    "cronos/studio/store.py": "56b85634ac0a6fb1301a15294ee22b9d8ff6a86da34e6f551aa259796ea0bc7f",
+    "cronos/studio/routes.py": "122e76e592ba6f85b0a744fb863d4bffcdc81e8cb6d6f0a69b09c0f7821ad869",
+    "cronos/studio/runtime.py": "3515f98484d0f32463270a4d1393f7f49323778bd4a25ef29d81ad78c935f594",
+    "cronos/studio/service.py": "d581a5c5f813aa9128d2021af0a1210a89c858796443d5e750de69ea249b8354",
+    "cronos/studio/store.py": "794ddecfae9a2a299a8a30bbaa258a54f25b84a5055a465755f930dab6852309",
     "cronos/studio/threed/__init__.py": "1901eec20561407916b99932cd0fd2f76f3935dd57157076de2ef978a1f8982a",
     "cronos/studio/threed/config.py": "d02c6a5a67334ef5165808ffb4c6227c3184a4fcdb7a51b852082178ebe7d4ef",
     "cronos/studio/threed/generator.py": "22612011625a47bf7b5c70814d6cc3a7dd9f426bc0166118b95d1ff67acb77be",
