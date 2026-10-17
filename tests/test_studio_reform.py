@@ -104,23 +104,25 @@ def test_thirty_mib_text_is_bounded_in_ai_context_and_zip_expansion_is_checked()
  with pytest.raises(ValueError):inspect_document('bomb.zip',data.getvalue())
 
 
-def test_bounded_public_search_is_a_real_reserve_when_map_servers_fail(settings,monkeypatch):
+@pytest.mark.parametrize('category',['restaurante','loja'])
+def test_bounded_public_search_is_a_real_reserve_when_map_servers_fail(settings,monkeypatch,category):
  calls=[]
  def respond(r):
   calls.append((r.url.host,r.method,dict(r.url.params)))
   if r.url.host=='nominatim.openstreetmap.org' and r.url.params.get('extratags')=='1':
    assert r.url.params['bounded']=='1' and int(r.url.params['limit'])<=20
-   return httpx.Response(200,json=[{'osm_type':'node','osm_id':999,'category':'amenity','type':'restaurant','name':'Cantina pública de teste','address':{'country_code':'br','road':'Rua de teste'},'extratags':{'website':'https://example.org'}}])
+   assert ('[shop]' if category=='loja' else '[restaurant]') in r.url.params['q']
+   return httpx.Response(200,json=[{'osm_type':'node','osm_id':999,'category':'shop' if category=='loja' else 'amenity','type':'clothes' if category=='loja' else 'restaurant','name':'Cantina pública de teste','address':{'country_code':'br','road':'Rua de teste'},'extratags':{'website':'https://example.org'}}])
   if r.url.host=='nominatim.openstreetmap.org':
    return httpx.Response(200,json=[{**lookup('Brasília, DF'),'osm_type':'node','addresstype':'city'}])
   return httpx.Response(503)
  monkeypatch.setattr('cronos.prospects.httpx.AsyncClient',lambda **kw:CLIENT(transport=httpx.MockTransport(respond),trust_env=False,**kw))
  with TestClient(create_app(settings,Builder())) as c:
-  response=c.post('/prospects/search',headers=AUTH,json={'city':'Brasília, DF'})
+  response=c.post('/prospects/search',headers=AUTH,json={'city':'Brasília, DF','category':category})
   assert response.status_code==200,response.text
   report=response.json()
   assert report['discovery_source']=='nominatim' and report['leads'][0]['name']=='Cantina pública de teste'
   assert report['leads'][0]['site_status']=='listed' and report['leads'][0]['website']=='https://example.org'
   n=len(calls)
-  assert c.post('/prospects/search',headers=AUTH,json={'city':'Brasília, DF'}).json()['cached']
+  assert c.post('/prospects/search',headers=AUTH,json={'city':'Brasília, DF','category':category}).json()['cached']
   assert len(calls)==n

@@ -210,7 +210,7 @@ class Prospector:
                                 await asyncio.sleep(max(0,1.1-(time.monotonic()-self.last_geocode)))
                                 self.last_geocode=time.monotonic()
                                 south,north,west,east=map(float,place['boundingbox'])
-                                term=amenity.split('|')[0]
+                                term='shop' if tag=='shop' and amenity=='.+' else amenity.split('|')[0]
                                 async with asyncio.timeout(10):
                                     points=await fetch_json(client,'GET','https://nominatim.openstreetmap.org/search',params={
                                         'q':'['+term+'] '+args.city+', Brasil','countrycodes':'br','format':'jsonv2','addressdetails':1,'extratags':1,
