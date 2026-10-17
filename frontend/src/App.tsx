@@ -19,7 +19,8 @@ import {studioCommand} from './studioCommands';
 import type {SiteStudioHandle} from './components/SiteStudio';
 const SiteStudio=lazy(()=>import('./components/SiteStudio'));
 const ProspectPanel=lazy(()=>import('./components/ProspectPanel'));
-import {MusicPlayer,MusicHandle} from './components/MusicPlayer';
+import {MusicPlayer,MusicHandle,type MusicWindow} from './components/MusicPlayer';
+import {WindowSurface,WindowShelf,MinimizeWindow,type ShelfItem} from './components/WindowShelf';
 const WorldMap=lazy(()=>import('./components/WorldMap'));
 const ModulePanel=lazy(()=>import('./panels/ModulePanel'));
 
@@ -57,6 +58,15 @@ export default function App(){
   const studioHandle=useRef<SiteStudioHandle>(null);
   const [studio,setStudio]=useState<{brief:string;request:number}|null>(null);
   const [prospect,setProspect]=useState<{city:string;category:string;report?:any}|null>(null);
+  const [minimizedWindows,setMinimizedWindows]=useState<string[]>([]);
+  const [musicWindow,setMusicWindow]=useState<MusicWindow>({visible:false,minimized:false,title:'Música',state:'Em espera'});
+  const [studioWindow,setStudioWindow]=useState({title:'Estúdio de Sites',detail:'Pronto para continuar'});
+  const minimizeWindow=(id:string)=>setMinimizedWindows(previous=>previous.includes(id)?previous:[...previous,id]);
+  const restoreWindow=(id:string)=>setMinimizedWindows(previous=>{const next=previous.filter(item=>item!==id);for(const other of ['studio','module','eye'])if(id!==other&&(other==='studio'?Boolean(studio):other==='module'?Boolean(module):eyeOpen)&&!next.includes(other))next.push(other);return next;});
+  const studioActive=Boolean(studio&&!minimizedWindows.includes('studio'));
+  const moduleActive=Boolean(module&&!minimizedWindows.includes('module'));
+  const eyeActive=eyeOpen&&!minimizedWindows.includes('eye');
+
   const pendingAlerts=useRef(new Map<number,any>());
   const chatAbort=useRef<AbortController|null>(null),turnVersion=useRef(0),interrupt=useRef(()=>{}),bargeIn=useRef(()=>{});
   const session=useRef<string|null>(null),iframe=useRef<HTMLIFrameElement|null>(null),cursor=useRef(0),inFlight=useRef(false);
@@ -132,18 +142,18 @@ export default function App(){
     return()=>{alive=false;controller.abort();};
   },[connected,graphRevision,tell]);
   useEffect(()=>{if(!connected)return;const timer=setInterval(()=>{if(prefsRef.current?.auto_index!==false&&!document.hidden&&!live.current.busy&&!live.current.recording&&!live.current.transcribing)setGraphRevision(value=>value+1);},60000);return()=>clearInterval(timer);},[connected]);
-  const openAnalysis=(kind:AnalysisKind)=>{if(autoVoice&&config?.fish_speech_configured)voice.prepare();setAnalyses(previous=>previous.includes(kind)?previous:[...previous,kind]);setEyeOpen(false);setModule(null);setChatOpen(false);};
+  const openAnalysis=(kind:AnalysisKind)=>{restoreWindow('analysis:'+kind);if(autoVoice&&config?.fish_speech_configured)voice.prepare();setAnalyses(previous=>previous.includes(kind)?previous:[...previous,kind]);setEyeOpen(false);setModule(null);setChatOpen(false);};
   const runCommand=(text:string)=>{
-    if(studio&&studioHandle.current?.handle(text))return true;
-    const site=studioCommand(text);if(site){setStudio({brief:site.brief,request:Date.now()});setEyeOpen(false);setModule(null);setChatOpen(false);return true;}
+    if(studioActive&&studioHandle.current?.handle(text))return true;
+    const site=studioCommand(text);if(site){restoreWindow('studio');if(!studio||site.brief)setStudio({brief:site.brief,request:Date.now()});setEyeOpen(false);setModule(null);setChatOpen(false);return true;}
     const attachment=text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
     if(/\b(?:ver|veja|ve|olh\w*|enxerg\w*|analis\w*|compartilh\w*|captur\w*)\b/.test(attachment)&&/\b(?:minha|a) tela\b/.test(attachment)){openAnalysis('screen');return true;}
     if(/\b(?:analis\w*|examin\w*|abr\w*|envi\w*|carreg\w*)\b/.test(attachment)&&/\b(?:imagem|foto|fotografia|arquivo|zip|codigo)\b/.test(attachment)){
       openAnalysis(/\b(?:imagem|foto|fotografia)\b/.test(attachment)?'image':'document');return true;
     }
-    const film=stremioCommand(text);if(film){if(config?.privacy_mode==='local'){tell('Stremio online desativado no modo local.',true);return true;}voice.stop();setStremio(film);setModule(null);setChatOpen(false);return true;}
-    const leadCommand=prospectCommand(text);if(leadCommand){if(config?.privacy_mode==='local'){tell('Prospecção online desativada no modo local.',true);return true;}voice.stop();setProspect(leadCommand);setModule(null);setChatOpen(false);return true;}
-    if(music.current?.handle(text)){setChatOpen(false);voice.stop();return true;}
+    const film=stremioCommand(text);if(film){if(config?.privacy_mode==='local'){tell('Stremio online desativado no modo local.',true);return true;}voice.stop();restoreWindow('stremio');setStremio(film);setModule(null);setChatOpen(false);return true;}
+    const leadCommand=prospectCommand(text);if(leadCommand){if(config?.privacy_mode==='local'){tell('Prospecção online desativada no modo local.',true);return true;}voice.stop();restoreWindow('prospect');setProspect(leadCommand);setModule(null);setChatOpen(false);return true;}
+    if(music.current?.handle(text)){if(studioActive)minimizeWindow('studio');setChatOpen(false);voice.stop();return true;}
     const position=cardPositionCommand(text);if(position&&(showSpokenCards||/cards?|cart[õo]es|textos?/i.test(text))){setCardLayout(position);setShowSpokenCards(true);setChatOpen(false);return true;}
     const cards=cardDisplayCommand(text);if(cards!==null){spokenCards.current=cards;setShowSpokenCards(cards);setChatOpen(false);if(cards){if(lastAnswer.current)setDisplayTurn(lastAnswer.current);else if(!displayTurn?.reply)tell('Ainda não há uma resposta para mostrar. Faça uma pergunta e peça a explicação em cards.',true);setModule(null);setEyeOpen(false);setNote(null);}return true;}
     const command=localCommand(text,eyeOpen);if(!command)return false;latency.current=null;
@@ -153,15 +163,15 @@ export default function App(){
       return true;
     }
     if((command.type==='eye'||command.type==='place')&&config?.privacy_mode==='local'){tell('O mapa mundial está desativado em modo local.',true);return true;}
-    if(command.type==='eye'){setAnalyses([]);voice.prepare();eyeAnnouncement.current=true;setEyeOpen(true);setChatOpen(false);setModule(null);setNote(null);}
+    if(command.type==='eye'){restoreWindow('eye');setAnalyses([]);voice.prepare();eyeAnnouncement.current=true;setEyeOpen(true);setChatOpen(false);setModule(null);setNote(null);}
     else if(command.type==='memory'){setEyeOpen(false);setShowSpokenCards(false);setChatOpen(false);setGraphRevision(value=>value+1);}
-    else if(command.type==='panel')setChatOpen(true);
-    else if(command.type==='place'){setPlaceQuery(command.query);setEyeOpen(true);setChatOpen(false);}
+    else if(command.type==='panel'){restoreWindow('chat');setChatOpen(true);}
+    else if(command.type==='place'){restoreWindow('eye');setPlaceQuery(command.query);setEyeOpen(true);setChatOpen(false);}
     return true;
   };commandRef.current=runCommand;
-  const selectNote=useCallback(async(path:string)=>{if(eyeOpen){setEyeOpen(false);return;}try{setNote(await jsonApi(`/memory/note?path=${encodeURIComponent(path)}`));}catch(error){tell('Não foi possível abrir essa nota.',true);}},[eyeOpen,tell]);
+  const selectNote=useCallback(async(path:string)=>{if(eyeOpen){setEyeOpen(false);return;}restoreWindow('note');try{setNote(await jsonApi(`/memory/note?path=${encodeURIComponent(path)}`));}catch(error){tell('Não foi possível abrir essa nota.',true);}},[eyeOpen,tell]);
   const worldReady=()=>{if(eyeAnnouncement.current){eyeAnnouncement.current=false;if(config?.fish_speech_configured)void voice.speak('Ampliando sua perspectiva. Olho de Deus aberto.');}};
-  interrupt.current=()=>{if(studio)studioHandle.current?.handle('fechar estúdio de sites');analysisSpeechQueue.current=[];setAnalyses([]);spokenCards.current=false;setStremio(null);setProspect(null);music.current?.stop();latency.current=null;turnVersion.current++;chatAbort.current?.abort();voice.stop();microphone.cancelCapture();eyeAnnouncement.current=false;pendingAlerts.current.clear();setBusy(false);inFlight.current=false;setModule(null);setEyeOpen(false);setNote(null);setChatOpen(false);setShowSpokenCards(false);setNotice('');};
+  interrupt.current=()=>{if(studioActive)studioHandle.current?.handle('fechar estúdio de sites');analysisSpeechQueue.current=[];setAnalyses([]);spokenCards.current=false;setStremio(null);setProspect(null);music.current?.stop();latency.current=null;turnVersion.current++;chatAbort.current?.abort();voice.stop();microphone.cancelCapture();eyeAnnouncement.current=false;pendingAlerts.current.clear();setBusy(false);inFlight.current=false;setModule(null);setEyeOpen(false);setNote(null);setChatOpen(false);setShowSpokenCards(false);setNotice('');};
   bargeIn.current=()=>{music.current?.pause();window.dispatchEvent(new Event('cronos:listen'));analysisSpeechQueue.current=[];latency.current=null;turnVersion.current++;chatAbort.current?.abort();voice.stop();microphone.cancelCapture();pendingAlerts.current.clear();setBusy(false);inFlight.current=false;setNotice('');};
   useEffect(()=>{const key=(event:KeyboardEvent)=>{if(event.key==='F4'&&!event.altKey&&!event.ctrlKey&&!event.metaKey){event.preventDefault();if(!event.repeat)handlers.current.f4();return;}if(event.key==='Escape'){if(!live.current.speaking&&!live.current.generating&&!live.current.busy&&music.current?.exitView()){event.preventDefault();return;}event.preventDefault();interrupt.current();}};window.addEventListener('keydown',key);return()=>{window.removeEventListener('keydown',key);chatAbort.current?.abort();};},[]);
   useEffect(()=>{if(!notice)return;const timer=setTimeout(()=>setNotice(''),8000);return()=>clearTimeout(timer);},[notice]);
@@ -235,8 +245,8 @@ export default function App(){
       setTools(old=>old.map(item=>item===result?outcome:item));tell(outcome.status==='completed'?'Solicitação atendida; confira seu resultado.':outcome.error||outcome.status,outcome.status==='failed');
     }catch(error){tell(error instanceof Error?error.message:'Falha na confirmação.',true);}finally{setBusy(false);inFlight.current=false;}
   };
-  const openModule=(index:number)=>{setAnalyses([]);setEyeOpen(false);setChatOpen(false);setNote(null);setModule(moduleIds[index]);setModuleActivity('IDLE');};
-  useEffect(()=>{document.documentElement.dataset.cronosPanel=module||studio?'true':'false';return()=>{delete document.documentElement.dataset.cronosPanel;};},[module,studio]);
+  const openModule=(index:number)=>{restoreWindow('module');setAnalyses(previous=>previous.filter(kind=>minimizedWindows.includes('analysis:'+kind)));setEyeOpen(false);setChatOpen(false);setNote(null);setModule(moduleIds[index]);setModuleActivity('IDLE');};
+  useEffect(()=>{document.documentElement.dataset.cronosPanel=moduleActive||studioActive?'true':'false';return()=>{delete document.documentElement.dataset.cronosPanel;};},[moduleActive,studioActive]);
   const closeModule=()=>{(iframe.current?.contentWindow as (Window & {cronosPanelClose?:()=>void})|null)?.cronosPanelClose?.();setModule(null);setModuleActivity('IDLE');setGraphRevision(value=>value+1);if(connected)void jsonApi('/status').then(setConfig).catch(()=>{});};
   const handlers=useRef({mic:handleMic,f4:()=>{},module:openModule});handlers.current={mic:handleMic,f4:()=>{if(microphone.recording)microphone.stop();else handleMic();},module:openModule};
   const stageMic=useCallback(()=>handlers.current.mic(),[]);
@@ -244,36 +254,48 @@ export default function App(){
   const activeAlerts=monitor?.alerts||[];
   const fresh=monitor?.checked_at&&Date.now()-Date.parse(monitor.checked_at)<45000;
   const diagnostic=!connected?'DESCONECTADO':!monitor||!fresh?'DIAGNÓSTICO INDISPONÍVEL':activeAlerts.length?`${activeAlerts.length} ALERTA(S)`:'SEM ALERTAS NOS SINAIS MONITORADOS';
+  const shelfItems:ShelfItem[]=[];
+  const addWindow=(id:string,title:string,detail?:string)=>{if(minimizedWindows.includes(id))shelfItems.push({id,title,detail,onRestore:()=>restoreWindow(id)});};
+  if(studio)addWindow('studio','Estúdio de Sites',studioWindow.title+' · '+studioWindow.detail);
+  if(module)addWindow('module',moduleNames[moduleIds.indexOf(module)]||'Painel');
+  if(stremio)addWindow('stremio','Stremio',stremio.query);
+  if(prospect)addWindow('prospect','Prospecção',prospect.city);
+  if(eyeOpen)addWindow('eye','Olho de Deus');
+  if(chatOpen)addWindow('chat','Conversa');
+  if(note)addWindow('note','Nota',note.path);
+  analyses.forEach(kind=>addWindow('analysis:'+kind,kind==='screen'?'Tela':kind==='image'?'Imagem':'Arquivo',analysisTasks.includes(kind)?'Analisando em segundo plano':'Análise aberta'));
+  if(musicWindow.visible&&musicWindow.minimized)shelfItems.push({id:'music',title:'Música',detail:musicWindow.title+' · '+musicWindow.state,playing:musicPlaying,onRestore:()=>{restoreWindow('music');music.current?.restore();},onPlayback:()=>{if(musicPlaying)music.current?.pause();else void music.current?.resume();},onClose:()=>music.current?.stop()});
   return <div className="relative h-screen w-screen overflow-hidden bg-black text-slate-100 flex flex-col select-none">
+    <WindowShelf items={shelfItems}/>
     <UpdateNotice connected={connected} enabled={panelPrefs?.proactive_suggestions!==false} idle={!studio&&!module&&!chatOpen&&!eyeOpen&&!busy&&!microphone.capturing&&!microphone.transcribing&&!voice.isSpeaking&&!voice.isGenerating} voiceEnabled={autoVoice&&Boolean(config?.fish_speech_configured)} onSpeak={text=>void voice.speak(text)} onBusy={setUpdateBusy}/>
 
-    {!eyeOpen&&<main className={`absolute inset-0 ${module?'scene-under-panel':''}`}><IntegratedNeuralStage state={state} audioLevelSource={audioLevelSource} onOrbClick={stageMic} onMicToggle={stageMic} onModuleClick={stageModule}/></main>}
-    {!eyeOpen&&<div className={`memory-slot ${eyeOpen?'small':''}`}><MemorySpiral graph={graph} small={eyeOpen} onSelect={selectNote}/></div>}
-    {eyeOpen&&<div className="eye-slot expanded">
+    {!eyeActive&&<main className={`absolute inset-0 ${moduleActive?'scene-under-panel':''}`}><IntegratedNeuralStage state={state} audioLevelSource={audioLevelSource} onOrbClick={stageMic} onMicToggle={stageMic} onModuleClick={stageModule}/></main>}
+    {!eyeActive&&<div className={`memory-slot ${eyeOpen?'small':''}`}><MemorySpiral graph={graph} small={eyeOpen} onSelect={selectNote}/></div>}
+    {eyeOpen&&<WindowSurface minimized={!eyeActive}><div className="eye-slot expanded"><MinimizeWindow label="Olho de Deus" onClick={()=>minimizeWindow('eye')}/>
       <button className="eye-close" aria-label="Fechar Olho de Deus" title="Fechar Olho de Deus · F4 controla o microfone" onClick={()=>{eyeAnnouncement.current=false;setEyeOpen(false);}}><X size={20}/></button>
       <Suspense fallback={<div className="panel-loading">Abrindo Olho de Deus…</div>}><WorldMap query={placeQuery} onError={message=>tell(message,true)} onReady={worldReady}/></Suspense>
-    </div>}
-    {!eyeOpen&&!module&&<><button className="reference-attachment" aria-label="Analisar imagem" title="Analisar imagem" onClick={()=>openAnalysis('image')}><ImagePlus size={16}/></button><button className="reference-attachment files" aria-label="Analisar ZIP ou código" title="Analisar ZIP ou código" onClick={()=>openAnalysis('document')}><FileArchive size={16}/></button></>}
-    {!eyeOpen&&!module&&<button className="reference-screen" aria-label="Ver minha tela" title="Ver minha tela" onClick={()=>openAnalysis('screen')}><MonitorUp size={16}/></button>}
-    {!eyeOpen&&!module&&analyses.map(kind=><AnalysisPanel key={kind} kind={kind} sessionId={session.current} onClose={()=>setAnalyses(previous=>previous.filter(item=>item!==kind))} onBusy={active=>setAnalysisTasks(previous=>active?[...previous.filter(item=>item!==kind),kind]:previous.filter(item=>item!==kind))} onResult={(reply,result)=>{if(result?.session_id)session.current=result.session_id;lastAnswer.current={question:kind==='screen'?'Captura da tela':kind==='image'?'Análise de imagem':'Análise de arquivo',source:'text',reply};if(autoVoice&&config?.fish_speech_configured){analysisSpeechQueue.current.push(reply);setAnalysisSpeechRevision(value=>value+1);}}}/>)}
+    </div></WindowSurface>}
+    {!eyeActive&&!moduleActive&&<><button className="reference-attachment" aria-label="Analisar imagem" title="Analisar imagem" onClick={()=>openAnalysis('image')}><ImagePlus size={16}/></button><button className="reference-attachment files" aria-label="Analisar ZIP ou código" title="Analisar ZIP ou código" onClick={()=>openAnalysis('document')}><FileArchive size={16}/></button></>}
+    {!eyeActive&&!moduleActive&&<button className="reference-screen" aria-label="Ver minha tela" title="Ver minha tela" onClick={()=>openAnalysis('screen')}><MonitorUp size={16}/></button>}
+    {analyses.map(kind=><WindowSurface key={kind} minimized={minimizedWindows.includes('analysis:'+kind)||eyeActive||moduleActive}><AnalysisPanel key={kind} kind={kind} onMinimize={()=>minimizeWindow('analysis:'+kind)} sessionId={session.current} onClose={()=>setAnalyses(previous=>previous.filter(item=>item!==kind))} onBusy={active=>setAnalysisTasks(previous=>active?[...previous.filter(item=>item!==kind),kind]:previous.filter(item=>item!==kind))} onResult={(reply,result)=>{if(result?.session_id)session.current=result.session_id;lastAnswer.current={question:kind==='screen'?'Captura da tela':kind==='image'?'Análise de imagem':'Análise de arquivo',source:'text',reply};if(autoVoice&&config?.fish_speech_configured){analysisSpeechQueue.current.push(reply);setAnalysisSpeechRevision(value=>value+1);}}}/></WindowSurface>)}
     <button className={`reference-mic ${microphone.starting?'starting':microphone.transcribing?'transcribing':busy?'thinking':voice.isGenerating?'generating':voice.isSpeaking?'speaking':microphone.recording?'recording':''}`} aria-pressed={microphone.recording} title={microphone.starting?'Abrindo microfone':microphone.transcribing?'Transcrevendo':busy?'Aguardando Gemini':voice.isGenerating?'Preparando voz':voice.isSpeaking?'Falando — diga Cronos para interromper':microphone.recording?'Microfone ligado':'Microfone desligado'} aria-label={microphone.recording?'Desligar microfone':'Ligar microfone'} onClick={handleMic} ><Mic size={16}/></button>
-    {!studio&&!eyeOpen&&!module&&<button className="studio-entry" onClick={()=>setStudio({brief:'',request:Date.now()})}><Code2 size={15}/>ESTÚDIO DE SITES</button>}
-    {studio&&<Suspense fallback={<div className="panel-loading">Abrindo Estúdio de Sites…</div>}><SiteStudio ref={studioHandle} initial={studio} onClose={()=>setStudio(null)} onSpeak={text=>{if(autoVoice&&config?.fish_speech_configured){analysisSpeechQueue.current.push(text);setAnalysisSpeechRevision(v=>v+1);}}}/></Suspense>}
-    {stremio&&<Suspense fallback={<div className="panel-loading">Abrindo Stremio…</div>}><StremioPanel key={JSON.stringify(stremio)} initial={stremio} onPlayback={setFilmPlaying} onClose={()=>setStremio(null)}/></Suspense>}
-    {prospect&&<Suspense fallback={<div className="panel-loading">Abrindo prospecção…</div>}><ProspectPanel key={prospect.city+'|'+prospect.category+'|'+(prospect.report?.id||'')} initial={prospect} onClose={()=>setProspect(null)} onAsk={text=>{setProspect(null);void sendText(text);}}/></Suspense>}
-    <MusicPlayer ref={music} onPlayback={setMusicPlaying} onTalk={async()=>{voice.stop();microphone.cancelCapture();await microphone.start();}} local={config?.privacy_mode==='local'} onError={message=>tell(message,true)}/>
+    {!studio&&!eyeOpen&&!module&&<button className="studio-entry" onClick={()=>{restoreWindow('studio');setStudio({brief:'',request:Date.now()});}}><Code2 size={15}/>ESTÚDIO DE SITES</button>}
+    {studio&&<WindowSurface minimized={!studioActive}><Suspense fallback={<div className="panel-loading">Abrindo Estúdio de Sites…</div>}><SiteStudio ref={studioHandle} initial={studio} active={studioActive} onWindowChange={setStudioWindow} onMinimize={()=>minimizeWindow('studio')} onClose={()=>setStudio(null)} onSpeak={text=>{if(autoVoice&&config?.fish_speech_configured){analysisSpeechQueue.current.push(text);setAnalysisSpeechRevision(v=>v+1);}}}/></Suspense></WindowSurface>}
+    {stremio&&<WindowSurface minimized={minimizedWindows.includes('stremio')}><Suspense fallback={<div className="panel-loading">Abrindo Stremio…</div>}><StremioPanel key={JSON.stringify(stremio)} initial={stremio} onMinimize={()=>minimizeWindow('stremio')} onPlayback={setFilmPlaying} onClose={()=>setStremio(null)}/></Suspense></WindowSurface>}
+    {prospect&&<WindowSurface minimized={minimizedWindows.includes('prospect')}><Suspense fallback={<div className="panel-loading">Abrindo prospecção…</div>}><ProspectPanel key={prospect.city+'|'+prospect.category+'|'+(prospect.report?.id||'')} initial={prospect} onMinimize={()=>minimizeWindow('prospect')} onClose={()=>setProspect(null)} onAsk={text=>{setProspect(null);void sendText(text);}}/></Suspense></WindowSurface>}
+    <MusicPlayer ref={music} onWindowChange={setMusicWindow} onPlayback={setMusicPlaying} onTalk={async()=>{voice.stop();microphone.cancelCapture();await microphone.start();}} local={config?.privacy_mode==='local'} onError={message=>tell(message,true)}/>
     {notice&&error&&<div className="scene-notice" role="status">{notice}</div>}
-    {note&&<section className="note-window" aria-label="Nota Obsidian"><button onClick={()=>setNote(null)} aria-label="Fechar nota"><X size={18}/></button><pre>{note.content}</pre></section>}
+    {note&&<WindowSurface minimized={minimizedWindows.includes('note')}><section className="note-window" aria-label="Nota Obsidian"><MinimizeWindow label="nota" onClick={()=>minimizeWindow('note')}/><button onClick={()=>setNote(null)} aria-label="Fechar nota"><X size={18}/></button><pre>{note.content}</pre></section></WindowSurface>}
     {displayTurn?.reply&&showSpokenCards&&!chatOpen&&!module&&!eyeOpen&&<AnswerCards reply={displayTurn.reply} layout={cardLayout}/>}
     {displayTurn&&displayTurn.source==='text'&&showSpokenCards&&!chatOpen&&!module&&!eyeOpen&&<MovableCardFrame className="spoken-question"><HolographicCard title="PERGUNTA" variant="ribbon" movable><p className="holo-text">{displayTurn.question}</p></HolographicCard></MovableCardFrame>}
-    {chatOpen&&<section className="card-composer" aria-label="Escrever para Kronos"><HolographicCard title="PERGUNTA" variant="layered">
-      <button className="holo-close" onClick={()=>setChatOpen(false)} aria-label="Fechar conversa"><X size={17}/></button>
+    {chatOpen&&<WindowSurface minimized={minimizedWindows.includes('chat')}><section className="card-composer" aria-label="Escrever para Kronos"><HolographicCard title="PERGUNTA" variant="layered">
+      <MinimizeWindow label="conversa" onClick={()=>minimizeWindow('chat')}/><button className="holo-close" onClick={()=>setChatOpen(false)} aria-label="Fechar conversa"><X size={17}/></button>
       <form onSubmit={send}><label htmlFor="chat-input">O que você quer perguntar?</label><textarea id="chat-input" value={draft} onChange={event=>{setDraft(event.target.value);event.target.style.height='auto';event.target.style.height=Math.min(260,event.target.scrollHeight)+'px';}} maxLength={16000} rows={2}/>
         <div className="footer-actions"><button type="submit" disabled={busy||microphone.transcribing||!draft.trim()}><Send size={15}/>Enviar mensagem</button></div>
       </form>
-    </HolographicCard></section>}
+    </HolographicCard></section></WindowSurface>}
     {tools.some(result=>result.status==='pending_confirmation')&&<section className="holo-tool-deck" aria-label="Ações pendentes">{tools.filter(result=>result.status==='pending_confirmation').map((result,index)=><HolographicCard key={index} title={result.name} variant="layered"><pre>{JSON.stringify(result.arguments,null,2)}</pre><div className="footer-actions"><button disabled={busy} onClick={()=>approve(result,true)}>Confirmar ação</button><button disabled={busy} onClick={()=>approve(result,false)}>Cancelar</button></div></HolographicCard>)}</section>}
-    {module&&<Suspense fallback={<div className="panel-loading">Abrindo painel…</div>}><ModulePanel id={module} onSelect={openModule} onClose={closeModule} graph={graph} onSync={()=>setGraphRevision(v=>v+1)} onNote={path=>{closeModule();void selectNote(path);}} preferences={panelPrefs} onPreferences={updatePreferences} voice={voice} microphone={microphone} lastTurn={displayTurn} busy={busy} onComposer={()=>{closeModule();setChatOpen(true);}} onEye={()=>{closeModule();voice.prepare();eyeAnnouncement.current=true;setEyeOpen(true);}} onAsk={text=>void sendText(text)}/></Suspense>}
+    {module&&<WindowSurface minimized={!moduleActive}><Suspense fallback={<div className="panel-loading">Abrindo painel…</div>}><ModulePanel id={module} onMinimize={()=>minimizeWindow('module')} onSelect={openModule} onClose={closeModule} graph={graph} onSync={()=>setGraphRevision(v=>v+1)} onNote={path=>{closeModule();void selectNote(path);}} preferences={panelPrefs} onPreferences={updatePreferences} voice={voice} microphone={microphone} lastTurn={displayTurn} busy={busy} onComposer={()=>{closeModule();restoreWindow('chat');setChatOpen(true);}} onEye={()=>{closeModule();restoreWindow('eye');voice.prepare();eyeAnnouncement.current=true;setEyeOpen(true);}} onAsk={text=>void sendText(text)}/></Suspense></WindowSurface>}
 
 
   </div>;

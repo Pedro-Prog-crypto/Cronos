@@ -120,8 +120,11 @@ class CompatibleProvider:
                 else:
                     raw = data["choices"][0]["message"]["content"]
                 finish=data.get('stop_reason') if spec.kind=='anthropic' else data['choices'][0].get('finish_reason')
-                if structured and finish in {'length','max_tokens'}:raise ProviderError('O modelo atingiu o limite de saída do código.',502,kind='output_limit')
-                return (parse_structured_reply if structured else parse_completed_reply)(raw)
+                if structured and finish in {'length','max_tokens'}:raise ProviderError('O modelo atingiu o limite de saída do código.',502,kind='output_limit',partial_output=raw)
+                try:return (parse_structured_reply if structured else parse_completed_reply)(raw)
+                except ProviderError as exc:
+                    if structured and exc.kind=='format' and isinstance(raw,str):exc.partial_output=raw[:700_000]
+                    raise
         except httpx.HTTPStatusError as exc:
             status = exc.response.status_code
             reason = {401: "chave rejeitada", 403: "acesso negado", 404: "modelo ou endpoint indisponível",

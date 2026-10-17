@@ -3,8 +3,9 @@ import {ImagePlus,FileArchive,X,Upload,ScanLine,MonitorUp,Camera,Square} from 'l
 import {api} from '../api';
 import {useMovable,useDragScroll} from '../hooks/useMovable';
 import './analysis-panel.css';
+import {MinimizeWindow} from './WindowShelf';
 export type AnalysisKind='image'|'document'|'screen';
-export function AnalysisPanel({kind,onClose,onBusy,onResult,sessionId}:{kind:AnalysisKind;onClose:()=>void;onBusy:(busy:boolean)=>void;onResult:(reply:string,result?:any)=>void;sessionId?:string|null}){
+export function AnalysisPanel({kind,onClose,onBusy,onResult,sessionId,onMinimize}:{kind:AnalysisKind;onClose:()=>void;onBusy:(busy:boolean)=>void;onResult:(reply:string,result?:any)=>void;sessionId?:string|null;onMinimize?:()=>void}){
  const movement=useMovable(),scroll=useDragScroll();
  const [name,setName]=useState(''),[preview,setPreview]=useState(''),[payload,setPayload]=useState('');
  const [files,setFiles]=useState<{name:string;truncated:boolean}[]>([]),[skipped,setSkipped]=useState(0),[truncated,setTruncated]=useState(false);
@@ -63,7 +64,7 @@ export function AnalysisPanel({kind,onClose,onBusy,onResult,sessionId}:{kind:Ana
  };
  const active=phase==='analyzing';
  return <section ref={movement.ref} onPointerDown={e=>{movement.onPointerDown(e);scroll.onPointerDown(e);}} onPointerMove={e=>{movement.onPointerMove(e);scroll.onPointerMove(e);}} onPointerUp={e=>{movement.onPointerUp(e);scroll.onPointerUp(e);}} onPointerCancel={e=>{movement.onPointerCancel(e);scroll.onPointerCancel(e);}} onKeyDown={movement.onKeyDown} className={`analysis-panel kind-${kind} movable-surface ${active?'is-scanning':''}`} role="region" aria-label={kind==='screen'?'Ver minha tela':kind==='image'?'Análise de imagem':'Análise de arquivo'}>
-  <header data-drag-handle tabIndex={0} title="Arraste para mover o painel"><ScanLine size={16}/><strong>{active?'ANALISANDO':phase==='done'?'ANÁLISE CONCLUÍDA':kind==='screen'?'VER MINHA TELA':kind==='image'?'ANÁLISE DE IMAGEM':'ANÁLISE DE ARQUIVO'}</strong><button onClick={onClose} aria-label="Fechar análise"><X size={16}/></button></header>
+  <header data-drag-handle tabIndex={0} title="Arraste para mover o painel"><ScanLine size={16}/><strong>{active?'ANALISANDO':phase==='done'?'ANÁLISE CONCLUÍDA':kind==='screen'?'VER MINHA TELA':kind==='image'?'ANÁLISE DE IMAGEM':'ANÁLISE DE ARQUIVO'}</strong><MinimizeWindow label={kind==='screen'?'tela':kind==='image'?'imagem':'arquivo'} onClick={onMinimize}/><button onClick={onClose} aria-label="Fechar análise"><X size={16}/></button></header>
   {kind==='screen'&&<><video ref={video} muted playsInline style={{display:'none'}}/><p className="analysis-consent">Escolha uma janela ou aba. Só a captura enviada será analisada, sem áudio nem envio contínuo. Depois pode conversar sobre ela.</p><div className="analysis-actions"><button disabled={active} onClick={()=>void capture()}>{sharing?<Camera size={16}/>:<MonitorUp size={16}/>} {sharing?'Atualizar captura':'Compartilhar tela'}</button>{sharing&&<button onClick={stopSharing}><Square size={16}/>Parar</button>}</div></>}
   <div className="analysis-viewport">
    {preview?<img src={preview} alt={`Imagem selecionada: ${name}`}/>:files.length?<div className="analysis-file-list"><FileArchive size={30}/><b>{name}</b>{files.map(file=><span key={file.name}>{file.name}{file.truncated?' · trecho':''}</span>)}{skipped>0&&<small>{skipped} arquivo(s) ignorado(s), incluindo binários e configurações privadas.</small>}{truncated&&<small>Análise limitada a trechos: até 24 mil caracteres.</small>}</div>:<button className="analysis-pick" onClick={()=>fileInput.current?.click()}>{kind==='image'?<ImagePlus size={35}/>:<FileArchive size={35}/>}<span>{phase==='loading'?'LENDO ARQUIVO…':kind!=='document'?'Escolher imagem':'Escolher ZIP ou código'}</span><small>Até 30 MiB</small></button>}

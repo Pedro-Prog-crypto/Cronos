@@ -14,6 +14,7 @@ class Store:
         self.dbpath = safe_path(self.root, 'projects.sqlite3', private=True)
         with self.connect() as db:
             db.executescript('''CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY,payload TEXT NOT NULL,updated REAL NOT NULL);
+            CREATE TABLE IF NOT EXISTS generation_drafts(project TEXT PRIMARY KEY,request_key TEXT NOT NULL,payload TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS revisions(project TEXT,revision INTEGER,files TEXT NOT NULL,summary TEXT NOT NULL,report TEXT NOT NULL,created REAL NOT NULL,PRIMARY KEY(project,revision));''')
         with self.connect() as db:
             if 'archived' not in {row[1] for row in db.execute('PRAGMA table_info(projects)')}:
@@ -94,3 +95,16 @@ class Store:
 
     def asset_path(self, project, name):
         return safe_path(self.directory(project), name, private=True)
+
+    def generation_draft(self,project,key):
+        with self.connect() as db:
+            row=db.execute('SELECT payload FROM generation_drafts WHERE project=? AND request_key=?',(project['id'],key)).fetchone()
+        return json.loads(row[0]) if row else None
+
+    def save_generation_draft(self,project,key,raw,segments,request_payload=None):
+        if len(raw)>700_000:raise ValueError('Entrega parcial acima do limite permitido.')
+        with self.connect() as db:
+            db.execute('INSERT OR REPLACE INTO generation_drafts VALUES(?,?,?)',(project['id'],key,json.dumps({'raw':raw,'segments':segments,'request_payload':request_payload},ensure_ascii=True)))
+
+    def clear_generation_draft(self,project):
+        with self.connect() as db:db.execute('DELETE FROM generation_drafts WHERE project=?',(project['id'],))

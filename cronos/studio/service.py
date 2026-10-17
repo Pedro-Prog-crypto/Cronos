@@ -194,13 +194,13 @@ class Studio:
     def code_provider(self, settings, *, use_injected=True):
         # Conversation output limits often truncate complete site bundles. This is a
         # separate provider instance; neither .env nor conversation settings change.
-        settings = replace(settings, gemini_transport='rest', output_tokens=max(settings.output_tokens or 0, 8192), provider_timeout=240)
+        settings = replace(settings, gemini_transport='rest', output_tokens=max(settings.output_tokens or 0, 8192), provider_timeout=600)
         injected = self.app.state.engine.provider if use_injected else None
         provider = injected or make_provider(settings)
         if injected is None and hasattr(provider, 'spec'):
-            provider.spec = provider.spec.model_copy(update={'max_output_tokens': provider.spec.max_output_tokens or 8192, 'timeout_seconds': 240})
+            provider.spec = provider.spec.model_copy(update={'max_output_tokens': provider.spec.max_output_tokens or 8192, 'timeout_seconds': max(provider.spec.timeout_seconds,240)})
         if injected is None and hasattr(provider, 'settings'):
-            provider.settings = replace(provider.settings, gemini_transport='rest', output_tokens=max(provider.settings.output_tokens or 0, 8192), provider_timeout=240)
+            provider.settings = replace(provider.settings, gemini_transport='rest', output_tokens=max(provider.settings.output_tokens or 0, 8192), provider_timeout=600)
         return provider
 
     def provider_pool(self, project, *, vision=False):
@@ -210,7 +210,7 @@ class Studio:
         return ProviderPool(project, entries,
                             lambda identifier: self.code_provider(replace(settings, provider=identifier), use_injected=not vision),
                             self.store.event, self.vision_cooldowns if vision else self.provider_cooldowns,
-                            injected=injected, timeout=120 if vision else 240)
+                            injected=injected, timeout=120 if vision else 600)
 
     def check_provider(self, chosen):
         if self.app.state.engine.provider is not None: return
@@ -341,10 +341,12 @@ class Studio:
             payload['visual_reference'] = reference_notes
             self.store.event(project, 'generation', 'Solicitando os três arquivos do site. Se uma integração falhar, a próxima configurada assume esta etapa com o mesmo pedido e os recursos salvos.')
             payload_text = json.dumps(payload, ensure_ascii=False)
+            delivery_key_payload=payload_text
             deliveries = {}
             while True:
                 with request_scope('studio-generation', project['id']):
-                    result = await providers.reply(SYSTEM, [{'role': 'user', 'content': payload_text}])
+                    from .delivery import bundle
+                    result = await bundle(providers,SYSTEM,payload_text,self.store,project,key_payload=delivery_key_payload)
                 identifier = providers.current
                 deliveries[identifier] = deliveries.get(identifier, 0) + 1
                 try:
@@ -360,6 +362,7 @@ class Studio:
                         raise InvalidProject('Revisão recusada pelas verificações: ' + failures)
                     break
                 except InvalidProject as exc:
+                    self.store.clear_generation_draft(project)
                     if deliveries[identifier] >= 2:
                         providers.reject('código recebido, mas recusado: '+str(exc)[:450])
                         payload_text = json.dumps(payload, ensure_ascii=False)
@@ -368,6 +371,8 @@ class Studio:
                     payload_text = json.dumps({**payload, 'validation_error': str(exc), 'previous_candidate': str(result.get('reply', ''))[:40000],
                                                'correction': 'Corrija os problemas e retorne os três arquivos completos, em um pacote menor se o anterior foi truncado.'}, ensure_ascii=False)
             project['status'] = 'ready'; project['finished'] = time.time()
+            self.store.clear_generation_draft(project)
+            project.pop('generation_progress',None)
             report['origin'] = 'generated'
             self.store.commit(project, files, summary, report)
             self.store.event(project, 'ready', 'Versão salva. Verificações estáticas concluídas; agora abra a prévia e execute os testes no navegador antes de aprovar.')

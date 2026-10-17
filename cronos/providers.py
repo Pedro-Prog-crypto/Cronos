@@ -20,12 +20,14 @@ def record_gemini_error(status,message):
 
 
 class ProviderError(Exception):
-    def __init__(self,message,status=None,*,kind=None):
+    def __init__(self,message,status=None,*,kind=None,partial_output=None):
         super().__init__(message)
         self.retryable = status in {429, 502, 503, 504}
         self.status=status if status in {429,502,503,504} else 503
         self.http_status=status if isinstance(status,int) and 400<=status<=599 else None
         self.kind=kind
+        # Private recovery material, never included in an error message/log.
+        self.partial_output=partial_output if isinstance(partial_output,str) and len(partial_output)<=700_000 else None
 
 
 def quota_details(response):
@@ -162,12 +164,17 @@ class Gemini:
         if remaining>0:raise ProviderError(f'Gemini: limite recente (HTTP 429). Aguarde {int(remaining)+1} segundos antes de tentar novamente. Nenhuma nova chamada foi enviada.',429)
         characters=len(system)+len(OUTPUT_RULES)+sum(len(m['content']) for m in messages)
         try:
-            async with httpx.AsyncClient(timeout=self.settings.provider_timeout) as client:
+            # Long code may legitimately take minutes while bytes keep arriving.
+            # A silent connection must still fail promptly and preserve its prefix.
+            timeout=httpx.Timeout(90,connect=15,write=45,pool=15) if structured else self.settings.provider_timeout
+            async with httpx.AsyncClient(timeout=timeout) as client:
                 for attempt in range(2):
-                    response = await client.post(
+                    from cronos.structured_stream import receive
+                    send=receive if structured else lambda client,url,headers,payload:client.post(url,headers=headers,json=payload)
+                    response = await send(client,
                         f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
                         headers={"x-goog-api-key": key},
-                        json={
+                        payload={
                             "systemInstruction": {"parts": [{"text": system + "\n" + (STRUCTURED_RULES if structured else OUTPUT_RULES)}]},
                             "contents": [{"role": "model" if m["role"] == "assistant" else "user",
                                           "parts": [{"text": m["content"]}] + ([{"inlineData": {"mimeType": m["image"]["mime_type"], "data": m["image"]["data"]}}] if m.get("image") else [])} for m in messages],
@@ -192,11 +199,12 @@ class Gemini:
                 if not candidates:
                     raise ProviderError("Gemini não retornou uma resposta. Tente uma mensagem curta de teste.")
                 candidate = candidates[0]
-                if candidate.get("finishReason") == "MAX_TOKENS":
-                    raise ProviderError("Gemini atingiu o limite de saída. Reduza a mensagem ou o contexto da conversa.",502,kind="output_limit")
                 raw = "".join(p.get("text", "") for p in candidate["content"]["parts"])
+                if candidate.get("finishReason") == "MAX_TOKENS":
+                    raise ProviderError("Gemini atingiu o limite de saída desta parte.",502,kind="output_limit",partial_output=raw if structured else None)
                 try:return parse_structured_reply(raw) if structured else parse_completed_reply(raw)
                 except ProviderError as exc:
+                    if structured and exc.kind=='format':exc.partial_output=raw[:700_000]
                     record_gemini_error(502,str(exc))
                     raise
         except httpx.HTTPStatusError as exc:

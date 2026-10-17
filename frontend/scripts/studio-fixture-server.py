@@ -82,6 +82,22 @@ if os.getenv('STUDIO_TEST_FALLBACK') == '1':
    return await super().reply(system,messages)
  studio_service.make_provider=lambda config: ReserveBuilder(config.provider)
  app=create_app(settings,vision_provider=vision_fixture)
+elif os.getenv('STUDIO_TEST_BACKGROUND') == '1':
+ class BackgroundBuilder(Builder):
+  pending=''
+  async def reply(self,system,messages):
+   if 'CONTRATO DESTA ETAPA' in system:
+    calls['continuations']=calls.get('continuations',0)+1
+    data=json.loads(messages[0]['content']);prefix=data['received_prefix']
+    assert self.pending.startswith(prefix)
+    await asyncio.sleep(4)
+    return {'reply':json.dumps({'continuation':self.pending[len(prefix):]})}
+   result=await super().reply(system,messages)
+   if 'files' in json.loads(result['reply']):
+    self.pending=result['reply'];await asyncio.sleep(4)
+    raise ProviderError('Fixture output limit',502,kind='output_limit',partial_output=self.pending[:len(self.pending)//2])
+   return result
+ app=create_app(settings,BackgroundBuilder(),vision_provider=vision_fixture)
 else:
  app=create_app(settings,Builder(),vision_provider=vision_fixture)
 if os.getenv('STUDIO_TEST_SCREEN') == '1':

@@ -1,6 +1,8 @@
 CRONOS COMPLETO — UM PACOTE
 
 NESTA ATUALIZACAO
+As janelas agora tem um botao de minimizar (tracinho). Estudio, musica, Stremio, analises, paineis, conversa, notas e Olho de Deus podem ficar em segundo plano. Restaure pela barra no canto inferior. Minimizar nao cancela a criacao nem reinicia o audio; fechar e outra acao.
+O Estudio recebe a entrega longa do Gemini em fluxo. Se uma resposta de codigo for cortada, preserva a parte recebida e pede continuacao. Uma falha de cota/conexao ainda pode exigir outra IA ou nova tentativa. O codigo parcial nunca substitui uma versao aprovada.
 Ver minha tela fica ao lado do microfone: compartilhe uma janela, confira a captura e clique em Analisar. Depois converse sobre ela; mudancas na tela precisam de nova captura.
 A voz filtra caminhos, codigo e rodapes de memoria. A captura de pergunta e bloqueada enquanto musica/video toca; clicar no microfone pausa a midia para conversar.
 O player de musica oferece nova tentativa apos falha. No Stremio, reproducao interna precisa de uma fonte HTTPS direta de um complemento fornecido pelo senhor; o catalogo sozinho nao fornece videos nem importa sua conta.

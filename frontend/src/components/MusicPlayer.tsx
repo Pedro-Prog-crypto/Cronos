@@ -2,12 +2,16 @@ import React,{forwardRef,useEffect,useImperativeHandle,useRef,useState} from 're
 import {api} from '../api';
 import {musicCommand} from '../musicCommands';
 import './MusicPlayer.css';
-export type MusicHandle={handle:(text:string)=>boolean;stop:()=>void;pause:()=>void;exitView:()=>boolean;load:(result:any)=>void};
+import {MinimizeWindow} from './WindowShelf';
+export type MusicWindow={visible:boolean;minimized:boolean;title:string;state:string};
+export type MusicHandle={handle:(text:string)=>boolean;stop:()=>void;pause:()=>void;resume:()=>Promise<void>;minimize:()=>void;restore:()=>void;exitView:()=>boolean;load:(result:any)=>void};
 type Track={id:string;title:string};
 type Media={audio_url?:string|null;video_url?:string|null;title?:string;player?:'official';id?:string;height?:number;qualities?:{height:number;video_url:string;audio_url?:string|null}[]};
 const time=(n:number)=>`${Math.floor(n/60)}:${String(Math.floor(n%60)).padStart(2,'0')}`;
 function officialPlayer(id:string){const url=new URL('/music/player',location.href);url.hostname=location.hostname==='localhost'?'127.0.0.1':'localhost';url.search=new URLSearchParams({id,parentOrigin:location.origin}).toString();return url;}
-export const MusicPlayer=forwardRef<MusicHandle,{local:boolean;onError:(message:string)=>void;onTalk?:()=>Promise<void>;onPlayback?:(active:boolean)=>void}>(({local,onError,onTalk,onPlayback},ref)=>{
+export const MusicPlayer=forwardRef<MusicHandle,{local:boolean;onError:(message:string)=>void;onTalk?:()=>Promise<void>;onPlayback?:(active:boolean)=>void;onWindowChange?:(state:MusicWindow)=>void}>(({local,onError,onTalk,onPlayback,onWindowChange},ref)=>{
+ const [minimized,setMinimized]=useState(false);
+ const windowCallback=useRef(onWindowChange);windowCallback.current=onWindowChange;
  const playback=useRef(onPlayback);playback.current=onPlayback;
  useEffect(()=>()=>playback.current?.(false),[]);
  const [visible,setVisible]=useState(false),[tracks,setTracks]=useState<Track[]>([]),[index,setIndex]=useState(0),[media,setMedia]=useState<Media|null>(null),[message,setMessage]=useState(''),[hz,setHz]=useState<number|null>(null);
@@ -26,7 +30,7 @@ export const MusicPlayer=forwardRef<MusicHandle,{local:boolean;onError:(message:
  const primary=()=>media?.audio_url?audio.current:video.current;
  const pause=()=>{playback.current?.(false);playerCommand('pause');audio.current?.pause();video.current?.pause();if(context.current?.state==='running')void context.current.suspend().then(()=>setState('Pausado')).catch(()=>{});};
  const talk=()=>{pause();if(onTalk)void onTalk().catch(()=>setMessage('Não foi possível ativar o microfone. Confira a permissão do navegador.'));};
- const clear=()=>{generation.current++;request.current?.abort();pause();if(context.current&&context.current.state!=='closed')void context.current.close().catch(()=>{});context.current=null;gain.current=null;setTracks([]);setIndex(0);setMedia(null);setHz(null);setElapsed(0);setDuration(0);setState('Em espera');};
+ const clear=()=>{setMinimized(false);generation.current++;request.current?.abort();pause();if(context.current&&context.current.state!=='closed')void context.current.close().catch(()=>{});context.current=null;gain.current=null;setTracks([]);setIndex(0);setMedia(null);setHz(null);setElapsed(0);setDuration(0);setState('Em espera');};
  const stop=()=>{clear();setVisible(false);setExpanded(false);setQualityHelp(false);setMessage('');if(document.fullscreenElement===container.current)void document.exitFullscreen().catch(()=>{});};
  const resume=async()=>{
   try{
@@ -49,11 +53,13 @@ export const MusicPlayer=forwardRef<MusicHandle,{local:boolean;onError:(message:
   const oscillator=ctx.createOscillator(),level=ctx.createGain();gain.current=level;oscillator.frequency.value=value;level.gain.setValueAtTime(0,ctx.currentTime);level.gain.linearRampToValueAtTime(.025,ctx.currentTime+.1);oscillator.connect(level);level.connect(ctx.destination);oscillator.start();void ctx.resume().then(()=>setState('Reproduzindo tom'));
  };
  const next=(delta=1)=>{pause();setElapsed(0);setIndex(old=>Math.max(0,Math.min(tracks.length-1,old+delta)));};
- useImperativeHandle(ref,()=>({stop,pause,exitView,load,handle(text){const command=musicCommand(text);if(!command)return false;
+ const minimize=()=>{if(document.fullscreenElement===container.current)void document.exitFullscreen().catch(()=>{});setMinimized(true);};
+ useImperativeHandle(ref,()=>({stop,pause,resume,minimize,restore:()=>setMinimized(false),exitView,load,handle(text){if(/\bminimiz\w*\b.{0,25}\b(?:m[uú]sica|player|clipe)\b/i.test(text)){minimize();return true;}const command=musicCommand(text);if(!command)return false;
   if(command.action==='search'){if(local){onError('Música online desativada no modo local.');return true;}void search(command.query,command.similar,Boolean(command.video));}
   else if(command.action==='frequency')frequency(command.hz);else if(command.action==='stop')stop();else if(command.action==='pause')pause();else if(command.action==='resume')void resume();else if(command.action==='next')next();else if(command.action==='previous')next(-1);return true;
  }}));
  const track=tracks[index];
+ useEffect(()=>{windowCallback.current?.({visible,minimized,title:hz?`${hz} Hz`:media?.title||track?.title||'Música',state});},[visible,minimized,hz,media?.title,track?.title,state]);
  useEffect(()=>{
   if(!track)return;let alive=true;const controller=new AbortController();setMedia(null);setFailedMedia(false);setState('Preparando mídia');setDuration(0);setElapsed(0);
   void(async()=>{try{const result=await(await api('/music/resolve?'+new URLSearchParams({id:track.id,video:String(clip),native:'true',refresh:String(retry>0)}),{signal:controller.signal})).json();if(result.player==='official')throw new Error('O servidor retornou o player antigo. Atualize o Cronos nesta mesma pasta para usar reprodução direta.');if(alive){setMedia(result);setMessage('');}}
@@ -87,7 +93,7 @@ export const MusicPlayer=forwardRef<MusicHandle,{local:boolean;onError:(message:
  const quality=(height:number)=>{const chosen=media?.qualities?.find(q=>q.height===height);if(!chosen)return;restoreAt.current=primary()?.currentTime||0;pause();setMedia(old=>old?{...old,...chosen}:old);};
  const ended=()=>{playback.current?.(false);if(index+1<tracks.length)next();else setState('Finalizado');};
  if(!visible)return null;
- return <section ref={container} className={`music-player ${expanded?'music-expanded':''}`} aria-label="Música no Kronos"><header><strong>{hz?`${hz} Hz`:media?.title||track?.title||'MÚSICA E CLIPES'}</strong><button onClick={()=>setExpanded(v=>!v)} aria-label={expanded?'Reduzir player':'Maximizar player'}>{expanded?'▣':'□'}</button><button onClick={()=>void fullscreen()} aria-label={fullscreenActive?'Sair da tela cheia':'Tela cheia do Cronos'}>⛶</button><button onClick={talk} aria-label="Pausar música e falar com Cronos" title="Pausar música e falar com Cronos">🎙</button><button onClick={stop} aria-label="Fechar música">×</button></header>
+ return <section ref={container} style={{display:minimized?'none':undefined}} aria-hidden={minimized} inert={minimized} className={`music-player ${expanded?'music-expanded':''}`} aria-label="Música no Kronos"><header><strong>{hz?`${hz} Hz`:media?.title||track?.title||'MÚSICA E CLIPES'}</strong><MinimizeWindow label="música" onClick={minimize}/><button onClick={()=>setExpanded(v=>!v)} aria-label={expanded?'Reduzir player':'Maximizar player'}>{expanded?'▣':'□'}</button><button onClick={()=>void fullscreen()} aria-label={fullscreenActive?'Sair da tela cheia':'Tela cheia do Cronos'}>⛶</button><button onClick={talk} aria-label="Pausar música e falar com Cronos" title="Pausar música e falar com Cronos">🎙</button><button onClick={stop} aria-label="Fechar música">×</button></header>
   {!hz&&<form className="music-search" onSubmit={e=>{e.preventDefault();if(query.trim())void search(query,false,clip);}}><label>Buscar música, clipe ou colar link<input aria-label="Buscar música ou clipe" value={query} maxLength={240} onChange={e=>setQuery(e.target.value)} placeholder="Nome da música · cantor opcional · ou link"/></label><label><input type="checkbox" checked={clip} onChange={e=>setClip(e.target.checked)}/> Buscar clipe oficial</label><button disabled={!query.trim()}>Tocar aqui</button></form>}
 
   {media?.player==='official'&&<iframe ref={official} title="Player de música interno" src={officialPlayer(media.id||track.id).href} allow="autoplay; encrypted-media; fullscreen" allowFullScreen referrerPolicy="strict-origin-when-cross-origin"/>}

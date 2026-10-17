@@ -218,3 +218,44 @@ fonte de áudio/vídeo e seletor de compartilhamento de teste. Houve reproduçã
 real de WAV/MP4 no Chromium e passagem pelo backend autenticado. As contas
 Gemini/Fish do usuário, as fontes externas e o Windows físico não foram testados
 neste ambiente. As tentativas externas foram bloqueadas pelo proxy da nuvem.
+# Criação longa e janelas em segundo plano
+
+O botão de tracinho minimiza o Estúdio, player, análises, Stremio, prospecção,
+painéis, conversa, notas e Olho de Deus. A barra inferior restaura a mesma janela.
+Os componentes continuam montados: música, consultas e criação não são canceladas
+ao minimizar. O Estúdio libera o foco para os outros controles e preserva seus
+campos, guia atual e edição de código ainda não salva. Fechar continua sendo
+uma ação distinta; minimizar não exige descartar uma edição. O player minimizado
+tem pausa/continuação e mantém o mesmo elemento de áudio e a posição da faixa.
+
+A geração estruturada do Gemini usa `streamGenerateContent` com SSE, mantendo
+a recepção incremental em vez de aguardar todo o pacote numa resposta silenciosa.
+A conversa comum conserva seu transporte e seus limites. As etapas distinguem
+espera, caracteres recebidos, continuação, reserva e validação. Não há porcentagem
+fictícia. O orçamento máximo da parte de código é de dez minutos; adaptadores
+compatíveis mantêm pelo menos quatro minutos de timeout de transporte, respeitando
+configurações maiores. Uma conexão Gemini sem novos dados por 90 segundos pode falhar e continuar pelo prefixo salvo; isso é diferente do orçamento total da parte. Há limites de tamanho e de tentativas.
+
+Quando a API corta a saída por limite de tokens ou interrompe a conexão após
+enviar texto, o Estúdio preserva o prefixo JSON e pede somente a continuação.
+O recebimento SSE salva também o primeiro trecho e depois quadros periódicos,
+sem gravar cada token. Outra integração pode completar o mesmo prefixo. Há até
+oito partes por tentativa explícita, cada chamada podendo consumir cota/créditos.
+Erros de chave, acesso, cota e ausência de resposta continuam sendo falhas reais;
+não são mascarados como geração concluída.
+
+O rascunho de geração fica em uma tabela privada do banco do Estúdio, associado
+ao pedido, contexto e código-base. Não aparece no catálogo nem é executado.
+Uma nova solicitação não recebe o rascunho de outra. A etapa de correção também
+pode ser retomada. Após falha ou reinício, **Tentar novamente** pode continuar um
+rascunho correspondente ao mesmo pedido; não há repetição paga automática ao
+reiniciar o servidor. Somente um pacote completo que passe pelas verificações
+vira nova versão. O rascunho é removido após a entrega ou quando a validação pede
+uma correção diferente. As revisões anteriores, APIs e memórias não são apagadas.
+
+Validação: HTTP SSE simulado com o adaptador real, saída cortada, erro de rede,
+prazo esgotado, cota durante continuação, cancelamento e recuperação do banco.
+No Chromium, uma criação foi concluída em partes enquanto minimizada, com áudio
+real de teste tocando; restauração preservou o elemento de áudio, o projeto e os
+campos. As integrações e fontes desse teste são controladas, sem cobrança. Isso
+não comprova disponibilidade permanente ou cota nas contas reais do usuário.
