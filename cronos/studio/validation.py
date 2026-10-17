@@ -23,6 +23,7 @@ class Document(HTMLParser):
         self.ids = []; self.anchors = []; self.forms = []; self.form_fields = []; self.active_form = None; self.images = []; self.inputs = []; self.tags = []
         self.models = 0
         self.procedural = []
+        self.stylesheets=0;self.app_scripts=0
         self.resources = []; self.errors = []; self.title = False; self.viewport = False; self.lang = False
 
     def handle_starttag(self, tag, attrs):
@@ -34,6 +35,8 @@ class Document(HTMLParser):
         if values.get('id'): self.ids.append(values['id'])
         if tag == 'html': self.lang = bool(values.get('lang'))
         if tag == 'title': self.title = True
+        if tag=='link' and values.get('href')=='styles.css' and values.get('rel','').lower()=='stylesheet':self.stylesheets+=1
+        if tag=='script' and values.get('src')=='app.js':self.app_scripts+=1
         if tag == 'style': self.errors.append('Use styles.css, sem CSS inline.')
         if 'style' in values: self.errors.append('Use classes em styles.css, sem atributo style.')
         if tag == 'meta':
@@ -96,6 +99,7 @@ def validate(files, assets=(), *, run_syntax=True):
     def check(name, ok, detail): checks.append({'name': name, 'status': 'passed' if ok else 'failed', 'detail': detail})
     check('Recursos isolados', not doc.errors, '; '.join(dict.fromkeys(doc.errors)) or 'Sem script externo, eventos inline, frames ou formulários externos.')
     check('IDs e navegação interna', len(set(doc.ids)) == len(doc.ids) and all(anchor and anchor in doc.ids for anchor in doc.anchors), 'IDs únicos e destinos internos existentes.')
+    check('Estilos e interações ligados ao HTML',doc.stylesheets==1 and doc.app_scripts==1,'O documento deve carregar styles.css como stylesheet e app.js uma vez; arquivos soltos não estilizam o site exportado.')
     check('Documento responsivo', doc.lang and doc.viewport and doc.title and 'main' in doc.tags, 'Idioma, título, viewport e conteúdo principal presentes; o layout ainda precisa de inspeção no navegador.')
     check('Imagens e recursos', all(img.get('alt') is not None for img in doc.images) and all(not ASSET.fullmatch(r) or r[7:] in assets for r in doc.resources), 'Texto alternativo e arquivos locais existentes.')
     check('Formulários conectados', set(doc.forms) >= {'contact', 'booking'} and all(f in {'contact', 'booking'} for f in doc.forms), 'Contato e solicitação de horário usam o runtime do estúdio.')

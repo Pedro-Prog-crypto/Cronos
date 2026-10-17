@@ -56,6 +56,28 @@ No projeto aberto, use **Pedir ao Cronos** para revisar. Pedidos reconhecidos po
 
 **Briefing e dados confirmados** permite atualizar nome, categoria e informações comerciais. Depois peça uma revisão para aplicá-los ao código. O editor também permite salvar HTML/CSS/JS manualmente. Edições usam a revisão de origem para impedir que uma aba antiga sobrescreva uma versão nova. Cada alteração aceita cria uma versão; a restauração preserva todo o histórico. “Duplicar” cria outro projeto a partir da versão atual, com cópia dos recursos e sem os envios de teste. Há até 80 projetos ativos e 40 versões por projeto: arquive sem apagar e reative pela lista de arquivados, ou duplique para continuar outro histórico.
 
+## Tentar novamente sem perder o trabalho
+
+Quando todas as integrações falharem, o aviso **A criação não terminou** oferece **Tentar novamente**. O botão inicia de verdade uma nova tentativa no mesmo projeto, com o pedido salvo, a direção escolhida, as referências, os recursos e a última versão. Também pode repetir uma etapa de propostas interrompida. A integração selecionada no painel é a primeira opção; as outras configuradas permanecem como reservas.
+
+Não cria um projeto duplicado nem repete chamadas sozinho. Enquanto uma tarefa estiver rodando, outra tentativa é bloqueada. Um erro preserva a versão anterior e mantém o botão disponível. Um limite externo, como HTTP 429, pode continuar ativo; o botão não cria créditos nem remove limites das APIs. Pode consumir cota a cada clique. Etapas de imagem gerada exigem nova confirmação; uma captura de tela precisa ser enviada novamente porque seus pixels não são salvos.
+
+## Ver minha tela e corrigir o site
+
+No projeto, abra **Ver minha tela**:
+
+1. Clique em **Compartilhar tela** e escolha a aba ou janela no seletor do navegador.
+2. O Estúdio volta à **Prévia**. Enquadre o problema e clique em **Capturar este site**.
+3. Confira a imagem e descreva o que precisa observar. Escolha **Analisar captura**, para receber observações sem alterar os arquivos, ou **Corrigir site com esta captura**, para analisar e pedir uma nova versão do código.
+
+Também pode **Enviar captura** PNG/JPEG até 2 MiB. **Capturar Windows local** usa o servidor do Cronos instalado no próprio Windows; não captura o computador do visitante se o servidor estiver em outra máquina. O compartilhamento pelo navegador depende de suporte e contexto seguro, como localhost/HTTPS, e sempre exige a escolha do usuário.
+
+Não há envio contínuo de tela, vídeo ou áudio. Só o quadro confirmado é enviado à integração de visão; pode conter informações de outras janelas, por isso confira o enquadramento. Os pixels não são adicionados aos recursos, ao banco ou à exportação. Somente as observações ficam no projeto, associadas à versão vista. Parar o compartilhamento, fechar o Estúdio ou trocar de projeto/versão encerra a captura local.
+
+A análise usa a reserva de integrações; ao menos uma precisa aceitar imagens e retornar o relatório solicitado. A correção recebe as observações, o código salvo e os testes do navegador. Só salva uma versão completa que passe pelas verificações de código, preservando o histórico. Não há promessa de que uma análise parcial detecte todos os problemas nem de que uma IA conserte qualquer página na primeira tentativa. Confira a nova prévia.
+
+O botão **Ampliar prévia** agora ocupa a área da janela do Cronos. O **X** da barra ou **Esc** volta ao editor. Os testes automáticos também observam se o navegador interpretou CSS, se os controles dos formulários têm altura utilizável e se cabem na largura disponível. Um aviso de teste concluído não aprova a aparência da página.
+
 ## Funções e verificações
 
 Contato e solicitação de horário usam um runtime próprio, com SQLite, validação no servidor, consentimento, limite de envio e restrição de horário duplicado. Dentro do Cronos os envios pertencem exclusivamente à base de **testes da prévia**. Não enviam e-mail/SMS nem confirmam atendimento com terceiros. O calendário tem um horário por site; capacidade, equipe, feriados e fuso precisam ser adaptados à operação real.
@@ -66,7 +88,7 @@ As verificações têm três origens identificadas:
 
 - **Código:** arquivos permitidos, recursos locais, estrutura, destinos, campos e sintaxe quando Node está disponível. No Windows, o parser é iniciado sem janela de console. Não instala Node automaticamente.
 - **Backend:** contatos, entrada inválida, falta de consentimento, texto excessivo, honeypot, campos inesperados, conflito de horário e texto adverso em banco temporário separado.
-- **Navegador:** DOM em 390 e 1280 px, largura, imagens, destinos, labels, conexão dos formulários, validação nativa e erros JavaScript observados. Novas versões geradas são verificadas quando sua prévia está aberta; também há botão para repetir. Sem navegador aberto, esses testes ficam pendentes, sem simular aprovação.
+- **Navegador:** DOM em 390 e 1280 px, CSS interpretado, altura e limites dos controles, largura, imagens, destinos, labels, conexão dos formulários, validação nativa e erros JavaScript observados. Novas versões geradas são verificadas quando sua prévia está aberta; também há botão para repetir. Sem navegador aberto, esses testes ficam pendentes, sem simular aprovação.
 
 Isso não equivale a auditoria de segurança, certificação de acessibilidade ou garantia de todos os fluxos de negócio. Pagamento real, autenticação de clientes, estoque, e-mail e serviços comerciais exigem implementação específica e credenciais antes da entrega. Falhas detectadas podem compor um pedido de correção no painel, sem geração adicional oculta.
 

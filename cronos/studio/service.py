@@ -37,6 +37,9 @@ Contrato obrigatório: somente esses três arquivos, HTML lang pt-BR com título
 No HTML use <link rel="stylesheet" href="styles.css"> e <script src="app.js" defer></script>.
 CSS todo em styles.css, JS todo em app.js. Sem eventos inline, style inline, scripts remotos, iframes ou imports.
 Use imagens APENAS dos assets autorizados (assets/nome). SVG inline original sem scripts é permitido. Não invente URL de imagem. Use caminhos literais assets/nome nos arquivos, sem construir nomes dinamicamente.
+Integre visualmente os formulários: campos com altura utilizável de pelo menos 32px, padding, espaçamento entre labels, foco visível e botões com apresentação própria. Não deixe controles amontoados no estilo padrão do navegador.
+Evite seções enormes vazias apenas com "Conteúdo pendente"; agrupe informações não confirmadas de forma breve e clara.
+Use screen_observations quando presente para corrigir problemas vistos na captura, distinguindo o site da interface do Cronos ao redor.
 Layout excelente em celular 390px e desktop 1280px, navegação teclado, labels, alt e prefers-reduced-motion.
 Links # precisam de destino. Botões precisam de comportamento real em app.js, sem innerHTML.
 Inclua autoria, licença e fonte das imagens usadas, conforme os metadados dos assets, sem inventar direitos de uso.
@@ -301,6 +304,7 @@ class Studio:
                        'current_summary': '' if origin == 'starter' or unique_creation else current['summary'],
                        'approved_direction': selected_direction(project),
                        'browser_observations': project.get('browser_reports', []),
+                       'screen_observations': [r for r in project.get('screen_reviews',[]) if r['revision']==project['revision']][-1:],
                        'recent_designs':plan_context(recent),
                        'design_policy':{'unique_creation':unique_creation,'scope':'Use variedade de disposição e movimento leve mesmo no site básico. 3D somente quando solicitado.'}}
             from .threed.integration import reference_payload, reference_id, suggested_model
@@ -367,6 +371,81 @@ class Studio:
         except Exception:
             project['status'] = 'failed'; project['finished'] = time.time(); project['error'] = 'Falha interna no estúdio. A última versão foi preservada.'
             self.store.event(project, 'failed', project['error'])
+
+    def retry(self, project, provider=''):
+        from .routes import Generate
+        self.available()
+        if project.get('archived'):raise ValueError('Reative o projeto antes de tentar novamente.')
+        if project['status'] not in {'failed','cancelled','interrupted'}:raise ValueError('Este projeto não tem uma criação interrompida para repetir.')
+        if project.get('job_kind') in {'screen_review','image'}:
+            raise ValueError('Para essa etapa, envie novamente a captura ou confirme uma nova geração de imagem no painel correspondente.')
+        request=project.get('last_request','')
+        if len(request.strip())<3:raise ValueError('Não há pedido salvo. Escreva o que deseja criar ou corrigir.')
+        chosen=provider or project.get('provider') or self.app.state.engine.settings.provider
+        self.check_provider(chosen)
+        # An explicit retry may recheck adapters that failed during the previous job.
+        # No timer or retry loop consumes quota in the background.
+        for identifier in set(project.get('provider_queue',[]))|{entry['id'] for entry in project.get('provider_attempts',[])}:
+            self.provider_cooldowns.pop(identifier,None)
+        body=Generate(mode=project.get('mode') or 'autonomous',prompt=request,provider=chosen,
+                      reference=project.get('reference',''),reference_asset=project.get('reference_asset',''),
+                      research_images=project.get('research_images',False),plan_first=project.get('plan_first',False))
+        self.store.event(project,'retry','Nova tentativa solicitada pelo senhor. Pedido, arquivos e recursos mantidos; limites dos provedores ainda podem estar ativos.')
+        return self.start_directions(project,body) if project.get('job_kind')=='directions' else self.start(project,body)
+
+    def start_screen_review(self, project, body, image):
+        self.available()
+        project=self.store.get(project['id'])
+        if project.get('archived'):raise ValueError('Reative o projeto antes de analisar a tela.')
+        if project['revision']!=body.revision:raise ValueError('A versão mudou. Capture novamente a tela.')
+        chosen=body.provider or self.app.state.engine.settings.provider
+        if self.app.state.vision_provider is None:self.check_provider(chosen)
+        if body.repair:self.check_provider(chosen)
+        previous_state={key:project.get(key) for key in ('status','error','job_kind','started','finished')}
+        project.update(status='running',job_kind='screen_review',provider=chosen,started=time.time(),finished=None,error=None)
+        self.store.event(project,'screen_review','Analisando somente a captura compartilhada. A imagem não será salva no projeto nem enviada continuamente.')
+        self.task=asyncio.create_task(self.analyze_screen(project,body,image,previous_state))
+        return self.detail(project['id'])
+
+    async def analyze_screen(self, project, body, image, previous_state):
+        from .screen_review import SYSTEM as SCREEN_SYSTEM,parse_review
+        try:
+            vision=self.provider_pool(project,vision=True)
+            context={'request':body.prompt,'project':{'name':project['name'],'category':project['category'],'revision':body.revision},
+                     'browser_observations':project.get('browser_reports',[])}
+            with request_scope('studio-screen-review',project['id']):
+                review=await vision.reply(SCREEN_SYSTEM,[{'role':'user','content':json.dumps(context,ensure_ascii=False),'image':image}],transform=parse_review)
+            latest=self.store.get(project['id'])
+            if latest['revision']!=body.revision:raise ValueError('A versão mudou durante a análise. Capture novamente antes de corrigir.')
+            observation={**review,'revision':body.revision,'at':time.time(),'source':body.source,'provider':project.get('active_provider')}
+            project['screen_reviews']=[*project.get('screen_reviews',[])[-4:],observation]
+            # Keep only observations; no screenshot bytes, asset file or shared-stream token.
+            image.clear()
+            if body.repair:
+                from .routes import Generate
+                request=('Corrija os problemas observados na captura do site. Preserve dados, funções e identidade que já funcionam. '
+                         'Não copie os controles do Cronos nem texto de outras janelas. Confira os estilos dos formulários e os tamanhos de celular e computador. '
+                         +review['correction_request'])
+                job=Generate(mode=project.get('mode') or 'autonomous',prompt=request[:12000],provider=project['provider'],
+                             reference=project.get('reference',''),reference_asset=project.get('reference_asset',''),research_images=False)
+                project.update(job_kind='site',last_request=job.prompt,research_images=False,plan_first=False)
+                self.store.event(project,'screen_repair','Observações da captura salvas. Corrigindo os arquivos do site; a versão anterior permanece disponível.')
+                await self.generate(project,job)
+            else:
+                project.update(previous_state)
+                self.store.event(project,'screen_review_ready','Análise da captura concluída. Nenhum arquivo foi alterado; veja os problemas e escolha corrigir quando quiser.')
+        except asyncio.CancelledError:
+            project.update(status='cancelled',finished=time.time())
+            self.store.event(project,'cancelled','Análise interrompida. A versão salva foi preservada.')
+            raise
+        except (ProviderError,ValueError,OSError,TimeoutError) as exc:
+            project.update(status='failed',finished=time.time(),error=str(exc)[:1800])
+            self.store.event(project,'failed','A análise da captura não terminou. A versão anterior foi preservada. '+project['error'])
+        except Exception:
+            project.update(status='failed',finished=time.time(),error='Não foi possível analisar a captura. A versão anterior foi preservada.')
+            self.store.event(project,'failed',project['error'])
+        finally:
+            image.clear()
 
     def start_image(self, project, body):
         from .image_generation import image_providers

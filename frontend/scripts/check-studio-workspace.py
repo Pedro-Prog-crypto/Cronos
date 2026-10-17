@@ -59,7 +59,7 @@ async def main():
    await expect(page.locator('.ss-project-heading h2')).to_contain_text('Mesa da Praça')
    assert (await client.get('/fixture/calls')).json()==calls
    await page.get_by_role('tab',name='Verificações',exact=True).click()
-   await expect(page.locator('.ss-content-pane')).to_contain_text('Composição diferente dos projetos recentes')
+   await expect(page.locator('.ss-content-pane:visible')).to_contain_text('Composição diferente dos projetos recentes')
    await page.locator('.ss-sidebar').get_by_role('button',name='Início',exact=True).click()
    await expect(page.locator('.ss-recent-projects')).to_contain_text('Mesa da Praça')
    await page.get_by_role('button',name='Criar um site com IA',exact=False).click()

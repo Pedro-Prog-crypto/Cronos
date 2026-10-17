@@ -44,14 +44,25 @@ class Builder:
    return {'reply':json.dumps({'directions':directions})}
   calls['site']+=1
   data=json.loads(messages[-1]['content']);files=starter(data['business']['category'],data['business']['name'],[a['name'] for a in data.get('assets',[]) if a['purpose']=='image'])
-  if 'simular falha 429' in data.get('request','').lower():raise ProviderError('Integração de teste: limite temporário (HTTP 429).',429)
+  if 'simular falha 429' in data.get('request','').lower() and not calls.get('recover_retry'):raise ProviderError('Integração de teste: limite temporário (HTTP 429).',429)
   files['index.html']=files['index.html'].replace('Conteúdo de demonstração. Substitua por informações confirmadas do seu negócio.','Conteúdo específico deste briefing de teste.').replace('O que faz sentido para você faz parte de cada escolha.','Uma direção preparada para este projeto de teste.')
+  if data.get('screen_observations'):
+   files=data['current_files'].copy();files['styles.css']+='\nform label{margin-bottom:12px}form input,form button{min-height:48px}'
   if data.get('design_policy',{}).get('unique_creation'):
    variant=sum(ord(c) for c in data['business']['name'])%3
    files['styles.css']+='\nmain{display:grid;grid-template-columns:'+['1fr 2fr','2fr 1fr','1fr'][variant]+';gap:37px}'
   if any(a['purpose']=='model' for a in data.get('assets',[])):files['index.html']=files['index.html'].replace('<section id="sobre"','<section class="product-demo"><div data-studio-model></div></section><section id="sobre"')
   files['index.html']=files['index.html'].replace('Uma cozinha de encontros.','Um projeto de teste gerado a partir do briefing.')
   return {'reply':json.dumps({'summary':'Senhor, esta é uma geração de teste. Composição e formulários disponíveis para verificar no navegador. Nenhuma chamada a provedores externos.', 'files':files}),'topics':[]}
+if os.getenv('STUDIO_TEST_SCREEN') == '1':
+ class ScreenVision:
+  async def reply(self,system,messages):
+   calls['screen']=calls.get('screen',0)+1
+   calls['screen_has_image']=bool(messages[0].get('image',{}).get('data'))
+   return {'reply':json.dumps({'summary':'Os campos do formulário visível estão pequenos e sem espaço entre os rótulos.',
+    'issues':[{'title':'Campos muito pequenos','detail':'O formulário visível precisa de campos mais altos e rótulos separados.','severity':'high'}],
+    'correction_request':'Amplie os campos e botões do formulário e organize os rótulos em linhas separadas.'})}
+vision_fixture=ScreenVision() if os.getenv('STUDIO_TEST_SCREEN') == '1' else None
 if os.getenv('STUDIO_TEST_FALLBACK') == '1':
  from dataclasses import replace
  import cronos.studio.service as studio_service
@@ -70,9 +81,14 @@ if os.getenv('STUDIO_TEST_FALLBACK') == '1':
    await asyncio.sleep(2)
    return await super().reply(system,messages)
  studio_service.make_provider=lambda config: ReserveBuilder(config.provider)
- app=create_app(settings)
+ app=create_app(settings,vision_provider=vision_fixture)
 else:
- app=create_app(settings,Builder())
+ app=create_app(settings,Builder(),vision_provider=vision_fixture)
+if os.getenv('STUDIO_TEST_SCREEN') == '1':
+ @app.post('/fixture/recover-retry')
+ async def fixture_recover():
+  calls['recover_retry']=True
+  return {'recovered':True}
 if os.getenv('STUDIO_TEST_OPPORTUNITIES') == '1':
  from uuid import uuid4
  from cronos.prospects import recommendation

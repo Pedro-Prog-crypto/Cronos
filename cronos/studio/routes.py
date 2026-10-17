@@ -50,6 +50,20 @@ class Generate(Strict):
     plan_first: bool = False
 
 
+class Retry(Strict):
+    provider: str = Field(default='',max_length=64)
+
+
+class ScreenReview(Strict):
+    revision: int = Field(ge=0)
+    image_base64: str = Field(min_length=4,max_length=2_800_000)
+    prompt: str = Field(default='Analise o site visível e indique como corrigir os problemas de apresentação.',min_length=3,max_length=3000)
+    provider: str = Field(default='',max_length=64)
+    consent: Literal[True]
+    repair: bool = False
+    source: Literal['shared-screen','uploaded-capture','local-screen'] = 'shared-screen'
+
+
 class OpportunityCreate(Strict):
     report_id: str = Field(min_length=1, max_length=40)
     lead_id: str = Field(min_length=1, max_length=200)
@@ -225,6 +239,18 @@ def install_studio(app, authenticate):
         try: return service().start(project(identifier), body)
         except ValueError as exc: raise HTTPException(409, str(exc)) from None
 
+    @app.post('/studio/projects/{identifier}/screen-review', dependencies=auth)
+    async def screen_review(identifier: str, body: ScreenReview):
+        item=mutable(identifier)
+        if item['revision']!=body.revision:raise HTTPException(409,'A versão mudou. Capture novamente a tela do projeto atual.')
+        from cronos.vision import normalize_image
+        try:
+            raw=base64.b64decode(body.image_base64,validate=True)
+            image=await asyncio.to_thread(normalize_image,raw)
+            body.image_base64=''  # Do not retain the original upload during a code-generation job.
+            return service().start_screen_review(item,body,image)
+        except ValueError as exc:raise HTTPException(422,str(exc)) from None
+
     @app.post('/studio/projects/{identifier}/directions', dependencies=auth)
     async def directions(identifier: str, body: Generate):
         try: return service().start_directions(project(identifier), body)
@@ -243,6 +269,11 @@ def install_studio(app, authenticate):
     async def create_image(identifier: str, body: ImageCreate):
         try: return service().start_image(project(identifier), body)
         except ValueError as exc: raise HTTPException(409, str(exc)) from None
+
+    @app.post('/studio/projects/{identifier}/retry', dependencies=auth)
+    async def retry(identifier: str, body: Retry):
+        try:return service().retry(project(identifier),body.provider)
+        except ValueError as exc:raise HTTPException(409,str(exc)) from None
 
     @app.post('/studio/projects/{identifier}/cancel', dependencies=auth)
     async def cancel(identifier: str):

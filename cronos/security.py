@@ -128,7 +128,7 @@ class SecurityMiddleware:
             state=read_json(updater.folder/'status.json',{})
             if state.get('phase') in {'queued','installing','testing'}:
                 return await JSONResponse({'detail':'Atualização em andamento. Aguarde a verificação e recarregue a página.'},503)(scope,receive,send)
-        limit = 12 * 1024 * 1024 if path.startswith('/studio/projects/') and path.endswith('/assets') else 1024 * 1024 if path.startswith('/studio/projects/') and path.endswith('/files') else 10 * 1024 * 1024 if path == '/voice/transcribe' else 2 * 1024 * 1024 if path == '/chat/audio/stream' else 3 * 1024 * 1024 if path in {'/vision/analyze','/documents/preview','/documents/analyze'} else 2 * 1024 * 1024 if path == '/vision/preview' else 256 * 1024
+        limit = 12 * 1024 * 1024 if path.startswith('/studio/projects/') and path.endswith('/assets') else 1024 * 1024 if path.startswith('/studio/projects/') and path.endswith('/files') else 10 * 1024 * 1024 if path == '/voice/transcribe' else 2 * 1024 * 1024 if path == '/chat/audio/stream' else 3 * 1024 * 1024 if path in {'/vision/analyze','/documents/preview','/documents/analyze'} else 2 * 1024 * 1024 if path == '/vision/preview' else 3 * 1024 * 1024 if re.fullmatch(r'/studio/projects/[a-f0-9-]{36}/screen-review',path) else 256 * 1024
         try:
             length = int(headers.get('content-length', '0'))
             if length < 0:
@@ -156,7 +156,7 @@ class SecurityMiddleware:
                 if studio_preview:
                     nonce = next((v.decode() for k,v in event.get('headers',[]) if k.lower()==b'x-studio-nonce'), '')
                     additions['x-frame-options']='SAMEORIGIN'
-                    additions['permissions-policy']='camera=(), microphone=(), geolocation=(), payment=()'
+                    additions['permissions-policy']='camera=(), microphone=(), display-capture=(), geolocation=(), payment=()'
                     additions['content-security-policy']="default-src 'none'; script-src 'nonce-"+nonce+"'; style-src 'nonce-"+nonce+"'; img-src data: blob:; font-src data:; connect-src 'none'; object-src 'none'; frame-src 'none'; frame-ancestors 'self'; base-uri 'none'; form-action 'none'; sandbox allow-scripts allow-forms"
                     additions['x-studio-nonce']=''
                 if path=='/music/player':additions.pop('x-frame-options') # CSP restricts parents to this loopback port.

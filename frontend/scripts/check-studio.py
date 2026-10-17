@@ -63,12 +63,12 @@ async def main():
    await page.get_by_role('button',name='Testar esta prévia',exact=True).click()
    await expect(page.locator('.ss-notification')).to_contain_text('celular e desktop concluídas',timeout=15000)
    await page.get_by_role('tab',name='Verificações',exact=True).click()
-   await expect(page.locator('.ss-content-pane')).to_contain_text('390 px')
-   await expect(page.locator('.ss-content-pane')).to_contain_text('1280 px')
+   await expect(page.locator('.ss-content-pane:visible')).to_contain_text('390 px')
+   await expect(page.locator('.ss-content-pane:visible')).to_contain_text('1280 px')
    assert await page.locator('.ss-checks .failed').count()==0
    await page.get_by_role('tab',name='Testes de envio',exact=True).click()
-   await expect(page.locator('.ss-content-pane')).to_contain_text('Senhor Teste')
-   await expect(page.locator('.ss-content-pane')).to_contain_text('DROP TABLE')
+   await expect(page.locator('.ss-content-pane:visible')).to_contain_text('Senhor Teste')
+   await expect(page.locator('.ss-content-pane:visible')).to_contain_text('DROP TABLE')
    await page.get_by_role('tab',name='Imagens e 3D',exact=True).click()
    async with page.expect_file_chooser() as info:
     await page.get_by_role('button',name='Modelo GLB',exact=True).click()

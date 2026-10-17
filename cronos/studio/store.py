@@ -46,7 +46,7 @@ class Store:
     def list(self, archived=False):
         with self.connect() as db:
             rows = db.execute('SELECT payload FROM projects WHERE archived=? ORDER BY updated DESC LIMIT 80', (int(archived),)).fetchall()
-        return [{k: v for k, v in json.loads(row[0]).items() if k not in {'events', 'brief', 'reference', 'assets'}} for row in rows]
+        return [{k: v for k, v in json.loads(row[0]).items() if k not in {'events', 'brief', 'reference', 'assets', 'screen_reviews'}} for row in rows]
 
     def save(self, project):
         project['updated'] = time.time()

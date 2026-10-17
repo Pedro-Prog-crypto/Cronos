@@ -40,6 +40,17 @@
   }
   const checks=[];const add=(name,ok,detail)=>checks.push({name,status:ok?'passed':'failed',detail});
   const w=document.documentElement.clientWidth;
+  let declarations=0;
+  const countRules=rules=>{for(const rule of rules){if(rule.style)declarations+=rule.style.length;if(rule.cssRules)countRules(rule.cssRules);}};
+  for(const sheet of document.styleSheets){try{countRules(sheet.cssRules);}catch{/* Opaque external sheets cannot certify local styles. */}}
+  add('Estilos interpretados pelo navegador',declarations>0,declarations+' declaração(ões) CSS reconhecida(s); isto não aprova o design.');
+  const visible=element=>{const box=element.getBoundingClientRect(),style=getComputedStyle(element);return box.width>0&&box.height>0&&style.visibility!=='hidden'&&style.display!=='none';};
+  const controls=[...document.querySelectorAll('form input:not([hidden]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]),form textarea,form select,form button')].filter(visible);
+  const small=controls.filter(element=>element.getBoundingClientRect().height<30);
+  const outside=controls.filter(element=>{const box=element.getBoundingClientRect();return box.left< -2||box.right>w+2;});
+  const describe=items=>items.slice(0,6).map(element=>(element.name||element.tagName.toLowerCase())+' ('+Math.round(element.getBoundingClientRect().height)+' px de altura)').join('; ');
+  add('Campos e botões com tamanho utilizável',small.length===0,small.length?describe(small):controls.length+' controle(s) visível(is) com pelo menos 30 px de altura.');
+  add('Formulários dentro da largura disponível',outside.length===0,outside.length?describe(outside):'Campos e botões visíveis sem corte horizontal em '+w+' px.');
   if(document.querySelector('[data-studio-procedural]'))add('Modelo procedural no navegador',window.__studioProceduralState==='ready'&&Boolean(document.querySelector('[data-studio-procedural] canvas')),'Three.js iniciou a cena procedural no WebGL deste navegador.');
   add('Sem rolagem horizontal em '+w+' px',document.documentElement.scrollWidth<=w+2,'Viewport '+w+' px; largura do documento '+document.documentElement.scrollWidth+' px.');
   add('Imagens carregadas',[...document.images].every(image=>image.complete&&image.naturalWidth>0),document.images.length+' imagem(ns) observada(s).');
