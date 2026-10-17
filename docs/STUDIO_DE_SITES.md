@@ -122,3 +122,7 @@ Referências técnicas para conferência: https://platform.openai.com/docs/guide
 ## Material integrado do Mistral
 
 A integração completa está documentada em **INTEGRACAO-MISTRAL-3D.md**. As cópias sem alteração dos oito anexos ficam em `cronos/studio/mistral_original/`. O catálogo inclui todas as categorias e variantes fornecidas, os três templates, as quatro faixas de preço e os três modelos procedurais completos.
+
+## Correção do bloqueio de banco temporário no Windows
+
+O erro `[WinError 32]` em `Temp/cronos-forms-test-*/test.sqlite3` ocorria porque o contexto de transação SQLite não fecha automaticamente a conexão. A verificação de formulários agora fecha explicitamente todas as conexões antes de remover sua pasta temporária. O mesmo fechamento se aplica aos formulários exportados, à leitura dos envios de teste e às transações dos projetos, inclusive em falhas de inicialização, gravação ou conflito. Os testes retêm os objetos de conexão para impedir que a coleta de memória esconda o defeito e verificam o fechamento antes da limpeza. Não é necessário apagar bancos, memórias, projetos ou integrações.

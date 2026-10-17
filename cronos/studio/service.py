@@ -7,6 +7,7 @@ import secrets
 import sqlite3
 import time
 import zipfile
+from contextlib import closing
 from dataclasses import replace
 from pathlib import Path
 from uuid import uuid4
@@ -535,7 +536,7 @@ def backend_checks():
         adversarial = {**data, 'name': "<script>alert(1)</script> '); DROP TABLE submissions;--"}
         try:
             submit(db, 'contact', adversarial)
-            with sqlite3.connect(db) as connection: count = connection.execute('SELECT count(*) FROM submissions').fetchone()[0]
+            with closing(sqlite3.connect(db)) as connection: count = connection.execute('SELECT count(*) FROM submissions').fetchone()[0]
             add('Entrada adversa não executa SQL', count == 3, 'Texto é dado; consultas parametrizadas. A prévia exibe resultados com textContent.')
         except (ValueError, sqlite3.Error): add('Entrada adversa não executa SQL', False, 'Falha de isolamento de dados.')
     return results

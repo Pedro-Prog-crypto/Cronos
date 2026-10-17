@@ -1,6 +1,7 @@
 import json
 import sqlite3
 import time
+from contextlib import contextmanager
 from uuid import UUID, uuid4
 
 from cronos.security import safe_path
@@ -23,10 +24,15 @@ class Store:
                 value = self.get(project['id']); value['status'] = 'interrupted'; value['finished'] = time.time()
                 self.event(value, 'interrupted', 'O Cronos foi reiniciado. Nenhuma chamada foi repetida; a última versão foi preservada.')
 
+    @contextmanager
     def connect(self):
         db = sqlite3.connect(self.dbpath, timeout=10)
-        db.execute('PRAGMA journal_mode=WAL')
-        return db
+        try:
+            db.execute('PRAGMA journal_mode=WAL')
+            with db:
+                yield db
+        finally:
+            db.close()
 
     def get(self, identifier):
         try:

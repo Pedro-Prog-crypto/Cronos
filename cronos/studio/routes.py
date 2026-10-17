@@ -3,6 +3,7 @@ import base64
 import json
 import re
 import time
+from contextlib import closing
 from html.parser import HTMLParser
 from typing import Literal
 
@@ -355,7 +356,7 @@ def install_studio(app, authenticate):
         import sqlite3
         item = project(identifier); path = service().store.directory(item) / 'preview.sqlite3'
         if not path.exists(): return {'submissions': []}
-        with sqlite3.connect(path) as db:
+        with closing(sqlite3.connect(path)) as db:
             rows = db.execute('SELECT id,kind,payload,created FROM submissions ORDER BY created DESC LIMIT 30').fetchall()
         return {'submissions': [{'id': r[0], 'kind': r[1], 'data': json.loads(r[2]), 'created': r[3]} for r in rows], 'preview': True}
 

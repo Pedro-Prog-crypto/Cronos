@@ -5,6 +5,7 @@ import re
 import secrets
 import sqlite3
 import time
+from contextlib import contextmanager
 from datetime import date, datetime
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -50,12 +51,19 @@ def validated(kind, data):
     return result
 
 
+@contextmanager
 def connect(path):
     db = sqlite3.connect(path, timeout=5)
-    db.execute('PRAGMA journal_mode=WAL')
-    db.execute('CREATE TABLE IF NOT EXISTS submissions(id TEXT PRIMARY KEY,kind TEXT NOT NULL,payload TEXT NOT NULL,created REAL NOT NULL)')
-    db.execute('CREATE TABLE IF NOT EXISTS slots(day TEXT,hour TEXT,submission TEXT NOT NULL,PRIMARY KEY(day,hour))')
-    return db
+    try:
+        db.execute('PRAGMA journal_mode=WAL')
+        db.execute('CREATE TABLE IF NOT EXISTS submissions(id TEXT PRIMARY KEY,kind TEXT NOT NULL,payload TEXT NOT NULL,created REAL NOT NULL)')
+        db.execute('CREATE TABLE IF NOT EXISTS slots(day TEXT,hour TEXT,submission TEXT NOT NULL,PRIMARY KEY(day,hour))')
+        with db:
+            yield db
+    finally:
+        # SQLite's transaction context commits/rolls back, but does not close.
+        # Windows needs every handle closed before a temporary DB can be removed.
+        db.close()
 
 
 def submit(path, kind, data):
