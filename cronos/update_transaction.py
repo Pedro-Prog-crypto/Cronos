@@ -221,6 +221,12 @@ def restore_memory(transaction):
     info=read_json(Path(transaction)/'memory-backup.json')
     if not info:return
     vault=regular(info['vault'])
+    # Code recovery must never replace the shared, live user memory with an
+    # older version's snapshot. Explicit memory restore remains a separate action.
+    if os.getenv('CRONOS_DATA_HOME') and vault.is_relative_to(regular(os.environ['CRONOS_DATA_HOME'])):
+        return
+    if (vault.parent/'DADOS-CRONOS.json').is_file():
+        return
     if not re.fullmatch(r'memory-[0-9-]+-[0-9a-f]{8}\.zip',info['name']):
         raise ValueError('Nome de backup inválido.')
     archive=regular(vault/'.cronos/backups'/info['name'])

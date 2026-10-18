@@ -97,6 +97,12 @@ def _serve(root):
     token=secrets.token_urlsafe(32)
     environment={**os.environ,'CRONOS_SUPERVISED':'1','CRONOS_MANAGED_PORT':str(port),
                  'CRONOS_API_TOKEN':token,'CRONOS_SUPERVISOR_PID':str(os.getpid()),'PYTHONDONTWRITEBYTECODE':'1'}
+    data_home=Path(os.environ['CRONOS_DATA_HOME']) if os.getenv('CRONOS_DATA_HOME') else None
+    if data_home:
+        if read_json(data_home/'DADOS-CRONOS.json',{}).get('complete') is not True:
+            raise ValueError('Pasta permanente incompleta; abertura interrompida.')
+        # Relative .env/config access works for older browser entry points too.
+        environment['PYTHONPATH']=str(root)+os.pathsep+environment.get('PYTHONPATH','')
     (folder/'stop.request').unlink(missing_ok=True)
     initial=True
     def launch():
@@ -105,7 +111,7 @@ def _serve(root):
         log=folder/'server.log'
         if log.exists() and log.stat().st_size>1024*1024:log.replace(folder/'server.previous.log')
         with log.open('ab') as output:
-            return subprocess.Popen([sys.executable,'-m','cronos.browser','--managed'],cwd=root,env=environment,
+            return subprocess.Popen([sys.executable,'-m','cronos.browser','--managed'],cwd=data_home or root,env=environment,
                                     stdout=output,stderr=output,creationflags=0x08000000 if os.name=='nt' else 0)
     write_json(folder/'heartbeat.json',{'pid':os.getpid(),'at':time.time()})
     child=launch();heartbeat=0
@@ -181,6 +187,26 @@ def _serve(root):
 
 
 def serve(root):
+    if os.getenv('CRONOS_DATA_HOME'):
+        # One live version per permanent folder; avoid competing voice services
+        # and migrations against the same databases across different code roots.
+        import importlib.util
+        spec=importlib.util.spec_from_file_location('cronos_data_guard',Path(__file__).with_name('persistent_data.py'))
+        data=importlib.util.module_from_spec(spec);spec.loader.exec_module(data)
+        home=data.validate(os.environ['CRONOS_DATA_HOME'])
+        try:
+            with data.locked(home/'.launcher/session.lock'):
+                data.write_json(home/'.launcher/active-installation.json',{'root':str(root)})
+                return serve_installation(root)
+        except BlockingIOError:
+            active=read_json(home/'.launcher/active-installation.json',{}).get('root')
+            if active:
+                regular(Path(active)/'.cronos-local/updater/open.request').write_text('open')
+            return
+    return serve_installation(root)
+
+
+def serve_installation(root):
     folder=regular(Path(root)/'.cronos-local/updater');folder.mkdir(parents=True,exist_ok=True)
     with (folder/'supervisor.lock').open('a+b') as lock:
         try:
@@ -200,6 +226,13 @@ def main():
     if '--run' in sys.argv:
         serve(Path(sys.argv[-1]));return
     root=Path(__file__).resolve().parents[1]
+    from cronos.persistent_data import activate
+    activate(root)
+    if os.getenv('CRONOS_DATA_HOME'):
+        # The current supervisor understands shared data. Do not reuse a cached
+        # pre-migration runner which could roll it back on update failure.
+        serve(root)
+        return
     folder=regular(root/'.cronos-local/updater');folder.mkdir(parents=True,exist_ok=True)
     for name,source in [('runner.py',Path(__file__)),('update_transaction.py',Path(__file__).with_name('update_transaction.py'))]:
         destination=regular(folder/name)

@@ -11,6 +11,9 @@ from dotenv import load_dotenv
 
 
 def _run():
+    from pathlib import Path
+    from cronos.persistent_data import activate
+    activate(Path(__file__).resolve().parents[1])
     if sys.platform != "win32":
         raise SystemExit("A janela desktop do Cronos deve ser iniciada no Windows.")
     flag='--autoplay-policy=no-user-gesture-required'

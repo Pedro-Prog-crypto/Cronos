@@ -42,11 +42,14 @@ def unpack(destination, encoded=PAYLOAD_BASE64, checksum=PAYLOAD_SHA256):
     return updater
 
 
-def launch(root, popen=subprocess.Popen):
+def launch(root, popen=subprocess.Popen, home=None, runner=None):
     root=Path(root).absolute()
     python=root/'.venv/Scripts/pythonw.exe'
     if not python.is_file():raise ValueError('Nao encontrei o ambiente Python desta instalacao. Seus dados estao preservados; execute novamente com o Python 3.11 ou mais recente instalado.')
-    return popen([str(python),'-m','cronos.supervisor'],cwd=str(root),creationflags=0x08000000 if os.name=='nt' else 0)
+    command=[str(python),str(runner),'--run',str(root)] if runner else [str(python),'-m','cronos.supervisor']
+    options={'cwd':str(root),'creationflags':0x08000000 if os.name=='nt' else 0}
+    if home: options['env']={**os.environ,'CRONOS_DATA_HOME':str(home)}
+    return popen(command,**options)
 
 
 def ensure_environment(root, run=subprocess.run):
@@ -96,14 +99,41 @@ def main():
     if sys.version_info<(3,11):raise ValueError('Este iniciador precisa de Python 3.11 ou mais recente. Nenhum dado foi alterado.')
     if len(sys.argv)!=2:raise ValueError('Escolha a pasta completa do Cronos, com .env e a pasta cronos.')
     root=Path(sys.argv[1]).absolute()
-    print('ABRIR CRONOS COM MEUS DADOS\nA pasta escolhida sera usada para as APIs, integracoes e novas memorias.\n',flush=True)
+    print('ABRIR CRONOS COM DADOS PERMANENTES\nO programa fica na pasta escolhida; APIs e memorias ficam em Documentos\\Cronos-Dados.\n',flush=True)
     with tempfile.TemporaryDirectory(prefix='cronos-data-launcher-') as folder:
         source=Path(folder);updater=unpack(source)
         rescue=load('data_launcher_backup',source/'tools/rescue_installation.py')
-        prepare(root,source,updater,rescue.snapshot)
+        data=load('data_launcher_persistent',source/'cronos/persistent_data.py')
+        home=data.selected_home(root)
+        print('Pasta permanente:',home,flush=True)
+        with updater.stopped(root):
+            home,saved=data.import_data(root,home,rescue)
+        if saved: print('Importacao concluida. Originais e backup foram mantidos:',saved,flush=True)
+        else: print('Reutilizando APIs, integracoes e memorias atuais; dados antigos nao serao importados por cima.',flush=True)
+        # A freshly extracted version need not receive copies of private keys.
+        # The non-secret pointer selects the existing permanent configuration.
+        if not (root/'.env').exists():
+            (root/'.env').write_text('# Dados privados em Cronos-Dados; use este iniciador.\n',encoding='utf-8')
+        prepare(root,source,updater,(lambda _: (saved,{'complete':True})) if saved else rescue.snapshot)
         ensure_environment(root)
-    launch(root)
-    print('Abrindo o Cronos atualizado com os dados desta pasta. Use sempre este iniciador.\nNao apague a pasta escolhida.',flush=True)
+        # Versioned bootstrap lives outside replaceable code. Even an older
+        # installation uses shared-data-aware supervision through this launcher.
+        driver=home/'.launcher'/PAYLOAD_SHA256[:16]
+        driver.mkdir(parents=True,exist_ok=True)
+        for name in ('supervisor.py','update_transaction.py','persistent_data.py'):
+            target=driver/('runner.py' if name=='supervisor.py' else name)
+            content=(source/'cronos'/name).read_bytes()
+            if not target.is_file() or target.read_bytes()!=content:
+                temporary=target.with_suffix('.tmp');temporary.write_bytes(content);os.replace(temporary,target)
+        # Stop a previous version before switching code roots, never copy its
+        # data back. The shared session lock also prevents simultaneous starts.
+        active=home/'.launcher/active-installation.json'
+        if active.is_file():
+            previous=Path(json.loads(active.read_text())['root'])
+            if previous!=root and previous.is_dir():
+                with updater.stopped(previous): pass
+    launch(root,home=home,runner=driver/'runner.py')
+    print('Abrindo o Cronos com a pasta permanente. Use sempre este iniciador.\nNao apague Cronos-Dados; suas proximas memorias serao salvas nela.',flush=True)
     return 0
 
 

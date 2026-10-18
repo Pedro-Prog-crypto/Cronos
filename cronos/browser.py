@@ -13,6 +13,8 @@ from dotenv import load_dotenv
 
 
 def main():
+    from cronos.persistent_data import activate
+    activate(Path(__file__).resolve().parents[1])
     managed_token=os.getenv('CRONOS_API_TOKEN','')
     managed_environment={key:os.environ[key] for key in ('CRONOS_SUPERVISED','CRONOS_SUPERVISOR_PID','CRONOS_MANAGED_PORT','CRONOS_OPEN_BROWSER') if key in os.environ}
     load_dotenv('.env', override=True)
