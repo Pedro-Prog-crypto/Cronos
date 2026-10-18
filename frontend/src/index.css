@@ -74,7 +74,7 @@
 .holographic-globe{width:100%;height:100%;cursor:pointer;overflow:visible}.earth-grid{animation:earth-shimmer 8s ease-in-out infinite}.earth-beacons{animation:earth-shimmer 3s ease-in-out infinite}
 @keyframes earth-shimmer{50%{opacity:.4}}
 .world-map,.world-canvas{position:absolute;inset:0}.world-credits{position:absolute;bottom:10%;left:15%;right:15%;font-size:9px;z-index:2;color:#afeeff}.world-credits a{color:inherit}
-.reference-mic{position:absolute;left:50%;bottom:2.5%;transform:translateX(-50%);z-index:35;width:34px;height:34px;border:1px solid #178bd188;border-radius:50%;background:#041321;box-shadow:0 0 14px #006eff55;display:grid;place-items:center;color:#8ee6ff;padding:0}.reference-mic.recording{box-shadow:0 0 20px #00eaffbb}
+.reference-mic{position:relative;flex:0 0 36px;width:36px;height:36px;border:1px solid #178bd188;border-radius:50%;background:#041321;box-shadow:0 0 14px #006eff55;display:grid;place-items:center;color:#8ee6ff;padding:0}.reference-mic.recording{box-shadow:0 0 20px #00eaffbb}
 .scene-notice{position:absolute;left:50%;top:3%;transform:translateX(-50%);z-index:60;color:#8deaff;background:#001323cc;padding:8px 14px;border-radius:6px;max-width:65%;font-size:13px}
 .note-window{position:absolute;z-index:60;left:3%;top:8%;width:40%;height:80%;background:#031320ed;border:1px solid #00bfff55;border-radius:16px;padding:20px;overflow:auto}.note-window pre{white-space:pre-wrap;font:inherit;user-select:text}.note-window button{float:right}
 @media(max-width:900px){.memory-slot{width:43%;height:70%;top:15%}.eye-slot{left:68%;width:27%}.memory-slot.small{left:68%;width:27%}.cronos-central-hologram{transform:translate(-50%,-50%) scale(.65)}}
@@ -85,6 +85,3 @@
 .reference-mic.recording{background:#063a50;border-color:#77f6ff;color:white;box-shadow:0 0 18px #00eaffcc,inset 0 0 8px #00dfff55}
 .reference-mic.speaking{border-color:#73f2ff;background:#062337}
 @keyframes mic-wait{to{box-shadow:0 0 20px #ffbe6899}}
-
-/* Keep the Studio entry styled before the lazy module is requested. */
-.studio-entry{position:absolute;left:25px;bottom:23px;z-index:21;display:flex;align-items:center;gap:9px;background:#032031c9;border:1px solid #3286a384;border-radius:5px;color:#87e4f3;padding:10px 13px;font:11px 'Rajdhani',sans-serif;letter-spacing:.08em;cursor:pointer}.studio-entry:hover{border-color:#3bd4f1;box-shadow:0 0 20px #15b7dc30}.studio-entry:focus-visible{outline:2px solid #75f1ff;outline-offset:4px}
