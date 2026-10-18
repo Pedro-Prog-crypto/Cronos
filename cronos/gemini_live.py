@@ -18,6 +18,8 @@ from cronos.providers import OUTPUT_RULES,ProviderError,record_gemini_error
 from cronos.live_output import parse_live_output
 
 ORIGINAL_MODELS=('models/gemini-3.1-flash-live-preview','models/gemini-2.5-flash-native-audio-preview-12-2025')
+LIVE_ATTEMPT_TIMEOUT_SECONDS=25
+LIVE_TOTAL_TIMEOUT_SECONDS=45
 
 def make_client(key):
     from google import genai
@@ -103,15 +105,18 @@ async def reply(settings,system,messages):
     if not re.fullmatch(r'(?:models/)?[\w.-]+',primary):raise ProviderError('GEMINI_LIVE_MODEL inválido.')
     models=list(dict.fromkeys((primary,*ORIGINAL_MODELS))) if primary in ORIGINAL_MODELS else [primary]
     characters=len(system)+len(OUTPUT_RULES)+sum(len(m['content']) for m in messages)
-    last=None
+    last=None;loop=asyncio.get_running_loop();deadline=loop.time()+LIVE_TOTAL_TIMEOUT_SECONDS
     for model in models:
+        remaining_budget=deadline-loop.time()
+        if remaining_budget<=0:break
         identity=hashlib.sha256((settings.gemini_key.strip()+'|live|'+model).encode()).hexdigest()
         remaining=usage.remaining(identity)
         if remaining>0:raise ProviderError(f'Gemini Live: pausa ativa por {int(remaining)+1} segundos. Nenhuma sessão nova foi aberta.',429)
         client=None
         try:
             client=make_client(settings.gemini_key.strip())
-            result=await asyncio.wait_for(turn(client,model,system,messages,settings.gemini_live_thinking_budget),settings.provider_timeout)
+            timeout=min(float(settings.provider_timeout),LIVE_ATTEMPT_TIMEOUT_SECONDS,remaining_budget)
+            result=await asyncio.wait_for(turn(client,model,system,messages,settings.gemini_live_thinking_budget),timeout)
             usage.audit(model,200,characters);usage.clear_pause(identity)
             return result
         except ImportError:
@@ -123,7 +128,8 @@ async def reply(settings,system,messages):
             raise ProviderError(message,502) from None
         except asyncio.TimeoutError:
             usage.audit(model,504,characters)
-            raise ProviderError('Gemini Live: tempo de resposta esgotado.',504) from None
+            last=ProviderError('Gemini Live: tempo de resposta esgotado; verificando a próxima rota Live disponível.',504)
+            continue
         except Exception as exc:
             code=getattr(exc,'code',None)
             # Inspect privately for classification; never echo SDK bodies or websocket reasons.
@@ -141,4 +147,6 @@ async def reply(settings,system,messages):
             if client is not None:
                 try:await client.aio.aclose()
                 except Exception:pass
+    if last and last.status==504:
+        raise ProviderError('Gemini Live demorou demais; nenhuma rota Live concluiu a resposta dentro do prazo.',504) from None
     raise last or ProviderError('Gemini Live indisponível.')

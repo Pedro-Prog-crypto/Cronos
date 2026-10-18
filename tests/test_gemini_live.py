@@ -79,6 +79,23 @@ def test_live_quota_is_not_retried_and_error_body_is_private(settings,monkeypatc
             assert error.value.status==429 and 'private' not in str(error.value)
     asyncio.run(run());assert len(calls)==1
 
+
+def test_live_timeouts_are_bounded_across_model_routes(settings,monkeypatch):
+    calls=[]
+    class Client:
+        def __init__(self):self.aio=self
+        async def aclose(self):pass
+    monkeypatch.setattr(gemini_live,'make_client',lambda key:Client())
+    monkeypatch.setattr(gemini_live,'LIVE_ATTEMPT_TIMEOUT_SECONDS',0.01)
+    monkeypatch.setattr(gemini_live,'LIVE_TOTAL_TIMEOUT_SECONDS',0.03)
+    async def slow_turn(client,model,*args):calls.append(model);await asyncio.sleep(1)
+    monkeypatch.setattr(gemini_live,'turn',slow_turn)
+    started=__import__('time').monotonic()
+    with pytest.raises(ProviderError,match='demorou demais'):
+        asyncio.run(gemini_live.reply(replace(settings,gemini_key='test'),'',[]))
+    assert calls==list(gemini_live.ORIGINAL_MODELS)
+    assert __import__('time').monotonic()-started<0.2
+
 def test_provider_429_is_not_disguised_as_backend_503(settings):
     class Provider:
         async def reply(self,*args):raise ProviderError('Limite do provedor',429)
