@@ -1,5 +1,5 @@
 {
-  "revision": "67c93adbbaabab27f1005f78d3d181d7cc1c09b2",
+  "revision": "a939acca97b82ab69852656372f764d573061da5",
   "files": {
     "cronos/app.py": "1648e6fc51dd0b8dcbaf1d09ef6164076fb6702114214bf2981cfec107bdc96a",
     "cronos/browser.py": "1b268c98e82bbc24e55c4beae670241d2c7df818e88deb77a22007b8908d740a",
@@ -7,7 +7,7 @@
     "cronos/desktop.py": "5ec49077015d2fbfbd81d598ca0671f21cc965744582dbbffdda98f5d79d3995",
     "cronos/documents.py": "090994d41402871460161a886831ce6e5482df2843ccdaf746ca50172f52dd22",
     "cronos/engine.py": "37468ba9001f8b08ec47a6717c3296812321acb84c77ede60af4299ff98c24d5",
-    "cronos/evolution.py": "6f49f51303e877e926b9ae59cb36cd742732e4a91040c451e9252ebf59126e36",
+    "cronos/evolution.py": "aa825e3eba230b7c71259bcba8fefe42fbbb1839efa5dad33b7a248715966d4c",
     "cronos/gemini_live.py": "fc445487f8e68c422fb59c4757b6c63e2f03368e74b25b0279e50cd13dc98330",
     "cronos/integrations.py": "eaf60069e9f57cf07dd31bbae4199809abdbb8c1198f4e8a9b03cff42b7185ea",
     "cronos/live_screen.py": "04ae06369e8dc009e8e3eda7d5ff6bca271bceb4326c67b4a1d87e48acb0255e",

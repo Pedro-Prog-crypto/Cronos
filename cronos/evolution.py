@@ -10,6 +10,13 @@ from cronos.providers import ProviderError
 
 _LOCK = threading.RLock()
 
+# A chat request should not inherit the multi-minute timeout used by some
+# long-running generation jobs. Keep failover bounded so a dead API cannot
+# hold the conversation while every configured provider waits in sequence.
+PRIMARY_CHAT_TIMEOUT_SECONDS = 30
+FALLBACK_ATTEMPT_TIMEOUT_SECONDS = 8
+FALLBACK_TOTAL_TIMEOUT_SECONDS = 24
+
 
 class Routing(BaseModel):
     model_config = ConfigDict(extra='forbid')
@@ -110,6 +117,7 @@ class ResilientProvider:
         self.settings, self.primary = settings, primary
 
     async def reply(self, system, messages):
+        import asyncio
         # Never replay raw mic audio to an incompatible API or silently change an explicit council request.
         from cronos.reply_stream import reply_sink, intro_sink
         delivered = False
@@ -124,30 +132,49 @@ class ResilientProvider:
             await original_intro(value)
         reply_token = reply_sink.set(observe_reply) if original_reply else None
         intro_token = intro_sink.set(observe_intro) if original_intro else None
+        primary_timed_out = False
         try:
-            try:
-                return await self.primary.reply(system, messages)
-            finally:
-                if reply_token is not None: reply_sink.reset(reply_token)
-                if intro_token is not None: intro_sink.reset(intro_token)
-        except ProviderError as original:
-            if delivered or any(m.get('audio_pcm') is not None or m.get('image') for m in messages):
-                raise
-            policy = Routing.model_validate(read(self.settings)['routing'])
-            if not policy.enabled or not original.retryable:
-                raise
-            from dataclasses import replace
-            from cronos.providers import make_provider
-            usable = {p['id'] for p in provider_catalog(self.settings) if p['configured']}
-            for provider_id in policy.fallbacks:
-                if provider_id == self.settings.provider or provider_id not in usable:
-                    continue
-                try:
-                    result = await make_provider(replace(self.settings, provider=provider_id)).reply(system, messages)
-                    return {**result, 'provider_used': provider_id, 'fallback_used': True}
-                except ProviderError:
-                    continue
+            timeout = min(float(self.settings.provider_timeout), PRIMARY_CHAT_TIMEOUT_SECONDS)
+            return await asyncio.wait_for(self.primary.reply(system, messages), timeout=timeout)
+        except asyncio.TimeoutError:
+            primary_timed_out = True
+            original = ProviderError('A integração principal demorou demais; tentando as reservas configuradas.', 504)
+        except ProviderError as exc:
+            original = exc
+        finally:
+            if reply_token is not None: reply_sink.reset(reply_token)
+            if intro_token is not None: intro_sink.reset(intro_token)
+        if delivered or any(m.get('audio_pcm') is not None or m.get('image') for m in messages):
+            if primary_timed_out:
+                raise ProviderError('A integração principal demorou demais e a resposta já havia começado; não troquei de IA no meio da fala.', 504)
             raise original
+        policy = Routing.model_validate(read(self.settings)['routing'])
+        if not policy.enabled or not original.retryable:
+            if primary_timed_out:
+                raise ProviderError('A integração principal demorou demais e não há reserva automática ativa.', 504)
+            raise original
+        from dataclasses import replace
+        from cronos.providers import make_provider
+        usable = {p['id'] for p in provider_catalog(self.settings) if p['configured']}
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + FALLBACK_TOTAL_TIMEOUT_SECONDS
+        for provider_id in policy.fallbacks:
+            if provider_id == self.settings.provider or provider_id not in usable:
+                continue
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                break
+            try:
+                result = await asyncio.wait_for(
+                    make_provider(replace(self.settings, provider=provider_id)).reply(system, messages),
+                    timeout=min(FALLBACK_ATTEMPT_TIMEOUT_SECONDS, remaining),
+                )
+                return {**result, 'provider_used': provider_id, 'fallback_used': True}
+            except (ProviderError, asyncio.TimeoutError):
+                continue
+        if primary_timed_out:
+            raise ProviderError('A integração principal demorou demais e nenhuma reserva respondeu dentro do prazo.', 504)
+        raise original
 
 
 def install_api(app, authenticate):

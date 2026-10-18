@@ -56,6 +56,42 @@ def test_fallback_only_authorized_text_and_transient_errors(tmp_path,monkeypatch
     assert len(calls)==1
 
 
+def test_slow_primary_is_bounded_and_uses_configured_reserve(tmp_path,monkeypatch):
+    settings=setup(tmp_path,monkeypatch)
+    evolution.routing(settings,{'enabled':True,'fallbacks':['second']})
+    monkeypatch.setattr(evolution,'PRIMARY_CHAT_TIMEOUT_SECONDS',0.01)
+    monkeypatch.setattr(evolution,'FALLBACK_ATTEMPT_TIMEOUT_SECONDS',0.1)
+    monkeypatch.setattr(evolution,'FALLBACK_TOTAL_TIMEOUT_SECONDS',0.2)
+    class Primary:
+        async def reply(self,*args):await asyncio.sleep(1)
+    class Alternative:
+        async def reply(self,*args):return {'reply':'reserva','topics':[],'tool_calls':[]}
+    monkeypatch.setattr('cronos.providers.make_provider',lambda settings:Alternative())
+    result=asyncio.run(evolution.ResilientProvider(settings,Primary()).reply('',[{'role':'user','content':'teste'}]))
+    assert result['reply']=='reserva' and result['fallback_used']
+
+
+def test_slow_reserves_do_not_extend_total_fallback_budget(tmp_path,monkeypatch):
+    settings=setup(tmp_path,monkeypatch)
+    monkeypatch.setenv('THIRD_KEY','dummy')
+    payload=json.loads(settings.providers_file.read_text())
+    payload['providers'].append({'id':'third','kind':'openai','model':'test','base_url':'https://example.net/v1','key_env':'THIRD_KEY'})
+    settings.providers_file.write_text(json.dumps(payload))
+    evolution.routing(settings,{'enabled':True,'fallbacks':['second','third']})
+    monkeypatch.setattr(evolution,'PRIMARY_CHAT_TIMEOUT_SECONDS',0.01)
+    monkeypatch.setattr(evolution,'FALLBACK_ATTEMPT_TIMEOUT_SECONDS',0.02)
+    monkeypatch.setattr(evolution,'FALLBACK_TOTAL_TIMEOUT_SECONDS',0.025)
+    calls=[]
+    class Slow:
+        async def reply(self,*args):calls.append(True);await asyncio.sleep(1)
+    monkeypatch.setattr('cronos.providers.make_provider',lambda settings:Slow())
+    import time
+    started=time.monotonic()
+    with pytest.raises(ProviderError,match='demorou demais'):
+        asyncio.run(evolution.ResilientProvider(settings,Slow()).reply('',[{'role':'user','content':'teste'}]))
+    assert len(calls)==3 and time.monotonic()-started<0.2
+
+
 def test_registration_validates_before_writing(tmp_path,monkeypatch):
     settings=setup(tmp_path,monkeypatch)
     async def listed(*args):return ['real-model']
