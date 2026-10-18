@@ -1,8 +1,10 @@
 {
-  "revision": "a932cc3f7da5463c1e8f08b3172cecc637730b56",
+  "revision": "139cea24e61c35a60a9e4542af33a882fccc89e5",
   "files": {
     "cronos/app.py": "1648e6fc51dd0b8dcbaf1d09ef6164076fb6702114214bf2981cfec107bdc96a",
+    "cronos/browser.py": "1b268c98e82bbc24e55c4beae670241d2c7df818e88deb77a22007b8908d740a",
     "cronos/control.py": "de3229dc3e24713540f702c565f41dfcc0893ec823e38a00b6035b9c9833f1dc",
+    "cronos/desktop.py": "5ec49077015d2fbfbd81d598ca0671f21cc965744582dbbffdda98f5d79d3995",
     "cronos/documents.py": "090994d41402871460161a886831ce6e5482df2843ccdaf746ca50172f52dd22",
     "cronos/engine.py": "37468ba9001f8b08ec47a6717c3296812321acb84c77ede60af4299ff98c24d5",
     "cronos/gemini_live.py": "fc445487f8e68c422fb59c4757b6c63e2f03368e74b25b0279e50cd13dc98330",
@@ -11,6 +13,7 @@
     "cronos/media_streams.py": "7e53dff24cb000614371bde31e363198ef9c08c828288c9fef1b49cd885b2a77",
     "cronos/municipalities.py": "57cdba76e2b88cb2b0379dba67f8d8f1739a911f052e3ebb2acd0bd2c8beddd3",
     "cronos/music.py": "c4de3add869c24b66c494e5b0a592ffe7c16a17b98b0cee889de81b64fd3773a",
+    "cronos/persistent_data.py": "741559568b1680c7255c935899eef3261855200b3e980895128774d0d609136c",
     "cronos/prospects.py": "363940fbd38fd8e42318aec4b18be3de73413c1a34296c87321c5fbe8ea19884",
     "cronos/providers.py": "4fae288c5f750e1fb4701444f223203a853c3561eef1c7d1a2b7f666567c3873",
     "cronos/recognition.py": "f7fbc69510c110c48e9152c575434614d62ff1f501b7ee6e81c81d623b737f50",
@@ -73,6 +76,7 @@
     "cronos/studio/threed/vendor/three-0.128.0.min.js": "9274bbcec8d96168626c732b5d31c775aa8cfb7eaa0599bec0c175908a2c1ce2",
     "cronos/studio/threed/vendor/three-LICENSE.txt": "7dddf7c5b8fd10ee654db8857d75d104b5557889aa5a91fc4ca545ea7c07062f",
     "cronos/studio/validation.py": "a980ad501788be9268dbc67e7305c128df4b1cfa9771d4b2aca5a79065848e56",
+    "cronos/supervisor.py": "332ca093246f502a4c87a9540db05357911426feba6dce8de5074c6c0aeba714",
     "cronos/ui/assets/ModulePanel-BeFbQwwl.js": "53d3689134244dfd07e10be386ecf7330514f8b392eb4f244df4395e43e45489",
     "cronos/ui/assets/ProspectPanel-PTTnsjcA.js": "b18047381118758e553494699450bf302780d897f8165bad37b3e4d5f7e46cdf",
     "cronos/ui/assets/SiteStudio-BYyJPnr-.js": "2cdbaff105328ff8f0b47556c07f8b44f5c9bc6145e2f61c04084687262f3b07",
@@ -99,6 +103,7 @@
     "cronos/ui/assets/studio-restaurante-preview.jpg": "2e905beceb3aad2f984d88d6c5a1fa25ab47922fed5efa9ff2831ed0869cfbed",
     "cronos/ui/assets/studio-servicos-preview.jpg": "95d1a61bd3a49dde2798e9ac1a85febeade739156590a8531f9a369c1bb30464",
     "cronos/ui/index.html": "0cb1cef22da3b8c441862bdef09335adbe9aa092b5298dcef2f10233818222cf",
+    "cronos/update_transaction.py": "1a81fe53c971e3c8ad6a4c0dd6ce7a05e1b0dd3a1f006f770d27f89f5def6e0f",
     "cronos/upload_limits.py": "b2c492a0d1e5dbd56d04d69d2736420e938ff567ae6e88eff050d86312a26e43",
     "cronos/vision.py": "734168b101b36905b162be395f6f6a4066fec5de02219da6451c433215f4deae"
   }

@@ -213,3 +213,43 @@ Path('functional-result.json').write_text(json.dumps({
     assert not (old/'functional-result.json').exists()
     with closing(sqlite3.connect(home/'vault/.cronos/memory.sqlite3')) as db:
         assert ('saved by older code',) in db.execute('SELECT text FROM notes').fetchall()
+
+
+def test_downloaded_bat_imports_once_then_opens_new_version_without_replacing_data(tmp_path, monkeypatch):
+    root, home = setup(tmp_path, monkeypatch)
+    package = Path(__file__).resolve().parents[1]/'releases/ABRIR-CRONOS-COM-MEUS-DADOS.bat'
+    embedded = package.read_text().split('\n# CRONOS_DATA_PYTHON\n')[1]
+    namespace = {'__name__':'embedded_integration'}
+    exec(compile(embedded, 'downloaded-launcher.py', 'exec'), namespace)
+    original_load = namespace['load']
+    def load(name, path):
+        module = original_load(name,path)
+        if name == 'data_launcher_persistent': module.default_home = lambda: home
+        return module
+    namespace['load'] = load
+    namespace['ensure_environment'] = lambda _: None  # No Windows interpreter here.
+    calls = []
+    namespace['launch'] = lambda *args, **kwargs: calls.append((args,kwargs))
+    monkeypatch.setattr(sys, 'argv', ['downloaded-launcher.py',str(root)])
+    assert namespace['main']() == 0
+    assert (home/'config/providers.json').read_bytes() == (root/'config/providers.json').read_bytes()
+    assert data.selected_home(root) == home
+    assert calls[-1][1]['home'] == home
+    driver = calls[-1][1]['runner']
+    assert driver.is_file() and (driver.parent/'persistent_data.py').is_file()
+    assert (driver.parent/'update_transaction.py').is_file()
+    (home/'vault/Temas/new-after-import.md').write_text('Memoria posterior')
+    # An extracted new version without private keys/cofre must use existing data.
+    next_version = tmp_path/'next-version'; (next_version/'cronos').mkdir(parents=True)
+    (next_version/'cronos/app.py').write_text('placeholder=True\n')
+    monkeypatch.setattr(sys, 'argv', ['downloaded-launcher.py',str(next_version)])
+    assert namespace['main']() == 0
+    assert data.selected_home(next_version) == home
+    assert calls[-1][0] == (next_version,)
+    assert (home/'vault/Temas/new-after-import.md').read_text() == 'Memoria posterior'
+    assert 'fixture-do-not-log' not in (next_version/'.env').read_text()
+    assert not (next_version/'vault').exists()
+    # Reopening the older BAT never overlays later code or shared data.
+    (next_version/'cronos/app.py').write_text('future_code=True\n')
+    assert namespace['main']() == 0
+    assert (next_version/'cronos/app.py').read_text() == 'future_code=True\n'
