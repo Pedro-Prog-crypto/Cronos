@@ -75,7 +75,9 @@ def test_one_bat_contains_verified_current_code_without_private_data(tmp_path,mo
         assert b'PROCESS_FILES' in archive.read('tools/rescue_installation.py')
     namespace['unpack'](tmp_path/'payload')
     with zipfile.ZipFile(output.with_suffix('.zip')) as archive:
-        assert archive.namelist()==[output.name] and archive.read(output.name)==output.read_bytes()
+        assert set(archive.namelist())=={output.name,'LEIA-PRIMEIRO-DADOS.txt'}
+        assert archive.read(output.name)==output.read_bytes()
+        assert b'Documentos' in archive.read('LEIA-PRIMEIRO-DADOS.txt')
 
 
 def test_changed_embedded_package_is_rejected_before_extracting(tmp_path):

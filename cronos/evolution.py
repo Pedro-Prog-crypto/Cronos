@@ -99,7 +99,8 @@ def checkup(settings):
         if isinstance(value, (int, float)) and value > 3000:
             proposals.append({'title': title, 'evidence_ms': value, 'status': 'proposed',
                               'note': 'Medição do último turno; não comprova a causa e não altera código.'})
-    return {'providers': catalog, 'routing': read(settings), 'last_client_timings_ms': timings,
+    return {'providers': catalog, 'primary_provider': settings.provider,
+            'routing': read(settings), 'last_client_timings_ms': timings,
             'proposals': proposals, 'scope': 'Leitura local, sem chamadas pagas, varredura em segundo plano ou alteração de voz/modelo.',
             'discovery': 'Use integrations_models para modelos anunciados pela API; novidades de outros provedores exigem pesquisa em fontes oficiais. Não há catálogo universal garantido.'}
 

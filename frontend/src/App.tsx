@@ -229,7 +229,9 @@ export default function App(){
       const filmResult=result.tool_results?.find((r:any)=>r.name==='stremio_search'&&r.status==='completed');if(filmResult?.result){setStremio(filmResult.result);setModule(null);setChatOpen(false);}
       const mediaResult=result.tool_results?.find((r:any)=>r.name==='music_search'&&r.status==='completed');if(mediaResult?.result){music.current?.load(mediaResult.result);}
       const leadResult=result.tool_results?.find((r:any)=>r.name==='prospect_restaurants'&&r.status==='completed');if(leadResult?.result){setProspect({city:leadResult.result.city,category:leadResult.result.category,report:leadResult.result});setModule(null);setChatOpen(false);}
-      if(result.warnings?.length)tell(result.warnings.join('\n'),true);else setNotice('');
+      if(result.warnings?.length)tell(result.warnings.join('\n'),true);
+      else if(result.fallback_used)tell(`A integração principal não respondeu. Esta resposta veio da reserva ${result.provider_used}.`,false);
+      else setNotice('');
       if(autoVoice&&config?.fish_speech_configured){ready(result.reply);}
       else if(autoVoice)tell('A resposta está escrita, mas a voz não está configurada. Confira a configuração da voz no arquivo .env.',true);
     }catch(error){

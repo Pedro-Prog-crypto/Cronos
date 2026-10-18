@@ -77,6 +77,7 @@ def test_checkup_authenticated_and_key_never_returned(tmp_path,monkeypatch):
         headers={'Authorization':'Bearer test'}
         report=client.get('/evolution',headers=headers)
         assert report.status_code==200 and 'dummy' not in report.text
+        assert report.json()['primary_provider']=='gemini'
         response=client.post('/evolution/credential',headers=headers,json={'provider_id':'second','key':'new-private-key'})
         assert response.status_code==200 and 'new-private-key' not in response.text
         assert 'new-private-key' in (tmp_path/'.env').read_text()

@@ -31,7 +31,9 @@ exit /b %CRONOS_DATA_RESULT%
 '''
     output=ROOT/'releases/ABRIR-CRONOS-COM-MEUS-DADOS.bat'
     output.write_bytes((header+helper).replace('\n','\r\n').encode('utf-8'))
-    with zipfile.ZipFile(output.with_suffix('.zip'),'w',zipfile.ZIP_DEFLATED) as package:package.write(output,output.name)
+    with zipfile.ZipFile(output.with_suffix('.zip'),'w',zipfile.ZIP_DEFLATED) as package:
+        package.write(output,output.name)
+        package.write(ROOT/'docs/DADOS_PERMANENTES.md','LEIA-PRIMEIRO-DADOS.txt')
     return output
 
 

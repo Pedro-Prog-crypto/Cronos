@@ -21,7 +21,9 @@ def build_patch():
 def build():
     build_patch()
     tracked=subprocess.check_output(['git','ls-files','-z','--','cronos','modelos','config/providers.example.json','.env.example','pyproject.toml'],cwd=ROOT).decode().split('\0')
-    names=sorted(set(filter(None,tracked))|set(EXTRA))
+    manifest=json.loads((ROOT/'tools/interface_update_manifest.json').read_text())
+    ui_assets={p.relative_to(ROOT).as_posix() for p in (ROOT/'cronos/ui/assets').rglob('*') if p.is_file()}
+    names=sorted(name for name in set(filter(None,tracked))|set(EXTRA)|set(manifest['files'])|ui_assets if (ROOT/name).is_file())
     names=sorted(set(names)|{p.relative_to(ROOT).as_posix() for p in (ROOT/'examples/3d-product-demo').rglob('*') if p.is_file()})
     for name in names:
         parts=Path(name).parts

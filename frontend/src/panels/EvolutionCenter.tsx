@@ -18,6 +18,15 @@ export default function EvolutionCenter(){
   }
   await load();setMessage('Configuração salva.');
  };
+ const authorizeConfiguredBackups=()=>void run(async()=>{
+  const primary=report?.primary_provider;
+  const ids=(report?.providers||[])
+   .filter((provider:any)=>provider.configured&&provider.id!==primary&&provider.id!=='ollama')
+   .map((provider:any)=>provider.id);
+  if(!ids.length)throw new Error('Não há outra integração online configurada. Cadastre e configure uma chave primeiro.');
+  setAlternatives(ids.join(', '));
+  await action('integrations_routing',{enabled:true,fallbacks:ids});
+ });
  return <div className="panel-box"><h3>EVOLUÇÃO E CONSELHO DE IAS</h3><p>Check-up sob demanda, sem manter modelos carregados no notebook.</p><button disabled={busy} onClick={()=>void run(load)}>ATUALIZAR CHECK-UP</button>
  <p>{report?.providers?.length??'—'} provedores registrados · alternativas {report?.routing?.routing?.enabled?'autorizadas':'desligadas'}</p>
  {(report?.proposals||[]).map((p:any,i:number)=><p key={i}>{p.title} · {p.evidence_ms} ms · proposta, sem alteração automática.</p>)}
@@ -26,6 +35,7 @@ export default function EvolutionCenter(){
  {models.length>0&&<select aria-label="Modelos disponíveis" size={Math.min(8,models.length)}>{models.map(m=><option key={m}>{m}</option>)}</select>}
  {selected&&!['gemini','ollama'].includes(selected)&&<form onSubmit={e=>{e.preventDefault();void run(async()=>{try{await jsonApi('/evolution/credential',{provider_id:selected,key});await load();setMessage('Chave salva localmente; não enviada ao conselho de IAs.');}finally{setKey('');}});}}><label>Chave da integração<input type="password" autoComplete="off" value={key} onChange={e=>setKey(e.target.value)} maxLength={4096}/></label><small>Armazenada no .env local. Não é criptografada; mantenha sua conta Windows protegida.</small><button disabled={busy||!key}>SALVAR CHAVE LOCAL</button></form>}
  <label>Alternativas autorizadas, em ordem (IDs separados por vírgula)<input value={alternatives} onChange={e=>setAlternatives(e.target.value)}/></label><small>Conversas de texto apenas. Áudio Gemini Live e pedidos a uma IA específica preservam o provedor. As alternativas podem cobrar e receber o contexto da conversa.</small>
+ <button disabled={busy||!report?.providers?.some((p:any)=>p.configured&&p.id!==report?.primary_provider&&p.id!=='ollama')} onClick={authorizeConfiguredBackups}>ATIVAR RESERVA COM PROVEDORES CONFIGURADOS</button>
  <button disabled={busy} onClick={()=>void run(()=>action('integrations_routing',{enabled:true,fallbacks:alternatives.split(',').map(v=>v.trim()).filter(Boolean)}))}>AUTORIZAR ALTERNATIVAS</button>
  <button disabled={busy} onClick={()=>void run(()=>action('integrations_routing',{enabled:false,fallbacks:[]}))}>DESLIGAR ALTERNATIVAS</button>
  <button disabled={busy||!report?.routing?.previous} onClick={()=>void run(()=>action('integrations_rollback',{}))}>RESTAURAR POLÍTICA ANTERIOR</button>
