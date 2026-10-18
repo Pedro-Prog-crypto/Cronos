@@ -70,7 +70,11 @@ def selected_direction(project):
 
 
 def visual_review(files, baseline, assets):
-    """Observable content checks; these do not certify aesthetics or exclusivity."""
+    """Reject unfinished wireframes before the preview is presented as ready.
+
+    Static checks cannot grade taste, but literal TODO copy and blank sections
+    are objectively incomplete and must trigger the existing repair/fallback path.
+    """
     text = files['index.html']
     checks = []
     def add(name, ok, detail):
@@ -78,9 +82,31 @@ def visual_review(files, baseline, assets):
     identical = all(files.get(name) == value for name, value in baseline.items())
     add('Entrega diferente do ponto de partida', not identical,
         'Compara os três arquivos; isto não avalia beleza nem originalidade artística.')
-    placeholders = ['Conteúdo de demonstração. Substitua', 'O que faz sentido para você faz parte de cada escolha.']
-    add('Sem blocos do exemplo inicial', not any(s in text for s in placeholders),
-        'Textos provisórios do antigo exemplo devem ser substituídos por conteúdo específico.')
+    normalized = re.sub(r'\s+', ' ', text.casefold())
+    placeholders = [
+        'conteúdo de demonstração. substitua',
+        'o que faz sentido para você faz parte de cada escolha.',
+        'conteúdo pendente', 'content pending', 'lorem ipsum',
+        'texto provisório', 'descrição do restaurante.',
+        'itens do cardápio.', 'mapa interativo.',
+        '[nome do restaurante]', '[nome da empresa]', '[nome do negócio]',
+        'inserir descrição aqui', 'adicione uma imagem', 'imagem aqui',
+    ]
+    unfinished = [phrase for phrase in placeholders if phrase in normalized]
+    add('Sem texto de rascunho ou conteúdo pendente', not unfinished,
+        ('Encontrados marcadores que não podem aparecer na prévia: ' + ', '.join(unfinished[:5]) + '.')
+        if unfinished else 'Sem marcadores conhecidos de conteúdo inacabado.')
+    # An image-less page is rarely a usable first impression for a physical
+    # business. Original inline SVG also counts as deliberate visual content.
+    image_count = len(re.findall(r'<img\b', text, re.I))
+    svg_count = len(re.findall(r'<svg\b', text, re.I))
+    has_css_art = bool(re.search(r'(?:background|background-image)\s*:[^;}]*url\(', files['styles.css'], re.I))
+    add('Abertura tem elemento visual', bool(image_count or svg_count or has_css_art),
+        'Use uma fotografia local aprovada, uma ilustração SVG original ou arte local em CSS; uma página só com texto não está pronta para avaliação.')
+    css = files['styles.css']
+    add('CSS apresenta layout próprio', len(css.strip()) >= 500 and bool(re.search(r'\b(?:grid|flex)\b', css))
+        and bool(re.search(r'@media\b', css, re.I)),
+        'O site precisa de composição visual própria e ajuste para celular, além de carregar styles.css.')
     images = [a for a in assets if a['purpose'] == 'image']
     add('Fotografia disponível utilizada', not images or any('assets/' + a['name'] in text or 'assets/' + a['name'] in files['styles.css'] for a in images),
         'Confere o uso de pelo menos uma imagem disponível. A adequação da fotografia exige revisão visual.')

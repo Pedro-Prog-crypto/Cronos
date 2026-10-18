@@ -259,7 +259,8 @@ def test_chosen_reference_is_used_and_autonomous_requests_do_not_reuse_it(settin
         expected=c.get('/studio/projects/'+p['id']+'/assets/'+names[0],headers=AUTH).content
         assert actual==expected
         revised=dict(done['current']['files'])
-        revised['index.html']=revised['index.html'].replace('Uma proposta construída para este projeto de teste.', 'Segunda composição criada sem usar a referência anterior.')
+        revised['index.html']=revised['index.html'].replace('O lugar também faz parte da viagem.', 'Segunda composição criada sem usar a referência anterior.')
         builder.outputs=[{'reply':json.dumps({'summary':'Nova composição autônoma.','files':revised})}]
         done=generate(c,p,mode='autonomous',reference_asset=names[1])
-        assert done['status']=='ready' and len(vision.calls)==1 and done['reference_asset']==''
+        assert done['status']=='ready', done.get('error')
+        assert len(vision.calls)==1 and done['reference_asset']==''
