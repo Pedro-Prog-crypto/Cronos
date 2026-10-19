@@ -94,7 +94,10 @@ def test_downloadable_package_runs_as_a_standalone_updater(tmp_path):
     import subprocess,sys,zipfile
     root=Path(__file__).resolve().parents[1]
     package=tmp_path/'download';package.mkdir()
-    with zipfile.ZipFile(root/'releases/CRONOS-Atualizacao-Preservando-Dados.zip') as archive:archive.extractall(package)
+    with zipfile.ZipFile(root/'releases/CRONOS-Atualizacao-Preservando-Dados.zip') as archive:
+        assert 'Criar-Atalho-Cronos.vbs' in archive.namelist()
+        assert b'Criar-Atalho-Cronos.vbs' in archive.read('Atualizar-Cronos-Preservando-Dados.bat')
+        archive.extractall(package)
     _,target,personal=fixture(tmp_path/'installation')
     result=subprocess.run([sys.executable,str(package/'tools/apply_interface_update.py'),str(target)],capture_output=True,text=True,timeout=10)
     assert result.returncode==0,result.stdout+result.stderr

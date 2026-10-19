@@ -6,12 +6,12 @@ import subprocess
 import zipfile
 
 ROOT=Path(__file__).resolve().parents[1]
-EXTRA=['docs/INTEGRACAO-MISTRAL-3D.md','docs/STUDIO_DE_SITES.md','ABRIR-CRONOS.bat','LEIA-PRIMEIRO.txt','tools/start_bundle.py','tools/launch_bundle.vbs','tools/apply_interface_update.py','tools/interface_update_manifest.json']
+EXTRA=['docs/INTEGRACAO-MISTRAL-3D.md','docs/STUDIO_DE_SITES.md','ABRIR-CRONOS.bat','Criar-Atalho-Cronos.vbs','LEIA-PRIMEIRO.txt','tools/start_bundle.py','tools/launch_bundle.vbs','tools/apply_interface_update.py','tools/interface_update_manifest.json']
 
 
 def build_patch():
     manifest=json.loads((ROOT/'tools/interface_update_manifest.json').read_text())
-    names=[*manifest['files'],'tools/apply_interface_update.py','tools/interface_update_manifest.json','Atualizar-Cronos-Preservando-Dados.bat']
+    names=[*manifest['files'],'tools/apply_interface_update.py','tools/interface_update_manifest.json','Atualizar-Cronos-Preservando-Dados.bat','Criar-Atalho-Cronos.vbs']
     output=ROOT/'releases/CRONOS-Atualizacao-Preservando-Dados.zip';output.parent.mkdir(exist_ok=True)
     with zipfile.ZipFile(output,'w',zipfile.ZIP_DEFLATED) as package:
         for name in names:package.write(ROOT/name,name)

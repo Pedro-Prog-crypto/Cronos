@@ -13,6 +13,9 @@ APIs, memorias, integracoes, projetos e o limite de 30 MiB continuam preservados
 1. Extraia TODO o ZIP.
 2. Abra ABRIR-CRONOS.bat.
 
+ATALHO NA AREA DE TRABALHO
+O pacote de atualizacao preservando dados cria o atalho CRONOS automaticamente ao concluir. No pacote completo, execute Criar-Atalho-Cronos.vbs e escolha a pasta da instalacao existente. Para deixar na barra de tarefas, clique com o botao direito no atalho e escolha Fixar na barra de tarefas (no Windows 11: Mostrar mais opcoes).
+
 O iniciador procura sua instalacao anterior e abre o Cronos atualizado usando as APIs, integracoes e memorias que ja estavam la. Se houver mais de uma instalacao, escolha a pasta que voce usa. Nao e preciso colar as chaves de novo, copiar memorias ou executar outro pacote de atualizacao.
 
 A pasta antiga continua sendo usada. Nao apague essa pasta depois da atualizacao. Guarde este ZIP como pacote completo do programa.

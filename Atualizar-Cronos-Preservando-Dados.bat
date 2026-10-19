@@ -13,5 +13,6 @@ if not exist "%CRONOS_UPDATE_TARGET%\.venv\Scripts\python.exe" (
 )
 "%CRONOS_UPDATE_TARGET%\.venv\Scripts\python.exe" "%~dp0tools\apply_interface_update.py" "%CRONOS_UPDATE_TARGET%"
 set "CRONOS_UPDATE_EXIT=%ERRORLEVEL%"
+if "%CRONOS_UPDATE_EXIT%"=="0" if exist "%~dp0Criar-Atalho-Cronos.vbs" cscript.exe //nologo "%~dp0Criar-Atalho-Cronos.vbs" "%CRONOS_UPDATE_TARGET%"
 pause
 exit /b %CRONOS_UPDATE_EXIT%
