@@ -202,7 +202,7 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
             const audio=pcmWav(samples,rate);
             if(latest.current.onAudio){await latest.current.onAudio(audio,{recognition_ms:0,endpoint_ms:750});return;}
             const response=await api('/voice/transcribe',{method:'POST',headers:{'Content-Type':'audio/wav'},body:audio,signal:abort.signal});
-            const result=await response.json();if(version===captureVersion.current&&!abort.signal.aborted&&enabled.current&&mounted.current&&result.text?.trim())latest.current.onTranscript(result.text,{recognition_ms:Math.round(performance.now()-recognitionStarted),endpoint_ms:750});
+            const result=await response.json();if(version===captureVersion.current&&!abort.signal.aborted&&enabled.current&&mounted.current){if(result.text?.trim())latest.current.onTranscript(result.text,{recognition_ms:Math.round(performance.now()-recognitionStarted),endpoint_ms:750});else latest.current.onError('Não consegui transcrever sua fala. O microfone continua ligado; repita a frase ou confira o dispositivo de entrada.');}
           }catch(error){if(enabled.current&&!abort.signal.aborted)latest.current.onError(error instanceof Error?error.message:'Transcrição indisponível.');}
           finally{if(version===captureVersion.current){processing.current=false;resumeAfter.current=performance.now()+250;if(mounted.current)setTranscribing(false);}}
         };
@@ -238,7 +238,7 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
             if(!enabled.current||abort.signal.aborted)return;
             if(latest.current.onAudio){await latest.current.onAudio(audio,{recognition_ms:0,endpoint_ms:750});return;}
             const response=await api('/voice/transcribe',{method:'POST',headers:{'Content-Type':audio.type},body:audio,signal:abort.signal});
-            const result=await response.json();if(version===captureVersion.current&&!abort.signal.aborted&&enabled.current&&mounted.current&&result.text?.trim())latest.current.onTranscript(result.text,{recognition_ms:Math.round(performance.now()-recognitionStarted),endpoint_ms:750});
+            const result=await response.json();if(version===captureVersion.current&&!abort.signal.aborted&&enabled.current&&mounted.current){if(result.text?.trim())latest.current.onTranscript(result.text,{recognition_ms:Math.round(performance.now()-recognitionStarted),endpoint_ms:750});else latest.current.onError('Não consegui transcrever sua fala. O microfone continua ligado; repita a frase ou confira o dispositivo de entrada.');}
           }catch(error){if(enabled.current&&!abort.signal.aborted)latest.current.onError(error instanceof Error?error.message:'Transcrição indisponível.');}
           finally{if(version===captureVersion.current){processing.current=false;if(mounted.current)setTranscribing(false);}}
         };

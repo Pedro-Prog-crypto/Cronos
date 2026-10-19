@@ -91,13 +91,18 @@ def test_native_audio_preserves_history_and_delivers_input_transcript(settings,w
 def test_wake_gate_does_not_store_or_execute_uncalled_audio(settings):
     class Provider:
         async def reply(self,*args):
-            from cronos.reply_stream import deliver_intro
+            from cronos.reply_stream import deliver_intro, transcript_sink
+            sink=transcript_sink.get()
+            if sink:await sink('Abra uma pasta')
             await deliver_intro('Uma frase que não deve chegar à voz. ')
             return {'recognized_text':'Abra uma pasta','reply':'Vou abrir.','topics':[],'tool_calls':[{'name':'obsidian_search','arguments':{'query':'Pasta'}}]}
     with TestClient(create_app(replace(settings,gemini_transport='live'),Provider())) as client:
         client.patch('/panels/preferences',headers=AUTH,json={'called_only':True})
         r=client.post('/chat/audio/stream',headers={**AUTH,'Content-Type':'audio/wav'},content=wav())
-        result=json.loads(r.text)['result']
+        events=[json.loads(line) for line in r.text.splitlines()]
+        assert events[0]['type']=='transcript' and events[0]['text']=='Abra uma pasta'
+        assert events[-1]['type']=='result'
+        result=events[-1]['result']
         assert result['ignored'] and result['notes']==[] and result['tool_results']==[]
         assert client.get('/conversations/'+result['session_id'],headers=AUTH).json()['messages']==[]
 
