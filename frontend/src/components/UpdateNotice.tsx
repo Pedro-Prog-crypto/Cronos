@@ -1,4 +1,5 @@
 import React,{useEffect,useRef,useState} from 'react';
+import {X} from 'lucide-react';
 import {api,jsonApi,getToken} from '../api';
 import './UpdateNotice.css';
 
@@ -14,7 +15,7 @@ export function UpdateNotice({connected,enabled,idle,voiceEnabled,onSpeak,onBusy
   if(!connected)return;let alive=true,timer:ReturnType<typeof setTimeout>,controller:AbortController|null=null;
   const poll=async()=>{
    controller=new AbortController();const timeout=setTimeout(()=>controller?.abort(),4500);
-   try{const result=await(await api('/updates',{signal:controller.signal})).json();if(alive){setReport(result);setDismissed(new Set(result.dismissed||[]));setError('');}}
+   try{const result=await(await api('/updates',{signal:controller.signal})).json();if(alive){setReport(result);const hidden=new Set<string>(result.dismissed||[]);if(result.state?.id){try{if(localStorage.getItem(`cronos:update-dismissed:${result.state.id}`)==='1')hidden.add(result.state.id);}catch{}}setDismissed(hidden);setError('');}}
    catch{/* Preserve the banner through the expected server restart. */}
    finally{clearTimeout(timeout);if(alive)timer=setTimeout(poll,running.has(state.phase)?2000:30000);}
   };
@@ -31,6 +32,7 @@ export function UpdateNotice({connected,enabled,idle,voiceEnabled,onSpeak,onBusy
  },[report,enabled,idle,voiceEnabled,updating,dismissed]);
  useEffect(()=>()=>{cached.current?.pause();if(announcement.current)URL.revokeObjectURL(announcement.current);},[]);
  const request=async(work:()=>Promise<void>)=>{setWorking(true);setError('');try{await work();try{setReport(await jsonApi('/updates'));}catch{/* A queued installation may already be restarting the server. */}}catch(e){setError(e instanceof Error?e.message:'Não foi possível concluir.');}finally{setWorking(false);}};
+ const dismissNotice=()=>{const id=state.id||key;if(id){setDismissed(old=>new Set([...old,id]));try{localStorage.setItem(`cronos:update-dismissed:${id}`,'1');}catch{}void jsonApi('/updates/dismiss',{key:id}).catch(()=>{});}};
  const apply=()=>request(async()=>{
   if(state.origin==='ai'&&proposal?.id!==state.id){setProposal(await jsonApi(`/updates/proposal/${state.id}`));throw new Error('Leia a proposta gerada por IA e o plano de testes antes de autorizar.');}
   if(!window.confirm('Autorizar backup e instalação desta cópia? O servidor será reiniciado. Se a inicialização falhar, o supervisor tentará restaurar o código anterior.'))return;
@@ -44,9 +46,9 @@ export function UpdateNotice({connected,enabled,idle,voiceEnabled,onSpeak,onBusy
  });
  const suggestion=report?.suggestions?.find((s:any)=>!dismissed.has(s.id));
  const key=available?`release-${report?.release?.revision}`:suggestion?.id;
- const show=updating||['ready','completed','restored','failed','recovery_failed'].includes(state.phase)||(enabled&&(available||suggestion)&&!dismissed.has(key));
+ const show=updating||(['ready','completed','restored','failed','recovery_failed'].includes(state.phase)&&!dismissed.has(state.id))||(enabled&&(available||suggestion)&&!dismissed.has(key));
  if(!show&&!error)return null;
- return <aside className="update-notice" aria-label="Atualizações do Cronos"><div><strong>{updating?'ATUALIZANDO CRONOS':state.phase==='ready'?'ATUALIZAÇÃO PREPARADA':'EVOLUÇÃO DO CRONOS'}</strong><p>{updating||state.phase==='ready'||['completed','restored','failed','recovery_failed'].includes(state.phase)?state.message:available?`Atualização publicada: ${report.release.summary||report.release.revision}`:suggestion?.title}</p>
+ return <aside className="update-notice" aria-label="Atualizações do Cronos"><div><header className="update-notice-heading"><strong>{updating?'ATUALIZANDO CRONOS':state.phase==='ready'?'ATUALIZAÇÃO PREPARADA':'EVOLUÇÃO DO CRONOS'}</strong>{!updating&&<button className="update-notice-close" type="button" aria-label="Fechar aviso de atualização" title="Fechar aviso" onClick={dismissNotice}><X size={18}/></button>}</header><p>{updating||state.phase==='ready'||['completed','restored','failed','recovery_failed'].includes(state.phase)?state.message:available?`Atualização publicada: ${report.release.summary||report.release.revision}`:suggestion?.title}</p>
  {updating&&<progress aria-label="Progresso da atualização" max={100} value={state.progress||0}/>}
  {error&&<p role="alert">{error}</p>}
  {proposal&&<details open><summary>Proposta: {proposal.summary}</summary><p>Código gerado por IA pode conter erros. Verificações iniciais não substituem teste funcional. O backup não desfaz ações fora do Cronos.</p><p>Plano sugerido, ainda não executado: {proposal.test_plan}</p>{proposal.diffs.map((d:any)=><details key={d.path}><summary>{d.path}</summary><pre>{d.diff}</pre></details>)}</details>}
