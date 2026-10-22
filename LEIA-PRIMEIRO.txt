@@ -1,47 +1,29 @@
-CRONOS COMPLETO — UM PACOTE
+CRONOS COMPLETO — INSTALACAO AUTONOMA
 
-NESTA ATUALIZACAO
-O gerador confere as funcoes do pedido antes de salvar, preserva as funcoes nas revisoes e envia o codigo completo para correcao de projetos maiores. Busca, filtro, ordenacao e carrinho de demonstracao usam componentes internos testaveis, sem um visual obrigatorio. Pagamentos, login e estoque reais continuam exigindo integracao especifica.
-Ver minha tela agora inicia o acompanhamento silencioso da tela inteira no Windows local, sem escolher janela. Diga "Cronos, veja minha tela" e depois faca perguntas. Para desligar: "Cronos, pare de ver minha tela", ou o botao Parar. Minimizar outra janela nao desliga. Capturas ficam apenas em RAM e a imagem atual acompanha a pergunta; nenhuma IA narra o que ve em segundo plano. Fechar o Cronos/reiniciar o servidor ou perder a conexao por dois minutos encerra o acompanhamento.
-As janelas agora tem um botao de minimizar (tracinho). Estudio, musica, Stremio, analises, paineis, conversa, notas e Olho de Deus podem ficar em segundo plano. Restaure pela barra no canto inferior. Minimizar nao cancela a criacao nem reinicia o audio; fechar e outra acao.
-O Estudio recebe a entrega longa do Gemini em fluxo. Se uma resposta de codigo for cortada, preserva a parte recebida e pede continuacao. Uma falha de cota/conexao ainda pode exigir outra IA ou nova tentativa. O codigo parcial nunca substitui uma versao aprovada.
-Se a captura local nao estiver disponivel, Compartilhar tela inteira usa a permissao obrigatoria do navegador uma vez, sem audio. A IA selecionada precisa aceitar imagem. O painel Ver minha tela do Estudio ainda permite analisar uma captura especifica para corrigir um site.
-A voz filtra caminhos, codigo e rodapes de memoria. A captura de pergunta e bloqueada enquanto musica/video toca; clicar no microfone pausa a midia para conversar.
-O player de musica oferece nova tentativa apos falha. No Stremio, reproducao interna precisa de uma fonte HTTPS direta de um complemento fornecido pelo senhor; o catalogo sozinho nao fornece videos nem importa sua conta.
-APIs, memorias, integracoes, projetos e o limite de 30 MiB continuam preservados.
+ESTA PASTA E A NOVA INSTALACAO
+O Cronos sera executado a partir desta pasta. APIs, integracoes, memoria e projetos
+que voce migrar ficam guardados aqui; ele nao precisa abrir outra instalacao.
 
-1. Extraia TODO o ZIP.
-2. Abra ABRIR-CRONOS.bat.
+PRIMEIRA INSTALACAO
+1. Extraia o ZIP inteiro para uma pasta permanente, por exemplo Documentos\Cronos.
+2. Feche o Cronos antigo.
+3. Execute MIGRAR-DADOS-DA-VERSAO-ANTIGA.bat e escolha a pasta antiga do Cronos.
+   O migrador copia .env, integracoes, vault/memorias e personalidade. Ele cria uma
+   copia de seguranca dos dados que ja existirem na pasta nova. A pasta antiga nao
+   e alterada. O arquivo .env e as chaves nunca sao enviados ao GitHub.
+4. Execute ABRIR-CRONOS.bat. Na primeira vez ele instala as dependencias nesta pasta;
+   isso exige Python 3.11+ de 64 bits e acesso a internet. Depois, basta usar esse
+   mesmo arquivo para abrir o Cronos.
+5. Opcional: execute Criar-Atalho-Cronos.vbs para criar um atalho para ESTA pasta.
+   Para fixar na barra de tarefas, clique com o botao direito no atalho e escolha
+   Fixar na barra de tarefas (no Windows 11, talvez seja preciso "Mostrar mais opcoes").
 
-ATALHO NA AREA DE TRABALHO
-O pacote de atualizacao preservando dados cria o atalho CRONOS automaticamente ao concluir. No pacote completo, execute Criar-Atalho-Cronos.vbs e escolha a pasta da instalacao existente. Para deixar na barra de tarefas, clique com o botao direito no atalho e escolha Fixar na barra de tarefas (no Windows 11: Mostrar mais opcoes).
+APOS CONFERIR QUE A NOVA INSTALACAO ABRE E TEM SEUS DADOS, voce pode remover a pasta
+antiga para liberar espaco. Mantenha o backup criado dentro da pasta nova.
 
-O iniciador procura sua instalacao anterior e abre o Cronos atualizado usando as APIs, integracoes e memorias que ja estavam la. Se houver mais de uma instalacao, escolha a pasta que voce usa. Nao e preciso colar as chaves de novo, copiar memorias ou executar outro pacote de atualizacao.
+O pacote completo contem o codigo e os arquivos publicos do projeto, mas nao contem
+suas chaves, conversas ou vault privado. Esses dados sao copiados diretamente entre
+pastas do seu computador pelo migrador.
 
-A pasta antiga continua sendo usada. Nao apague essa pasta depois da atualizacao. Guarde este ZIP como pacote completo do programa.
-
-As imagens PNG/JPEG e os arquivos ZIP/codigo sao escolhidos nos dois icones ao lado do microfone. O scanner aparece enquanto a IA analisa. O Olho de Deus abre por comando, sem globo na tela inicial.
-
-Este pacote contem o codigo completo, mas nao inventa nem inclui suas chaves privadas. As configuracoes continuam no seu computador. Precisa de uma instalacao anterior funcional com Python/ambiente virtual e APIs cadastradas. Se ela nao for encontrada automaticamente, o programa pede apenas que voce indique a pasta.
-
-CARDS E PAINEIS MOVEIS
-Arraste pelo titulo para colocar cada card ou painel onde quiser. Textos longos podem ser percorridos com o scroll do mouse ou arrastando o proprio texto, sem barras visiveis. Se houver seis cards, eles aparecem com tres de cada lado do holograma. Abrir uma imagem ou ZIP nao corta a fala; a analise espera a explicacao terminar para falar. ESC continua interrompendo quando voce quiser.
-
-ESTUDIO DE SITES
-Abra o botao ESTUDIO DE SITES ou diga: Cronos, abrir estudio de sites.
-Escolha uma categoria, nomeie o projeto e decida: planejar sozinho ou seguir referencia. A demonstracao abre sem IA. A criacao personalizada usa uma integracao ja cadastrada, com etapas reais, tempo decorrido, versoes, edicao, testes e exportacao.
-Os projetos ficam no cofre atual, em .cronos/studio. APIs, integracoes e memorias existentes nao sao substituidas.
-
-IDEIAS E IMAGENS DO ESTUDIO
-Comece em Ideias e direcao. Compare tres propostas, aprove uma e depois construa o site. As miniaturas sao esquemas, nao imagens finais. Na aba Imagens e 3D ha upload, busca por formato horizontal/vertical e geracao opcional de imagem pela API oficial OpenAI, se ja houver uma integracao compativel com chave e creditos. Essa API pode cobrar separadamente da assinatura ChatGPT. Exportar o exemplo inicial exige confirmacao; pedidos que falham ficam registrados sem substituir a versao salva.
-
-ESTUDIO REORGANIZADO
-A tela Inicio separa criar com IA, encontrar negocios e retomar projetos.
-Em Oportunidades, pesquise e clique em Criar proposta com IA no negocio escolhido.
-So esse clique inicia ideias, imagens opcionais, construcao e verificacoes. Pode consumir cota das APIs.
-Clicar novamente reabre a proposta salva. Modelos prontos mostra novos estudos de composição, sem IA. Os antigos estão na opção Arquivos originais recebidos.
-A criacao autonoma compara a estrutura com projetos recentes; repetir apenas com outras cores, textos ou imagens gera um pedido de correcao. Isso nao certifica qualidade artistica ou exclusividade mundial.
-As reservas de IA acompanham as etapas. Suas APIs e memorias continuam na instalacao anterior.
-
-NOVO: fotos, ZIP, texto/código e GLB aceitam até 30 MiB por arquivo.
-Imagens são reduzidas; ZIP e textos grandes têm limites de análise descritos em docs/STUDIO_DE_SITES.md.
+Se a migracao disser que nao encontrou o vault ou o .env, cancele e escolha a pasta
+que realmente contem esses dados. Nao apague a instalacao antiga ate conferir a nova.
