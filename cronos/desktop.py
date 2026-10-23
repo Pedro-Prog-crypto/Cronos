@@ -25,7 +25,9 @@ def _run():
         raise SystemExit('Instale o modo desktop: python -m pip install -e ".[desktop]"')
 
     # Carregar configurações antes de importar a aplicação.
+    managed_environment={key:os.environ[key] for key in ('CRONOS_SUPERVISED','CRONOS_SUPERVISOR_PID','CRONOS_MANAGED_PORT','CRONOS_API_TOKEN') if key in os.environ}
     load_dotenv(".env", override=True)
+    if managed_environment.get('CRONOS_SUPERVISED')=='1':os.environ.update(managed_environment)
     if not os.getenv("CRONOS_API_TOKEN", "").strip():
         os.environ["CRONOS_API_TOKEN"] = secrets.token_urlsafe(32)
     from cronos.app import create_app
@@ -36,7 +38,8 @@ def _run():
     server = uvicorn.Server(uvicorn.Config(create_app(settings), log_level="warning", access_log=False))
     # Reservar a porta evita colisões com o servidor usado nos testes anteriores.
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    listener.bind(("127.0.0.1", 0))
+    listener.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
+    listener.bind(("127.0.0.1", int(os.getenv('CRONOS_MANAGED_PORT','0'))))
     port = listener.getsockname()[1]
     thread = threading.Thread(target=server.run, kwargs={"sockets": [listener]}, daemon=True)
     thread.start()
@@ -84,7 +87,14 @@ def _run():
                 ctypes.windll.user32.LockWorkStation()
         window.events.minimized += on_minimized
         window.events.loaded += connect
-        webview.start(gui="edgechromium", debug=False)
+        try:
+            webview.start(gui="edgechromium", debug=False)
+        except Exception:
+            # If WebView2 is unavailable, retain a working local interface rather
+            # than leave the user with a flashing console or a dead application.
+            import webbrowser
+            webbrowser.open(address + "/#cronos-session=" + settings.token)
+            while thread.is_alive():thread.join(timeout=.5)
     finally:
         server.should_exit = True
         thread.join(timeout=5)

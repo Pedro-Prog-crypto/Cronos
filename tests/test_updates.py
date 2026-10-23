@@ -298,6 +298,7 @@ def test_real_cronos_server_restarts_or_rolls_back_under_independent_supervisor(
     root=installation(tmp_path);source=Path(__file__).resolve().parents[1]/'cronos'
     for module in source.glob('*.py'):shutil.copy2(module,root/'cronos'/module.name)
     shutil.copytree(source/'static',root/'cronos/static')
+    shutil.copytree(source/'studio',root/'cronos/studio')
     (root/'personality.md').write_text('Personalidade de teste, sem geração externa.')
     (root/'.env').write_text('CRONOS_VAULT=vault\nCRONOS_PERSONALITY=personality.md\nGEMINI_API_KEY=\nFISH_API_KEY=\n')
     (root/'cronos/revision.txt').write_text('a'*40)

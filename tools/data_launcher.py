@@ -59,13 +59,19 @@ def ensure_environment(root, run=subprocess.run):
         run([sys.executable,'-m','venv',str(root/'.venv')],check=True)
     elif not (root/'.venv/Scripts/pythonw.exe').is_file():
         raise ValueError('O ambiente .venv esta incompleto. Seus dados nao foram apagados; restaure o Python desta instalacao.')
-    probe=[str(python),'-c','import fastapi,uvicorn,httpx,PIL,dotenv,fish_audio_sdk,google.genai,yt_dlp']
+    probe=[str(python),'-c','import fastapi,uvicorn,httpx,PIL,dotenv,fish_audio_sdk,google.genai,yt_dlp; import sys; sys.platform != "win32" or __import__("webview")']
     result=run(probe,cwd=str(root),stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=False)
     if result.returncode:
         if not (root/'pyproject.toml').is_file():raise ValueError('A pasta esta sem pyproject.toml. Escolha a pasta completa do Cronos, nao somente a pasta de dados.')
         print('Instalando dependencias que faltam; esta etapa pode precisar de internet.',flush=True)
         run([str(python),'-m','pip','install','-e',str(root)],cwd=str(root),check=True)
-        run(probe,cwd=str(root),stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=True)
+        result=run(probe,cwd=str(root),stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=False)
+        if result.returncode and os.name=='nt':
+            # Code-only updates intentionally leave pyproject.toml untouched.
+            # Install the desktop host separately for an existing Windows copy.
+            run([str(python),'-m','pip','install','pywebview==6.2.1'],cwd=str(root),check=True)
+            result=run(probe,cwd=str(root),stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=False)
+        if result.returncode:raise ValueError('O Cronos ainda tem dependencias indisponiveis. Confira a conexao e tente abrir novamente.')
 
 
 def prepare(root, source, updater, backup):

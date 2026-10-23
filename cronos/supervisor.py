@@ -1,5 +1,6 @@
 """Small independent browser supervisor. Copied outside replaceable application code."""
 import json
+import importlib.util
 import os
 import secrets
 import shutil
@@ -30,6 +31,16 @@ def open_browser(port,token):
     if brave:subprocess.Popen([brave,'--new-window',url],shell=False,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0) if os.name=='nt' else 0)
     elif os.name=='nt':os.startfile(url)
     else:webbrowser.open(url)
+
+
+def ui_command(platform=None, webview_available=None):
+    platform = os.name if platform is None else platform
+    if webview_available is None:
+        webview_available = importlib.util.find_spec('webview') is not None
+    module = 'cronos.desktop' if platform == 'nt' and webview_available else 'cronos.browser'
+    command = [sys.executable, '-m', module]
+    if module == 'cronos.browser':command.append('--managed')
+    return command
 
 
 def healthy(port, token):
@@ -111,8 +122,9 @@ def _serve(root):
         environment['CRONOS_OPEN_BROWSER']='1' if initial else '0';initial=False
         log=folder/'server.log'
         if log.exists() and log.stat().st_size>1024*1024:log.replace(folder/'server.previous.log')
+        command=ui_command()
         with log.open('ab') as output:
-            return subprocess.Popen([sys.executable,'-m','cronos.browser','--managed'],cwd=data_home or root,env=environment,
+            return subprocess.Popen(command,cwd=data_home or root,env=environment,
                                     stdout=output,stderr=output,creationflags=0x08000000 if os.name=='nt' else 0)
     write_json(folder/'heartbeat.json',{'pid':os.getpid(),'at':time.time()})
     child=launch();heartbeat=0
