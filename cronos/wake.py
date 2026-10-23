@@ -21,7 +21,7 @@ from cronos.windows_agent import safe_extract
 
 MODEL_NAME = "vosk-model-small-pt-0.3"
 MODEL_URL = "https://alphacephei.com/vosk/models/" + MODEL_NAME + ".zip"
-PHRASES = {"abrir cronos", "abrir kronos"}
+PHRASES = {"abrir cronos", "abrir kronos", "cronos abrir", "kronos abrir"}
 MODEL_LAYOUTS = (("am/final.mdl", "conf/model.conf"),
                  ("final.mdl", "mfcc.conf", "HCLr.fst", "Gr.fst"))
 

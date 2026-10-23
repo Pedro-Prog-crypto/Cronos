@@ -544,6 +544,8 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
     install_studio(app, authenticate)
     from cronos.documents import install_documents
     install_documents(app, authenticate)
+    from cronos.studies import install_studies
+    install_studies(app, authenticate)
     install_routes(app, authenticate)
     install_panels(app, authenticate)
     install_geography(app, authenticate)

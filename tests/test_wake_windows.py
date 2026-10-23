@@ -25,8 +25,10 @@ def test_voice_trigger_exact_phrase_confidence_and_cooldown():
     assert not trigger.accept(result('abrir cronos',.5),now=100)
     assert not trigger.accept({'text':'abrir cronos'},now=100)
     assert trigger.accept(result('Abrir Cronos'),now=100)
-    assert not trigger.accept(result('abrir kronos'),now=110)
-    assert trigger.accept(result('abrir kronos'),now=121)
+    assert not trigger.accept(result('cronos abrir'),now=110)
+    assert trigger.accept(result('Cronos abrir'),now=121)
+    assert not trigger.accept(result('abrir kronos'),now=130)
+    assert trigger.accept(result('kronos abrir'),now=142)
 
 
 def package(extra=None):

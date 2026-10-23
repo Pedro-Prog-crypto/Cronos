@@ -15,7 +15,7 @@ export function UpdateNotice({connected,enabled,idle,voiceEnabled,onSpeak,onBusy
   if(!connected)return;let alive=true,timer:ReturnType<typeof setTimeout>,controller:AbortController|null=null;
   const poll=async()=>{
    controller=new AbortController();const timeout=setTimeout(()=>controller?.abort(),4500);
-   try{const result=await(await api('/updates',{signal:controller.signal})).json();if(alive){setReport(result);const hidden=new Set<string>(result.dismissed||[]);if(result.state?.id){try{if(localStorage.getItem(`cronos:update-dismissed:${result.state.id}`)==='1')hidden.add(result.state.id);}catch{}}setDismissed(hidden);setError('');}}
+   try{const result=await(await api('/updates',{signal:controller.signal})).json();if(alive){setReport(result);setDismissed(new Set<string>(result.dismissed||[]));setError('');}}
    catch{/* Preserve the banner through the expected server restart. */}
    finally{clearTimeout(timeout);if(alive)timer=setTimeout(poll,running.has(state.phase)?2000:30000);}
   };
@@ -32,7 +32,7 @@ export function UpdateNotice({connected,enabled,idle,voiceEnabled,onSpeak,onBusy
  },[report,enabled,idle,voiceEnabled,updating,dismissed]);
  useEffect(()=>()=>{cached.current?.pause();if(announcement.current)URL.revokeObjectURL(announcement.current);},[]);
  const request=async(work:()=>Promise<void>)=>{setWorking(true);setError('');try{await work();try{setReport(await jsonApi('/updates'));}catch{/* A queued installation may already be restarting the server. */}}catch(e){setError(e instanceof Error?e.message:'Não foi possível concluir.');}finally{setWorking(false);}};
- const dismissNotice=()=>{const id=state.id||key;if(id){setDismissed(old=>new Set([...old,id]));try{localStorage.setItem(`cronos:update-dismissed:${id}`,'1');}catch{}void jsonApi('/updates/dismiss',{key:id}).catch(()=>{});}};
+ const dismissNotice=()=>{const id=state.id||key;if(id){setDismissed(old=>new Set([...old,id]));void jsonApi('/updates/dismiss',{key:id}).catch(()=>{});}};
  const apply=()=>request(async()=>{
   if(state.origin==='ai'&&proposal?.id!==state.id){setProposal(await jsonApi(`/updates/proposal/${state.id}`));throw new Error('Leia a proposta gerada por IA e o plano de testes antes de autorizar.');}
   if(!window.confirm('Autorizar backup e instalação desta cópia? O servidor será reiniciado. Se a inicialização falhar, o supervisor tentará restaurar o código anterior.'))return;

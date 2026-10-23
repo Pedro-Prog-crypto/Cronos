@@ -59,6 +59,9 @@ class Engine:
         recall = '' if audio is not None or social_or_control(message) or prefetch_news else await asyncio.to_thread(self.memory.recall, message, self.settings.memory_results, self.settings.memory_chars)
         recall_done=time.perf_counter()
         system = personality + "\nPreferência explícita de tratamento: dirija-se ao usuário como senhor, inclusive se a personalidade antiga usar Pedro. Mantenha a personalidade e a franqueza.\nEstúdio de Sites: a interface abre pelo comando abrir estúdio de sites ou faça um site. Consulte studio_status para saber projetos e etapas reais. Há projetos versionados, geração HTML/CSS/JS pela integração escolhida, prévia isolada, edição por conversa, contato e solicitação de horário locais, exportação e testes. Não diga que criou ou publicou um site sem resultado real; pagamentos, estoque e login não são implementados automaticamente.\nData/hora local: " + datetime.now().astimezone().isoformat()
+        from cronos.study_intent import is_study_request
+        if is_study_request(message):
+            system += ("\nMODO DE EXPLICAÇÃO DIDÁTICA: esta pergunta é de aprendizagem. Responda em prosa organizada e com profundidade adequada à pergunta; não reduza a resposta a tópicos telegráficos nem a um mapa mental. Comece explicando a ideia central em linguagem clara, desenvolva causas, etapas ou diferenças que ajudem a entender, use uma analogia cotidiana e um exemplo concreto quando fizer sentido, explique termos difíceis na primeira vez e destaque limites ou controvérsias. Ajuste a extensão à complexidade, sem infantilizar e sem repetir a mesma ideia. Só proponha uma pergunta de revisão quando ela ajudar a verificar entendimento. Cards só devem aparecer se o senhor pedir explicitamente. Se pedir uma lista completa, obras, referências ou informação atual, pesquise na web quando web_search estiver disponível e cite as fontes; não invente itens para completar uma lista.")
         prefs = getattr(self, 'panel_preferences', None)
         if prefs:
             if prefs.language != 'pt-BR':system += '\nIdioma da resposta solicitado pelo usuário: ' + prefs.language
@@ -159,7 +162,8 @@ class Engine:
                         continue
                 if prefs and prefs.search_requested_only and call['name'] in {'web_search','web_news','browser_search'}:
                     import re
-                    if not re.search(r'pesquis|busc|procur|not[ií]cia|atual|hoje|agora|previs[aã]o|cota[cç][aã]o', message, re.I):
+                    from cronos.study_intent import requests_exhaustive_lookup
+                    if not re.search(r'pesquis|busc|procur|not[ií]cia|atual|hoje|agora|previs[aã]o|cota[cç][aã]o', message, re.I) and not requests_exhaustive_lookup(message):
                         outcome = {'name':call['name'], 'status':'failed', 'error':'Busca web requer solicitação do usuário nas configurações atuais.'}
                         results.append(outcome);self.memory.log_tool(session,outcome);batch.append(outcome)
                         continue
