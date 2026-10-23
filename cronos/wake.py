@@ -253,7 +253,8 @@ def listen():
                     if recognizer.AcceptWaveform(frame) and trigger.accept(json.loads(recognizer.Result())):
                         subprocess.Popen([str(python_windowless()), "-m", "cronos.desktop"],
                                          cwd=Path(__file__).resolve().parent.parent, shell=False,
-                                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
                         opened = datetime.now(timezone.utc).isoformat()
                         _write_status("listening", opened)
         finally:

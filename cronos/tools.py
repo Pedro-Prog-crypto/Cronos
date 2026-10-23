@@ -477,7 +477,8 @@ def create_registry(settings, memory, monitor=None, windows=None, missions=None,
                 programs = {"notepad": "notepad.exe", "calculator": "calc.exe", "explorer": "explorer.exe"}
                 system = Path(os.environ.get("SystemRoot", r"C:\Windows"))
                 executable = system / ("explorer.exe" if args.name == "explorer" else "System32/" + programs[args.name])
-                subprocess.Popen([str(executable)], shell=False)
+                subprocess.Popen([str(executable)], shell=False,
+                                 creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0) if os.name == 'nt' else 0)
             return {"opened": args.name}
 
         if settings.privacy_mode == 'online':
@@ -496,7 +497,8 @@ def create_registry(settings, memory, monitor=None, windows=None, missions=None,
             secret_names |= {'GEMINI_API_KEY', 'FISH_API_KEY', 'CRONOS_API_TOKEN'}
             clean_environment = {key: value for key, value in os.environ.items()
                                  if key.upper() not in secret_names and not any(word in key.upper() for word in ('TOKEN', 'SECRET', 'PASSWORD', 'API_KEY'))}
-            process = subprocess.Popen([str(path), *args.arguments], cwd=path.parent, shell=False, env=clean_environment)
+            process = subprocess.Popen([str(path), *args.arguments], cwd=path.parent, shell=False, env=clean_environment,
+                                       creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0) if os.name == 'nt' else 0)
             return {"started": args.path, "pid": process.pid, "note": "Processo iniciado; isso não comprova conclusão da tarefa ou instalação."}
 
         if settings.allow_executables and settings.privacy_mode == 'online':

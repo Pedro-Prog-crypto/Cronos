@@ -27,7 +27,8 @@ def open_browser(port,token):
     for name in ('LOCALAPPDATA','PROGRAMFILES','PROGRAMFILES(X86)'):
         if os.getenv(name):candidates.append(str(Path(os.environ[name])/'BraveSoftware/Brave-Browser/Application/brave.exe'))
     brave=next((p for p in candidates if p and Path(p).is_file()),None)
-    if brave:subprocess.Popen([brave,'--new-window',url])
+    if brave:subprocess.Popen([brave,'--new-window',url],shell=False,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0) if os.name=='nt' else 0)
+    elif os.name=='nt':os.startfile(url)
     else:webbrowser.open(url)
 
 

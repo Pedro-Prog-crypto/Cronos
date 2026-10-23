@@ -49,7 +49,10 @@ def main():
         if managed and os.getenv('CRONOS_OPEN_BROWSER')=='0':
             pass
         elif brave:
-            subprocess.Popen([brave, '--new-window', url])
+            subprocess.Popen([brave, '--new-window', url], shell=False,
+                             creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0) if os.name == 'nt' else 0)
+        elif os.name == 'nt':
+            os.startfile(url)
         else:
             webbrowser.open(url)
         # A janela de controle mantém o servidor vivo; Ctrl+C encerra os serviços.

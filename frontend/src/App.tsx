@@ -14,7 +14,7 @@ import {AnswerCards,HolographicCard,MovableCardFrame} from './components/Hologra
 import {localCommand} from './commands';
 import {cardRequest,cardDisplayCommand} from './cardRequests';
 import {cardPositionCommand,CardLayout} from './cardLayout';
-import {isStudyQuestion} from './studyIntent';
+import {isStudyQuestion,studyPanelTitle} from './studyIntent';
 import {stremioCommand,StremioRequest} from './stremioCommands';
 const StremioPanel=lazy(()=>import('./components/StremioPanel'));
 import {prospectCommand} from './prospectCommands';
@@ -27,7 +27,7 @@ import {WindowSurface,WindowShelf,MinimizeWindow,type ShelfItem} from './compone
 const WorldMap=lazy(()=>import('./components/WorldMap'));
 const ModulePanel=lazy(()=>import('./panels/ModulePanel'));
 const StudyWorkspace=lazy(()=>import('./components/StudyWorkspace'));
-import {StudyExplanationPanel} from './components/StudyExplanationPanel';
+import {StudyExplanationPanel,type StudyPanelItem} from './components/StudyExplanationPanel';
 
 const moduleIds=['processing','vision','voice','language','planning','tools','integrations','database','internet','devices','security','monitoring'];
 const moduleNames=['Processamento','Visão computacional','Síntese de voz','Entendimento de linguagem','Planejamento','Ferramentas','Integrações','Banco de dados','Internet','Dispositivos','Segurança','Monitoramento'];
@@ -64,7 +64,42 @@ export default function App(){
   const studioHandle=useRef<SiteStudioHandle>(null);
   const [studio,setStudio]=useState<{brief:string;request:number}|null>(null);
   const [studyOpen,setStudyOpen]=useState(false);
-  const [studyExplanation,setStudyExplanation]=useState<{question:string;reply:string}|null>(null),[studyExplanationMinimized,setStudyExplanationMinimized]=useState(false);
+  const [studyPanels,setStudyPanels]=useState<StudyPanelItem[]>([]);
+  const studyPanelsRef=useRef<StudyPanelItem[]>([]);
+  const changeStudyPanels=(update:(items:StudyPanelItem[])=>StudyPanelItem[])=>{const next=update(studyPanelsRef.current);studyPanelsRef.current=next;setStudyPanels(next);};
+  const addStudyPanel=(question:string,reply='')=>{
+    const current=studyPanelsRef.current;
+    const visible=current.filter(panel=>!panel.minimized);
+    let available=[0,1,2].find(slot=>!visible.some(panel=>panel.slot===slot));
+    let minimized=false;
+    if(available===undefined){
+      const replaceable=visible.filter(panel=>!panel.locked).sort((a,b)=>a.createdAt-b.createdAt)[0];
+      if(replaceable){available=replaceable.slot;changeStudyPanels(items=>items.map(panel=>panel.id===replaceable.id?{...panel,minimized:true}:panel));}
+      else {minimized=true;available=0;tell('Os três painéis visíveis estão fixados; deixei a nova explicação minimizada para preservar todos.',false);}
+    }
+    const slot=available??0;
+    const id=crypto.randomUUID();
+    const item:StudyPanelItem={id,title:studyPanelTitle(question,reply),reply,slot,locked:false,minimized,createdAt:Date.now()};
+    changeStudyPanels(items=>[...items,item].sort((a,b)=>a.slot-b.slot));
+    return id;
+  };
+  const updateStudyPanel=(id:string,question:string,reply:string)=>changeStudyPanels(items=>items.map(panel=>panel.id===id?{...panel,title:studyPanelTitle(question,reply),reply}:panel));
+  const closeStudyPanel=(id:string)=>changeStudyPanels(items=>items.filter(panel=>panel.id!==id));
+  const restoreStudyPanel=(id:string)=>{
+    const current=studyPanelsRef.current;
+    const target=current.find(panel=>panel.id===id);if(!target)return;
+    const visible=current.filter(panel=>!panel.minimized);
+    let slot=target.slot;
+    if(visible.length>=3){
+      const replaceable=visible.filter(panel=>!panel.locked&&panel.id!==id).sort((a,b)=>a.createdAt-b.createdAt)[0];
+      if(!replaceable){tell('Os três painéis visíveis estão fixados. Minimize ou desafixe um para restaurar este.',true);return;}
+      slot=replaceable.slot;
+      changeStudyPanels(items=>items.map(panel=>panel.id===replaceable.id?{...panel,minimized:true}:panel));
+    }else if(visible.some(panel=>panel.slot===slot)){
+      slot=[0,1,2].find(value=>!visible.some(panel=>panel.slot===value))??slot;
+    }
+    changeStudyPanels(items=>items.map(panel=>panel.id===id?{...panel,slot,minimized:false}:panel));
+  };
   const [prospect,setProspect]=useState<{city:string;category:string;report?:any}|null>(null);
   const [minimizedWindows,setMinimizedWindows]=useState<string[]>([]);
   const [musicWindow,setMusicWindow]=useState<MusicWindow>({visible:false,minimized:false,title:'Música',state:'Em espera'});
@@ -154,8 +189,16 @@ export default function App(){
   const openAnalysis=(kind:AnalysisKind)=>{restoreWindow('analysis:'+kind);if(autoVoice&&config?.fish_speech_configured)voice.prepare();setAnalyses(previous=>previous.includes(kind)?previous:[...previous,kind]);setEyeOpen(false);setModule(null);setChatOpen(false);};
   const runCommand=(text:string)=>{
     const normalizedCommand=text.trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/^(?:kronos|cronos)[,\s:]+/i,'').replace(/[.!?]+$/,'').toLowerCase().replace(/\s+/g,' ');
-    if(/^(?:(?:abrir|abre|abra|mostrar|mostre|entrar em|ir para)\s+)?(?:[oa]\s+)?(?:area de\s+)?(?:estudos|caderno de estudos|ambiente de estudos)$/.test(normalizedCommand)){
+    if(/^(?:(?:abrir|abre|abra|mostrar|mostre|entrar em|ir para|vamos para|vamos pra|quero abrir)\s+)?(?:[oa]\s+)?(?:area de\s+)?(?:estudo(?:s)?|caderno de estudos|ambiente de estudos|sala de estudos)(?:\s+(?:agora|por favor))?$/.test(normalizedCommand)){
       restoreWindow('study');setStudyOpen(true);setEyeOpen(false);setModule(null);setChatOpen(false);setNote(null);return true;
+    }
+    if(/^(?:fechar|fecha|feche|ocultar|esconder)\s+(?:todos os\s+)?paineis? de estud(?:o|os)$/.test(normalizedCommand)){
+      const closeAll=/\btodos os\b/.test(normalizedCommand);
+      changeStudyPanels(items=>closeAll?[]:items.filter(panel=>panel.locked));
+      return true;
+    }
+    if(/^(?:minimizar|minimize)\s+(?:todos os\s+)?paineis? de estud(?:o|os)$/.test(normalizedCommand)){
+      changeStudyPanels(items=>items.map(panel=>({...panel,minimized:true})));return true;
     }
     const screenAction=screenCommand(text);if(screenAction){screenMonitor.current?.[screenAction]();return true;}
     if(studioActive&&studioHandle.current?.handle(text))return true;
@@ -201,7 +244,7 @@ export default function App(){
   const sendText=async(value:string,source:'text'|'transcription'='text',audio?:Blob)=>{
     const text=value.trim();if(!text||inFlight.current)return;if(!audio&&runCommand(text)){setDraft('');return;}
     if(!connected){tell('A conexão automática ainda não está disponível. Feche e abra o Kronos novamente.',true);return;}
-    let showStudyText=isStudyQuestion(text);setStudyExplanation(showStudyText?{question:text,reply:''}:null);setStudyExplanationMinimized(false);
+    let showStudyText=isStudyQuestion(text);let studyPanelId:string|null=showStudyText?addStudyPanel(text):null;
     applyCardRequest(text,source==='text');if(!audio)setDisplayTurn({question:text,source,reply:''});setChatOpen(false);
     analysisSpeechQueue.current=[];inFlight.current=true;setBusy(true);voice.stop();if(autoVoice)voice.prepare();setDraft('');tell('Cronos está processando sua mensagem…');
     latency.current={turn_id:crypto.randomUUID(),source:source==='transcription'?'voice':'text',started:performance.now(),armed:false,chat_ms:0,...(source==='transcription'?recognition.current:{})};
@@ -210,13 +253,13 @@ export default function App(){
     try{
       let question=text;let previewIntro='';let voiced=false,introText='',replyDelivered=false,voiceAllowed=!audio;let finishSpeech:((text:string)=>void)|null=null;
       const intro=(reply:string)=>{
-        if(version!==turnVersion.current||controller.signal.aborted||!voiceAllowed)return;previewIntro=reply;if(!audio||question!==text)setDisplayTurn({question,source,reply});if(showStudyText)setStudyExplanation({question,reply});
+        if(version!==turnVersion.current||controller.signal.aborted||!voiceAllowed)return;previewIntro=reply;if(!audio||question!==text)setDisplayTurn({question,source,reply});if(showStudyText){if(!studyPanelId)studyPanelId=addStudyPanel(question,reply);if(studyPanelId)updateStudyPanel(studyPanelId,question,reply);}
         if(version!==turnVersion.current||controller.signal.aborted||!voiceAllowed||voiced||!autoVoice||!config?.fish_speech_configured)return;
         introText=reply;voiced=true;turnLatency.chat_ms=Math.round(performance.now()-turnLatency.started);latency.current=turnLatency;turnLatency.armed=true;saveLatency(turnLatency);const continuation=new Promise<string>(resolve=>{finishSpeech=resolve;});void voice.speak(reply,turnLatency.turn_id,continuation);
       };
       const ready=(reply:string)=>{
         if(version!==turnVersion.current||controller.signal.aborted)return;
-        if(!voiceAllowed||replyDelivered)return;replyDelivered=true;if(showStudyText)setStudyExplanation({question,reply});
+        if(!voiceAllowed||replyDelivered)return;replyDelivered=true;if(showStudyText){if(!studyPanelId)studyPanelId=addStudyPanel(question,reply);if(studyPanelId)updateStudyPanel(studyPanelId,question,reply);}
         if(!audio||question!==text)lastAnswer.current={question,source,reply};setDisplayTurn({question,source,reply});setNotice('');
         if(introText){
           if(!reply.startsWith(introText))throw new ApiError('A resposta inicial divergiu da resposta completa.',502);
@@ -237,8 +280,8 @@ export default function App(){
         if(stremioCommand(recognized)){controller.abort();runCommand(recognized);return;}if(music.current?.handle(recognized)){controller.abort();voice.stop();setChatOpen(false);return;}
         voiceAllowed=true;if(audio)turnLatency.recognition_ms=Math.round(performance.now()-turnLatency.started);
         if(runCommand(recognized)){controller.abort();return;}
-        applyCardRequest(recognized);question=recognized;showStudyText=isStudyQuestion(recognized);setStudyExplanation(showStudyText?{question,reply:previewIntro}:null);setStudyExplanationMinimized(false);setDisplayTurn({question,source,reply:previewIntro});
-      },audio);if(version!==turnVersion.current||controller.signal.aborted)return;if(result.ignored){const heard=result.recognized_text||text;setStudyExplanation(null);setDisplayTurn({question:heard,source,reply:''});tell(prefsRef.current?.called_only?'Ouvi sua fala, mas “Responder só após ser chamado” está ligado. Comece a frase com “Cronos” ou desligue essa opção no painel de Entendimento de Linguagem.':'Ouvi a fala, mas não consegui concluir a resposta. Tente novamente.',true);return;}if(audio&&!voiceAllowed&&result.recognized_text){if(runCommand(result.recognized_text))return;voiceAllowed=true;}if(!voiced)turnLatency.chat_ms=Math.round(performance.now()-turnLatency.started);saveLatency(turnLatency);session.current=result.session_id;const finalQuestion=result.recognized_text||text;showStudyText=isStudyQuestion(finalQuestion);setStudyExplanation(showStudyText?{question:finalQuestion,reply:result.reply}:null);setStudyExplanationMinimized(false);lastAnswer.current={question:finalQuestion,source,reply:result.reply};if(result.recognized_text)applyCardRequest(result.recognized_text);setDisplayTurn({question:finalQuestion,source,reply:result.reply});setGraphRevision(value=>value+1);
+        applyCardRequest(recognized);question=recognized;showStudyText=isStudyQuestion(recognized);if(showStudyText){if(!studyPanelId)studyPanelId=addStudyPanel(question,previewIntro);if(studyPanelId)updateStudyPanel(studyPanelId,question,previewIntro);}else if(studyPanelId&&!studyPanelsRef.current.find(panel=>panel.id===studyPanelId)?.reply){closeStudyPanel(studyPanelId);studyPanelId=null;}setDisplayTurn({question,source,reply:previewIntro});
+      },audio);if(version!==turnVersion.current||controller.signal.aborted)return;if(result.ignored){const heard=result.recognized_text||text;if(studyPanelId&&!studyPanelsRef.current.find(panel=>panel.id===studyPanelId)?.reply)closeStudyPanel(studyPanelId);setDisplayTurn({question:heard,source,reply:''});tell(prefsRef.current?.called_only?'Ouvi sua fala, mas “Responder só após ser chamado” está ligado. Comece a frase com “Cronos” ou desligue essa opção no painel de Entendimento de Linguagem.':'Ouvi a fala, mas não consegui concluir a resposta. Tente novamente.',true);return;}if(audio&&!voiceAllowed&&result.recognized_text){if(runCommand(result.recognized_text))return;voiceAllowed=true;}if(!voiced)turnLatency.chat_ms=Math.round(performance.now()-turnLatency.started);saveLatency(turnLatency);session.current=result.session_id;const finalQuestion=result.recognized_text||text;showStudyText=isStudyQuestion(finalQuestion);if(showStudyText){if(!studyPanelId)studyPanelId=addStudyPanel(finalQuestion,result.reply);if(studyPanelId)updateStudyPanel(studyPanelId,finalQuestion,result.reply);}else if(studyPanelId&&!studyPanelsRef.current.find(panel=>panel.id===studyPanelId)?.reply){closeStudyPanel(studyPanelId);studyPanelId=null;}lastAnswer.current={question:finalQuestion,source,reply:result.reply};if(result.recognized_text)applyCardRequest(result.recognized_text);setDisplayTurn({question:finalQuestion,source,reply:result.reply});setGraphRevision(value=>value+1);
       setTools(old=>[...old,...(result.tool_results||[])]);
       const filmResult=result.tool_results?.find((r:any)=>r.name==='stremio_search'&&r.status==='completed');if(filmResult?.result){setStremio(filmResult.result);setModule(null);setChatOpen(false);}
       const mediaResult=result.tool_results?.find((r:any)=>r.name==='music_search'&&r.status==='completed');if(mediaResult?.result){music.current?.load(mediaResult.result);}
@@ -251,7 +294,7 @@ export default function App(){
     }catch(error){
       if(version!==turnVersion.current||controller.signal.aborted)return;
       controller.abort();voice.stop();
-      setStudyExplanation(current=>current?.reply?current:null);
+      if(studyPanelId&&!studyPanelsRef.current.find(panel=>panel.id===studyPanelId)?.reply)closeStudyPanel(studyPanelId);
       if(error instanceof ApiError&&error.detail?.tool_results){session.current=error.detail.session_id;setTools(old=>[...old,...error.detail.tool_results]);}
       tell(error instanceof Error?error.message:'Não foi possível conversar.',true);
       setDraft(text); // Falha não elimina a pergunta; não repetir ações automaticamente.
@@ -310,7 +353,7 @@ export default function App(){
     <MusicPlayer ref={music} onWindowChange={setMusicWindow} onPlayback={setMusicPlaying} onTalk={async()=>{voice.stop();microphone.cancelCapture();await microphone.start();}} local={config?.privacy_mode==='local'} onError={message=>tell(message,true)}/>
     {notice&&error&&<div className="scene-notice" role="status">{notice}</div>}
     {note&&<WindowSurface minimized={minimizedWindows.includes('note')}><section className="note-window" aria-label="Nota Obsidian"><MinimizeWindow label="nota" onClick={()=>minimizeWindow('note')}/><button onClick={()=>setNote(null)} aria-label="Fechar nota"><X size={18}/></button><pre>{note.content}</pre></section></WindowSurface>}
-    {studyExplanation&&!chatOpen&&!moduleActive&&!eyeActive&&!studyActive&&!studioActive&&<StudyExplanationPanel question={studyExplanation.question} reply={studyExplanation.reply} minimized={studyExplanationMinimized} onMinimize={()=>setStudyExplanationMinimized(true)} onRestore={()=>setStudyExplanationMinimized(false)} onClose={()=>{setStudyExplanation(null);setStudyExplanationMinimized(false);}}/>}
+    {studyPanels.length>0&&!chatOpen&&!moduleActive&&!eyeActive&&!studyActive&&!studioActive&&<StudyExplanationPanel panels={studyPanels} onMinimize={id=>changeStudyPanels(items=>items.map(panel=>panel.id===id?{...panel,minimized:true}:panel))} onRestore={restoreStudyPanel} onClose={closeStudyPanel} onToggleLock={id=>changeStudyPanels(items=>items.map(panel=>panel.id===id?{...panel,locked:!panel.locked}:panel))}/>}
     {displayTurn?.reply&&showSpokenCards&&!chatOpen&&!module&&!eyeOpen&&<AnswerCards reply={displayTurn.reply} layout={cardLayout}/>}
     {displayTurn&&displayTurn.source==='text'&&showSpokenCards&&!chatOpen&&!module&&!eyeOpen&&<MovableCardFrame className="spoken-question"><HolographicCard title="PERGUNTA" variant="ribbon" movable><p className="holo-text">{displayTurn.question}</p></HolographicCard></MovableCardFrame>}
     {chatOpen&&<WindowSurface minimized={minimizedWindows.includes('chat')}><section className="card-composer" aria-label="Escrever para Kronos"><HolographicCard title="PERGUNTA" variant="layered">
