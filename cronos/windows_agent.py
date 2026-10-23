@@ -53,7 +53,9 @@ def main():
     elif args.action == "search":
         if not args.value:
             parser.error("Informe o texto da pesquisa.")
-        webbrowser.open("https://www.google.com/search?q=" + quote_plus(args.value))
+        url="https://www.google.com/search?q=" + quote_plus(args.value)
+        if os.name=='nt':os.startfile(url)
+        else:webbrowser.open(url)
     else:
         if not args.value or not args.destination:
             parser.error("Informe o arquivo ZIP e --destination.")

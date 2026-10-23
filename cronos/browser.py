@@ -1,9 +1,7 @@
 """Interface no navegador, com servidor apenas no computador do usuário."""
 import os
 import secrets
-import shutil
 import socket
-import subprocess
 import threading
 import time
 import webbrowser
@@ -40,18 +38,11 @@ def main():
                 raise RuntimeError('O servidor não iniciou. Confira a instalação e o .env.')
             time.sleep(.05)
         url = f'http://127.0.0.1:{listener.getsockname()[1]}/#cronos-session={settings.token}'
-        candidates = [shutil.which('brave')]
-        for name in ('LOCALAPPDATA', 'PROGRAMFILES', 'PROGRAMFILES(X86)'):
-            root = os.environ.get(name)
-            if root:
-                candidates.append(str(Path(root) / 'BraveSoftware/Brave-Browser/Application/brave.exe'))
-        brave = next((path for path in candidates if path and Path(path).is_file()), None)
         if managed and os.getenv('CRONOS_OPEN_BROWSER')=='0':
             pass
-        elif brave:
-            subprocess.Popen([brave, '--new-window', url], shell=False,
-                             creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0) if os.name == 'nt' else 0)
         elif os.name == 'nt':
+            # Use the browser registered with Windows. Avoid spawning a console
+            # process for every external link or app launch.
             os.startfile(url)
         else:
             webbrowser.open(url)

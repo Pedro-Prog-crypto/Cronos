@@ -27,26 +27,28 @@ def test_confirmation_and_reversible_routing(tmp_path, monkeypatch):
     registry=create_registry(settings,Memory(settings.vault))
     outcome=asyncio.run(registry.execute('integrations_routing',{'enabled':True,'fallbacks':['second','second']},'session'))
     assert outcome['status']=='pending_confirmation'
-    assert not evolution.read(settings)['routing']['enabled']
+    assert evolution.read(settings)['routing']['enabled']
     result=asyncio.run(registry.resolve(outcome['approval_id'],True,'session'))
     assert result['status']=='completed'
     assert evolution.read(settings)['routing']=={'enabled':True,'fallbacks':['second']}
     evolution.rollback(settings)
-    assert not evolution.read(settings)['routing']['enabled']
+    assert evolution.read(settings)['routing']['enabled']
     with pytest.raises(ValueError):evolution.routing(settings,{'enabled':True,'fallbacks':['unknown']})
 
 
-def test_fallback_only_authorized_text_and_transient_errors(tmp_path,monkeypatch):
+def test_default_fallback_uses_configured_alternative_after_transient_error(tmp_path,monkeypatch):
     settings=setup(tmp_path,monkeypatch)
     calls=[]
     class Primary:
         async def reply(self,*args):raise ProviderError('quota',429)
     class Alternative:
         async def reply(self,*args):calls.append(1);return {'reply':'ok','topics':[],'tool_calls':[]}
-    monkeypatch.setattr('cronos.providers.make_provider',lambda settings:Alternative())
+    def factory(settings):
+        if settings.provider=='ollama':raise ProviderError('Ollama offline',503)
+        return Alternative()
+    monkeypatch.setattr('cronos.providers.make_provider',factory)
     wrapped=evolution.ResilientProvider(settings,Primary())
-    with pytest.raises(ProviderError):asyncio.run(wrapped.reply('system',[{'role':'user','content':'test'}]))
-    evolution.routing(settings,{'enabled':True,'fallbacks':['second']})
+    assert evolution.read(settings)['routing']=={'enabled':True,'fallbacks':['ollama','second']}
     result=asyncio.run(wrapped.reply('system',[{'role':'user','content':'test'}]))
     assert result['provider_used']=='second' and len(calls)==1
     with pytest.raises(ProviderError):asyncio.run(wrapped.reply('system',[{'audio_pcm':b'pcm'}]))
@@ -59,7 +61,7 @@ def test_fallback_only_authorized_text_and_transient_errors(tmp_path,monkeypatch
 def test_slow_primary_is_bounded_and_uses_configured_reserve(tmp_path,monkeypatch):
     settings=setup(tmp_path,monkeypatch)
     evolution.routing(settings,{'enabled':True,'fallbacks':['second']})
-    monkeypatch.setattr(evolution,'PRIMARY_CHAT_TIMEOUT_SECONDS',0.01)
+    settings=replace(settings,provider_timeout=0.01)
     monkeypatch.setattr(evolution,'FALLBACK_ATTEMPT_TIMEOUT_SECONDS',0.1)
     monkeypatch.setattr(evolution,'FALLBACK_TOTAL_TIMEOUT_SECONDS',0.2)
     class Primary:
@@ -78,7 +80,7 @@ def test_slow_reserves_do_not_extend_total_fallback_budget(tmp_path,monkeypatch)
     payload['providers'].append({'id':'third','kind':'openai','model':'test','base_url':'https://example.net/v1','key_env':'THIRD_KEY'})
     settings.providers_file.write_text(json.dumps(payload))
     evolution.routing(settings,{'enabled':True,'fallbacks':['second','third']})
-    monkeypatch.setattr(evolution,'PRIMARY_CHAT_TIMEOUT_SECONDS',0.01)
+    settings=replace(settings,provider_timeout=0.01)
     monkeypatch.setattr(evolution,'FALLBACK_ATTEMPT_TIMEOUT_SECONDS',0.02)
     monkeypatch.setattr(evolution,'FALLBACK_TOTAL_TIMEOUT_SECONDS',0.025)
     calls=[]

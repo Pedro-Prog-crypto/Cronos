@@ -251,7 +251,7 @@ def listen():
                     except queue.Empty:
                         continue
                     if recognizer.AcceptWaveform(frame) and trigger.accept(json.loads(recognizer.Result())):
-                        subprocess.Popen([str(python_windowless()), "-m", "cronos.desktop"],
+                        subprocess.Popen([str(python_windowless()), "-m", "cronos.browser"],
                                          cwd=Path(__file__).resolve().parent.parent, shell=False,
                                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                          creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))

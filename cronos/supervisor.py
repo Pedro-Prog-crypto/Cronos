@@ -1,6 +1,5 @@
 """Small independent browser supervisor. Copied outside replaceable application code."""
 import json
-import importlib.util
 import os
 import secrets
 import shutil
@@ -24,6 +23,11 @@ def status(folder, phase, message, progress, **extra):
 def open_browser(port,token):
     import webbrowser
     url=f'http://127.0.0.1:{port}/#cronos-session={token}'
+    if os.name=='nt':
+        # Let Windows open the default browser; launching a browser executable
+        # through subprocess can briefly expose a console window.
+        os.startfile(url)
+        return
     candidates=[shutil.which('brave')]
     for name in ('LOCALAPPDATA','PROGRAMFILES','PROGRAMFILES(X86)'):
         if os.getenv(name):candidates.append(str(Path(os.environ[name])/'BraveSoftware/Brave-Browser/Application/brave.exe'))
@@ -35,12 +39,8 @@ def open_browser(port,token):
 
 def ui_command(platform=None, webview_available=None):
     platform = os.name if platform is None else platform
-    if webview_available is None:
-        webview_available = importlib.util.find_spec('webview') is not None
-    module = 'cronos.desktop' if platform == 'nt' and webview_available else 'cronos.browser'
-    command = [sys.executable, '-m', module]
-    if module == 'cronos.browser':command.append('--managed')
-    return command
+    # The app interface belongs in the user's browser, not a Python WebView.
+    return [sys.executable, '-m', 'cronos.browser', '--managed']
 
 
 def healthy(port, token):

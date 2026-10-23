@@ -458,7 +458,8 @@ def create_registry(settings, memory, monitor=None, windows=None, missions=None,
             url = urlsplit(args.url)
             if url.scheme not in {"http", "https"} or not url.hostname or url.username or url.password:
                 raise ToolError("Informe uma URL HTTP/HTTPS sem credenciais.")
-            if not webbrowser.open(args.url):
+            opened = (os.startfile(args.url) is None) if os.name=='nt' else webbrowser.open(args.url)
+            if not opened:
                 raise ToolError("O navegador não confirmou a abertura.")
             return {"opened": args.url}
 

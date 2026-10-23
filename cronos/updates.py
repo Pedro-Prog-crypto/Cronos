@@ -61,7 +61,8 @@ class UpdateService:
         if installed.get('revision'):return installed['revision']
         if self._revision:return self._revision
         try:
-            self._revision=subprocess.check_output(['git','rev-parse','HEAD'],cwd=self.root,stderr=subprocess.DEVNULL,text=True,timeout=3).strip()
+            self._revision=subprocess.check_output(['git','rev-parse','HEAD'],cwd=self.root,stderr=subprocess.DEVNULL,text=True,timeout=3,
+                creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0) if os.name=='nt' else 0).strip()
             return self._revision
         except (OSError,subprocess.SubprocessError):return None
 

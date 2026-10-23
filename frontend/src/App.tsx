@@ -297,8 +297,8 @@ export default function App(){
       controller.abort();voice.stop();
       if(studyPanelId&&!studyPanelsRef.current.find(panel=>panel.id===studyPanelId)?.reply)closeStudyPanel(studyPanelId);
       if(error instanceof ApiError&&error.detail?.tool_results){session.current=error.detail.session_id;setTools(old=>[...old,...error.detail.tool_results]);}
-      tell(error instanceof Error?error.message:'Não foi possível conversar.',true);
-      setDraft(text); // Falha não elimina a pergunta; não repetir ações automaticamente.
+      tell(`${error instanceof Error?error.message:'Não foi possível conversar.'}\nSua mensagem ficou guardada no campo para o senhor tentar novamente sem repetir.`,true);
+      setDraft(text); // A pergunta permanece disponível; não repetir ações automaticamente.
     }finally{if(version===turnVersion.current){setBusy(false);inFlight.current=false;chatAbort.current=null;}}
   };
   sendRef.current=(text,audio)=>sendText(text,'transcription',audio);

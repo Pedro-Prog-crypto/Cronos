@@ -10,12 +10,10 @@ from cronos.providers import ProviderError
 
 _LOCK = threading.RLock()
 
-# A chat request should not inherit the multi-minute timeout used by some
-# long-running generation jobs. Keep failover bounded so a dead API cannot
-# hold the conversation while every configured provider waits in sequence.
-PRIMARY_CHAT_TIMEOUT_SECONDS = 30
-FALLBACK_ATTEMPT_TIMEOUT_SECONDS = 8
-FALLBACK_TOTAL_TIMEOUT_SECONDS = 24
+# Chat uses the provider's full configured timeout. The previous 30-second
+# wrapper cut off long prompts before the API's own 180-second timeout.
+FALLBACK_ATTEMPT_TIMEOUT_SECONDS = 45
+FALLBACK_TOTAL_TIMEOUT_SECONDS = 300
 
 
 class Routing(BaseModel):
@@ -31,7 +29,12 @@ def _path(settings):
 def read(settings):
     path = _path(settings)
     if not path.exists():
-        return {'routing': Routing().model_dump(), 'previous': None, 'updated_at': None}
+        # On a fresh install, use configured alternatives automatically after
+        # a retryable failure. An existing evolution.json remains authoritative.
+        alternatives = [p['id'] for p in provider_catalog(settings)
+                        if p['configured'] and p['id'] != settings.provider]
+        return {'routing': Routing(fallbacks=alternatives, enabled=bool(alternatives)).model_dump(),
+                'previous': None, 'updated_at': None}
     try:
         data = json.loads(path.read_text(encoding='utf-8'))
         data['routing'] = Routing.model_validate(data['routing']).model_dump()
@@ -134,7 +137,7 @@ class ResilientProvider:
         intro_token = intro_sink.set(observe_intro) if original_intro else None
         primary_timed_out = False
         try:
-            timeout = min(float(self.settings.provider_timeout), PRIMARY_CHAT_TIMEOUT_SECONDS)
+            timeout = float(self.settings.provider_timeout)
             return await asyncio.wait_for(self.primary.reply(system, messages), timeout=timeout)
         except asyncio.TimeoutError:
             primary_timed_out = True
@@ -165,9 +168,12 @@ class ResilientProvider:
             if remaining <= 0:
                 break
             try:
+                attempt_timeout = min(FALLBACK_ATTEMPT_TIMEOUT_SECONDS, remaining)
+                if provider_id == 'ollama':
+                    attempt_timeout = min(attempt_timeout, 8)
                 result = await asyncio.wait_for(
                     make_provider(replace(self.settings, provider=provider_id)).reply(system, messages),
-                    timeout=min(FALLBACK_ATTEMPT_TIMEOUT_SECONDS, remaining),
+                    timeout=attempt_timeout,
                 )
                 return {**result, 'provider_used': provider_id, 'fallback_used': True}
             except (ProviderError, asyncio.TimeoutError):
