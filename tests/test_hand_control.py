@@ -16,6 +16,7 @@ class FakePointer:
     def left(self,down):self.events.append(('left',down))
     def right_click(self):self.events.append(('right',))
     def wheel(self,delta):self.events.append(('wheel',delta))
+    def zoom(self,delta):self.events.append(('zoom',delta))
     def release(self):self.events.append(('release',))
 
 
@@ -25,12 +26,16 @@ def test_desktop_pointer_maps_and_releases_mouse():
         def GetSystemMetrics(self,index):return {76:-1920,77:0,78:3840,79:1080}[index]
         def SetCursorPos(self,x,y):self.calls.append(('move',x,y));return True
         def mouse_event(self,*args):self.calls.append(('mouse',*args))
+        def keybd_event(self,*args):self.calls.append(('key',*args))
     user=User32();pointer=DesktopPointer(user)
-    pointer.move(0,1);pointer.left(True);pointer.release();pointer.right_click();pointer.wheel(-120)
+    pointer.move(0,1);pointer.left(True);pointer.release();pointer.right_click();pointer.wheel(-120);pointer.zoom(120)
     assert user.calls[0]==('move',-1920,1079)
     assert user.calls[1][1]==0x0002 and user.calls[2][1]==0x0004
-    assert [call[1] for call in user.calls if call[0]=='mouse'][-3:]==[0x0008,0x0010,0x0800]
-    assert user.calls[-1][4]==(2**32-120)
+    assert [call[1] for call in user.calls if call[0]=='mouse'][-4:]==[0x0008,0x0010,0x0800,0x0800]
+    assert user.calls[5][4]==(2**32-120)
+    assert user.calls[-3]==('key',0x11,0,0,0)
+    assert user.calls[-2][4]==120
+    assert user.calls[-1]==('key',0x11,0,0x0002,0)
 
 
 def test_authenticated_local_websocket_controls_pointer_and_releases_on_stop():
@@ -44,10 +49,11 @@ def test_authenticated_local_websocket_controls_pointer_and_releases_on_stop():
             socket.send_json({'action':'up'})
             socket.send_json({'action':'right_click'})
             socket.send_json({'action':'wheel','delta':120})
+            socket.send_json({'action':'zoom','delta':-120})
             socket.send_json({'action':'stop'})
     assert ('move',.25,.75) in pointer.events
     assert ('left',True) in pointer.events and ('left',False) in pointer.events
-    assert ('right',) in pointer.events and ('wheel',120) in pointer.events
+    assert ('right',) in pointer.events and ('wheel',120) in pointer.events and ('zoom',-120) in pointer.events
     assert pointer.events[-1]==('release',)
 
 

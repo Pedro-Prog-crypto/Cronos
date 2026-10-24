@@ -32,7 +32,7 @@ def entries(source):
     result={}
     for name,expected in manifest['files'].items():
         path=PurePosixPath(name)
-        bundled_image = path.suffix == '.jpg' and str(path.parent) in {'cronos/studio/media', 'cronos/ui/assets'}
+        bundled_image = path.suffix in {'.jpg','.png','.webp'} and str(path.parent) in {'cronos/studio/media', 'cronos/ui/assets'}
         bundled_hand_runtime = str(path.parent) == 'cronos/ui/assets' and path.suffix in {'.wasm','.data','.tflite','.binarypb'}
         bundled_reference = (name.startswith('cronos/studio/mistral_original/') and path.suffix in {'.txt','.json'}) or (str(path.parent) == 'cronos/studio/threed/vendor' and path.suffix in {'.txt','.json'})
         if (not name.startswith('cronos/') or '\\' in name or ':' in name or any(p.startswith('.') for p in path.parts)

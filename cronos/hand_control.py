@@ -55,6 +55,17 @@ class DesktopPointer:
         if value:
             self.user32.mouse_event(0x0800, 0, 0, value & 0xffffffff, 0)
 
+    def zoom(self, delta):
+        """Ctrl+wheel zoom for apps that expose the standard Windows gesture."""
+        value = max(-480, min(480, int(delta)))
+        if not value:
+            return
+        self.user32.keybd_event(0x11, 0, 0, 0)  # VK_CONTROL down
+        try:
+            self.user32.mouse_event(0x0800, 0, 0, value & 0xffffffff, 0)
+        finally:
+            self.user32.keybd_event(0x11, 0, 0x0002, 0)  # VK_CONTROL up
+
     def release(self):
         self.left(False)
 
@@ -126,6 +137,10 @@ def install(app, settings, pointer_factory=DesktopPointer):
                     delta = event.get('delta')
                     if isinstance(delta, int) and not isinstance(delta, bool):
                         pointer.wheel(delta)
+                elif action == 'zoom':
+                    delta = event.get('delta')
+                    if isinstance(delta, int) and not isinstance(delta, bool):
+                        pointer.zoom(delta)
                 elif action == 'stop':
                     await websocket.close(code=1000)
                     return
