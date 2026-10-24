@@ -28,6 +28,7 @@ const WorldMap=lazy(()=>import('./components/WorldMap'));
 const ModulePanel=lazy(()=>import('./panels/ModulePanel'));
 const StudyWorkspace=lazy(()=>import('./components/StudyWorkspace'));
 import {StudyExplanationPanel,type StudyPanelItem} from './components/StudyExplanationPanel';
+import {HandControl} from './components/HandControl';
 
 const moduleIds=['processing','vision','voice','language','planning','tools','integrations','database','internet','devices','security','monitoring'];
 const moduleNames=['Processamento','Visão computacional','Síntese de voz','Entendimento de linguagem','Planejamento','Ferramentas','Integrações','Banco de dados','Internet','Dispositivos','Segurança','Monitoramento'];
@@ -342,6 +343,7 @@ export default function App(){
     </div></WindowSurface>}
     <div className="cronos-quick-actions" aria-label="Ações rápidas">
       {!eyeActive&&!moduleActive&&!studyActive&&<><button className="reference-attachment" aria-label="Abrir área de estudos" title="Abrir área de estudos" onClick={()=>{restoreWindow('study');setStudyOpen(true);setEyeOpen(false);setModule(null);setChatOpen(false);}}><BookOpen size={16}/></button><button className="reference-attachment" aria-label="Analisar imagem" title="Analisar imagem" onClick={()=>openAnalysis('image')}><ImagePlus size={16}/></button><button className="reference-attachment" aria-label="Analisar ZIP ou código" title="Analisar ZIP ou código" onClick={()=>openAnalysis('document')}><FileArchive size={16}/></button></>}
+      <HandControl/>
       <button className={`reference-mic ${microphone.starting?'starting':microphone.transcribing?'transcribing':busy?'thinking':voice.isGenerating?'generating':voice.isSpeaking?'speaking':microphone.recording?'recording':''}`} aria-pressed={microphone.recording} title={microphone.starting?'Abrindo microfone':microphone.transcribing?'Transcrevendo':busy?'Aguardando Gemini':voice.isGenerating?'Preparando voz':voice.isSpeaking?'Falando — diga Cronos para interromper':microphone.recording?'Microfone ligado':'Microfone desligado'} aria-label={microphone.recording?'Desligar microfone':'Ligar microfone'} onClick={handleMic} ><Mic size={16}/></button>
       {!eyeActive&&!moduleActive&&<button className="reference-screen" aria-label="Ver minha tela" title="Ver minha tela" onClick={()=>screenMonitor.current?.start()}><MonitorUp size={16}/></button>}
     </div>

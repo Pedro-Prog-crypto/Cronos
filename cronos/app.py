@@ -249,6 +249,8 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 "personality_available": settings.personality.is_file()}
 
     install_live_screen(app,authenticate)
+    from cronos.hand_control import install as install_hand_control
+    install_hand_control(app,settings)
 
     @app.post("/chat", dependencies=[Depends(authenticate)])
     async def chat(body: ChatInput, request: Request):
