@@ -15,8 +15,9 @@ def is_study_request(text: str) -> bool:
     explicit = re.search(
         r"\b(?:explique|explica|me ensine|ensine|me ajuda a entender|ajude a entender|"
         r"quero entender|estude|resuma|resumo|compare|qual a diferenca|todas? as? obras|lista completa|"
-        r"o que (?:e|foi|significa|causou)|como funciona|por que|por qual motivo|"
-        r"me fale|fale sobre|me explica|me explique)\b",
+        r"o que (?:e|foi|significa|causou|aconteceu)|como funciona|como (?:foi|aconteceu|surgiu)|"
+        r"por que|por qual motivo|quem (?:foi|e|era|vai ganhar|voce acha)|o que acha de|qual a sua opiniao|qual sua opiniao|me conte sobre|me conta sobre|"
+        r"me fale|fale sobre|me explica|me explique|analise|analisa|quais foram as causas)\b",
         value,
     )
     school_topic = re.search(
@@ -26,7 +27,11 @@ def is_study_request(text: str) -> bool:
         r"primeira guerra|segunda guerra|causas da|consequencias da)\b",
         value,
     )
-    return bool(explicit or (school_topic and "?" in value))
+    contextual = re.search(
+        r"\b(?:como|por que|porque)\b.{0,80}\b(?:ele|ela|isso|aconteceu|funciona|mudou|comecou|terminou|influenciou|causou)\b",
+        value,
+    )
+    return bool(explicit or contextual or (school_topic and "?" in value))
 
 
 def requests_exhaustive_lookup(text: str) -> bool:

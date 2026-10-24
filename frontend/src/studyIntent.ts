@@ -2,7 +2,8 @@ const normalize=(text:string)=>text.normalize('NFD').replace(/[\u0300-\u036f]/g,
 const cleanTitle=(text:string)=>text.replace(/^\s*#{1,3}\s*/,'').replace(/\*\*/g,'').replace(/\s*[—–:]\s*.*$/,'').replace(/^(?:a ideia central|contexto|resumo|explicacao|explicação|introducao|introdução|conclusao|conclusão|o que voce precisa saber)\s*[:—-]?\s*/i,'').replace(/^(?:a|o|as|os)\s+/i,'').trim();
 export function isStudyQuestion(text:string){
  const value=normalize(text);
- return /\b(?:explique|explica|me ensine|ensine|me ajuda a entender|ajude a entender|quero entender|estude|resuma|resumo|compare|qual a diferenca|o que (?:e|foi|significa|causou)|como funciona|por que|me fale sobre|fale sobre|me explique|me explica|todas? as? obras|lista completa)\b/.test(value)
+ return /\b(?:explique|explica|me ensine|ensine|me ajuda a entender|ajude a entender|quero entender|estude|resuma|resumo|compare|qual a diferenca|o que (?:e|foi|significa|causou|aconteceu)|como funciona|como (?:foi|aconteceu|surgiu|se desenvolve)|por que|quem (?:foi|e|era|vai ganhar|voce acha)|o que acha de|qual a sua opiniao|qual sua opiniao|me conte sobre|me fala sobre|me fale sobre|fale sobre|me conta sobre|analise|analisa|quais foram as causas|me explique|me explica|todas? as? obras|lista completa)\b/.test(value)
+  || /\b(?:como|por que|porque)\b.{0,80}\b(?:ele|ela|isso|aconteceu|funciona|mudou|comecou|terminou|influenciou|causou)\b/.test(value)
   || /\b(?:historia|filosofia|biologia|matematica|fisica|quimica|geografia|portugues|literatura|sociologia|prova|vestibular|enem|pais|guerra mundial|revolucao|filosofo|equacao|teorema|celula|mitocondria|fotossintese|primeira guerra|segunda guerra)\b/.test(value);
 }
 

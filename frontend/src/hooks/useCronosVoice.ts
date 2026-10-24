@@ -31,13 +31,13 @@ export function speechChunks(text:string,firstLimit=80):string[]{
   return chunks.filter(chunk=>chunk.trim());
 }
 
-interface VoiceProps { preferences?: any; streaming?:boolean; onSpeechStart?: (metrics?:{speech_request_ms:number;playback_ms:number;turn_id?:string}) => void; onSpeechEnd?: () => void; onError?: (message: string) => void; }
-export function useCronosVoice({preferences,streaming,onSpeechStart,onSpeechEnd,onError}: VoiceProps = {}) {
+interface VoiceProps { preferences?: any; streaming?:boolean; onSpeechStart?: (metrics?:{speech_request_ms:number;playback_ms:number;turn_id?:string}) => void; onSpeechChunk?: (text:string,index:number,turnId?:string) => void; onSpeechEnd?: () => void; onError?: (message: string) => void; }
+export function useCronosVoice({preferences,streaming,onSpeechStart,onSpeechChunk,onSpeechEnd,onError}: VoiceProps = {}) {
   const [isSpeaking,setIsSpeaking]=useState(false), [isGenerating,setIsGenerating]=useState(false);
   const audioLevelSource=useRef(0);
   const prefs=useRef(preferences);prefs.current=preferences;
-  const callbacks=useRef({streaming,onSpeechStart,onSpeechEnd,onError});
-  callbacks.current={streaming,onSpeechStart,onSpeechEnd,onError};
+  const callbacks=useRef({streaming,onSpeechStart,onSpeechChunk,onSpeechEnd,onError});
+  callbacks.current={streaming,onSpeechStart,onSpeechChunk,onSpeechEnd,onError};
   const context=useRef<AudioContext|null>(null), audio=useRef<HTMLAudioElement|null>(null);
   const frame=useRef(0), url=useRef(''), pending=useRef<AbortController|null>(null);
   const source=useRef<MediaElementAudioSourceNode|null>(null), analyser=useRef<AnalyserNode|null>(null);
@@ -96,7 +96,7 @@ export function useCronosVoice({preferences,streaming,onSpeechStart,onSpeechEnd,
           await playPCM(received.response,context.current,controller.signal,{
             rate:()=>2**(((prefs.current?.voice_pitch??.5)-.5)*.7)*(prefs.current?.voice_speed??renderedSpeed.current)/renderedSpeed.current,volume:()=>prefs.current?.voice_volume??1,
             onNodes:(meter,gain)=>{analyser.current=meter;outputGain.current=gain;const values=new Uint8Array(meter.fftSize);let last=0;const measure=(now:number)=>{if(current!==generation.current)return;if(now-last>50){meter.getByteTimeDomainData(values);let sum=0;for(const v of values)sum+=((v-128)/128)**2;audioLevelSource.current=Math.min(1,Math.sqrt(sum/values.length)*4);last=now;}frame.current=requestAnimationFrame(measure);};frame.current=requestAnimationFrame(measure);},
-            onStart:(bytesMs,playbackMs)=>{setIsGenerating(false);setIsSpeaking(true);if(!index)callbacks.current.onSpeechStart?.({turn_id,speech_request_ms:Math.round(received.elapsed+bytesMs),playback_ms:Math.round(playbackMs)});}
+            onStart:(bytesMs,playbackMs)=>{setIsGenerating(false);setIsSpeaking(true);callbacks.current.onSpeechChunk?.(chunks[index]||'',index);if(!index)callbacks.current.onSpeechStart?.({turn_id,speech_request_ms:Math.round(received.elapsed+bytesMs),playback_ms:Math.round(playbackMs)});}
           });
           cancelAnimationFrame(frame.current);
         }else{
@@ -109,7 +109,7 @@ export function useCronosVoice({preferences,streaming,onSpeechStart,onSpeechEnd,
         source.current=context.current.createMediaElementSource(player);source.current.connect(meter);outputGain.current?.disconnect();const gain=context.current.createGain();outputGain.current=gain;gain.gain.value=prefs.current?.voice_volume??1;meter.connect(gain);gain.connect(context.current.destination);
         const values=new Uint8Array(meter.fftSize);let last=0;
         const measure=(time:number)=>{if(current!==generation.current)return;if(time-last>50){meter.getByteTimeDomainData(values);let sum=0;for(const value of values)sum+=((value-128)/128)**2;audioLevelSource.current=Math.min(1,Math.sqrt(sum/values.length)*4);last=time;}frame.current=requestAnimationFrame(measure);};
-        player.onplaying=()=>{setIsGenerating(false);setIsSpeaking(true);if(!index)callbacks.current.onSpeechStart?.({turn_id,speech_request_ms:Math.round(received.elapsed),playback_ms:Math.round(performance.now()-receivedAt)});frame.current=requestAnimationFrame(measure);};
+        player.onplaying=()=>{setIsGenerating(false);setIsSpeaking(true);callbacks.current.onSpeechChunk?.(chunks[index]||'',index);if(!index)callbacks.current.onSpeechStart?.({turn_id,speech_request_ms:Math.round(received.elapsed),playback_ms:Math.round(performance.now()-receivedAt)});frame.current=requestAnimationFrame(measure);};
         await new Promise<void>((resolve,reject)=>{
           const aborted=()=>{player.pause();resolve();};controller.signal.addEventListener('abort',aborted,{once:true});
           const cleanup=()=>controller.signal.removeEventListener('abort',aborted);

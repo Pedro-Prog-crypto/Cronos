@@ -33,6 +33,12 @@ import {HandControl} from './components/HandControl';
 const moduleIds=['processing','vision','voice','language','planning','tools','integrations','database','internet','devices','security','monitoring'];
 const moduleNames=['Processamento','Visão computacional','Síntese de voz','Entendimento de linguagem','Planejamento','Ferramentas','Integrações','Banco de dados','Internet','Dispositivos','Segurança','Monitoramento'];
 type ToolResult={name:string;status:string;approval_id?:string;session_id?:string;arguments?:unknown;result?:unknown;error?:string};
+function studyReferences(items:ToolResult[]=[]){
+  const output:Array<{title:string;url:string;excerpt?:string}>=[];
+  const add=(item:any)=>{const url=typeof item?.url==='string'?item.url:typeof item?.href==='string'?item.href:'';if(!/^https?:\/\//i.test(url))return;try{const parsed=new URL(url);if(!['http:','https:'].includes(parsed.protocol)||parsed.username||parsed.password)return;output.push({title:String(item.title||parsed.hostname).slice(0,180),url:parsed.href,excerpt:String(item.body||item.excerpt||'').slice(0,400)});}catch{/* Ignore malformed source URLs. */}};
+  for(const event of items){if(!['web_search','web_news','browser_search'].includes(event.name)||event.status!=='completed')continue;const data:any=event.result;if(Array.isArray(data))data.forEach(add);else if(Array.isArray(data?.articles))data.articles.forEach(add);else if(Array.isArray(data?.results))data.results.forEach(add);}
+  return [...new Map(output.map(item=>[item.url,item])).values()].slice(0,6);
+}
 
 export default function App(){
   const [panelPrefs,setPanelPrefs]=useState<any>(null),[pageHidden,setPageHidden]=useState(document.hidden);
@@ -67,6 +73,7 @@ export default function App(){
   const [studyOpen,setStudyOpen]=useState(false);
   const [studyPanels,setStudyPanels]=useState<StudyPanelItem[]>([]);
   const studyPanelsRef=useRef<StudyPanelItem[]>([]);
+  const activeStudyPanel=useRef<string|null>(null),expectedStudyTurn=useRef<string|null>(null);
   const changeStudyPanels=(update:(items:StudyPanelItem[])=>StudyPanelItem[])=>{const next=update(studyPanelsRef.current);studyPanelsRef.current=next;setStudyPanels(next);};
   const addStudyPanel=(question:string,reply='')=>{
     const current=studyPanelsRef.current;
@@ -81,12 +88,13 @@ export default function App(){
     const slot=available??0;
     const id=crypto.randomUUID();
     const item:StudyPanelItem={id,title:studyPanelTitle(question,reply),reply,slot,locked:false,minimized,createdAt:Date.now()};
+    activeStudyPanel.current=id;
     changeStudyPanels(items=>[...items,item].sort((a,b)=>a.slot-b.slot));
     return id;
   };
   const updateStudyPanel=(id:string,question:string,reply:string)=>changeStudyPanels(items=>items.map(panel=>panel.id===id?{...panel,title:studyPanelTitle(question,reply),reply}:panel));
   const moveStudyPanel=(id:string,left:number,top:number)=>changeStudyPanels(items=>items.map(panel=>panel.id===id?{...panel,position:{left,top}}:panel));
-  const closeStudyPanel=(id:string)=>changeStudyPanels(items=>items.filter(panel=>panel.id!==id));
+  const closeStudyPanel=(id:string)=>{if(activeStudyPanel.current===id)activeStudyPanel.current=null;changeStudyPanels(items=>items.filter(panel=>panel.id!==id));};
   const restoreStudyPanel=(id:string)=>{
     const current=studyPanelsRef.current;
     const target=current.find(panel=>panel.id===id);if(!target)return;
@@ -120,7 +128,7 @@ export default function App(){
   const recognition=useRef<any>(null),latency=useRef<any>(null);
   const saveLatency=useCallback((value:any)=>{const {started,armed,...metrics}=value;void jsonApi('/panels/latency',metrics).catch(()=>{});},[]);
   const tell=useCallback((message:string,isError=false)=>{setNotice(message);setError(isError);},[]);
-  const voice=useCronosVoice({preferences:panelPrefs,streaming:Boolean(config?.fish_pcm_streaming),onSpeechStart:metrics=>{const current=latency.current;if(current?.armed&&metrics?.turn_id===current.turn_id){current.armed=false;saveLatency({...current,...metrics,first_audio_ms:Math.round(performance.now()-current.started)});}},onError:message=>{if(latency.current)latency.current.armed=false;tell(message,true);}});
+  const voice=useCronosVoice({preferences:panelPrefs,streaming:Boolean(config?.fish_pcm_streaming),onSpeechStart:metrics=>{const current=latency.current;if(current?.armed&&metrics?.turn_id===current.turn_id){current.armed=false;saveLatency({...current,...metrics,first_audio_ms:Math.round(performance.now()-current.started)});}},onSpeechChunk:(spoken,_index,turnId)=>{if(!turnId||turnId!==expectedStudyTurn.current)return;const panelId=activeStudyPanel.current;if(panelId)changeStudyPanels(items=>items.map(panel=>panel.id===panelId?{...panel,spokenChunk:spoken}:panel));},onError:message=>{if(latency.current)latency.current.armed=false;tell(message,true);}});
   const microphone=useMicrophone(useCallback((text,metrics)=>{recognition.current=metrics;if(!text.trim()){tell('Não consegui entender a fala. Tente novamente.',true);return;}if(commandRef.current(text))return;if(prefsRef.current?.called_only&&!/\b(?:cronos|kronos|chronos)\b/i.test(text))return;setChatOpen(false);void sendRef.current(text);},[tell]),useCallback(message=>tell(message,true),[tell]),Boolean(config?.direct_audio_chat)||config?.transcription_provider==='vosk',busy||analysisBusy||updateBusy||mediaPlaying||voice.isSpeaking||voice.isGenerating||(pageHidden&&panelPrefs?.background_processing===false),panelPrefs,config?.direct_audio_chat?async(audio,metrics)=>{recognition.current=metrics;await sendRef.current('Pergunta por voz',audio);}:undefined,config?.local_voice_interrupt?{active:mediaPlaying||busy||voice.isSpeaking||voice.isGenerating,onKeyword:()=>bargeIn.current(),wakeOnly:Boolean(panelPrefs?.called_only)}:undefined);
   const state=voice.isSpeaking?'SPEAKING':microphone.capturing?'LISTENING':moduleActivity;
   const audioLevelSource=voice.isSpeaking?voice.audioLevelSource:microphone.audioLevelSource;
@@ -246,11 +254,12 @@ export default function App(){
   const sendText=async(value:string,source:'text'|'transcription'='text',audio?:Blob)=>{
     const text=value.trim();if(!text||inFlight.current)return;if(!audio&&runCommand(text)){setDraft('');return;}
     if(!connected){tell('A conexão automática ainda não está disponível. Feche e abra o Kronos novamente.',true);return;}
-    let showStudyText=isStudyQuestion(text);let studyPanelId:string|null=showStudyText?addStudyPanel(text):null;
+    let showStudyText=isStudyQuestion(text);if(!showStudyText)activeStudyPanel.current=null;let studyPanelId:string|null=showStudyText?addStudyPanel(text):null;
     applyCardRequest(text,source==='text');if(!audio)setDisplayTurn({question:text,source,reply:''});setChatOpen(false);
     analysisSpeechQueue.current=[];inFlight.current=true;setBusy(true);voice.stop();if(autoVoice)voice.prepare();setDraft('');tell('Cronos está processando sua mensagem…');
     latency.current={turn_id:crypto.randomUUID(),source:source==='transcription'?'voice':'text',started:performance.now(),armed:false,chat_ms:0,...(source==='transcription'?recognition.current:{})};
     const turnLatency=latency.current;
+    expectedStudyTurn.current=turnLatency.turn_id;
     const version=++turnVersion.current,controller=new AbortController();chatAbort.current=controller;
     try{
       let question=text;let previewIntro='';let voiced=false,introText='',replyDelivered=false,voiceAllowed=!audio;let finishSpeech:((text:string)=>void)|null=null;
@@ -284,7 +293,8 @@ export default function App(){
         if(runCommand(recognized)){controller.abort();return;}
         applyCardRequest(recognized);question=recognized;showStudyText=isStudyQuestion(recognized);if(showStudyText){if(!studyPanelId)studyPanelId=addStudyPanel(question,previewIntro);if(studyPanelId)updateStudyPanel(studyPanelId,question,previewIntro);}else if(studyPanelId&&!studyPanelsRef.current.find(panel=>panel.id===studyPanelId)?.reply){closeStudyPanel(studyPanelId);studyPanelId=null;}setDisplayTurn({question,source,reply:previewIntro});
       },audio);if(version!==turnVersion.current||controller.signal.aborted)return;if(result.ignored){const heard=result.recognized_text||text;if(studyPanelId&&!studyPanelsRef.current.find(panel=>panel.id===studyPanelId)?.reply)closeStudyPanel(studyPanelId);setDisplayTurn({question:heard,source,reply:''});tell(prefsRef.current?.called_only?'Ouvi sua fala, mas “Responder só após ser chamado” está ligado. Comece a frase com “Cronos” ou desligue essa opção no painel de Entendimento de Linguagem.':'Ouvi a fala, mas não consegui concluir a resposta. Tente novamente.',true);return;}if(audio&&!voiceAllowed&&result.recognized_text){if(runCommand(result.recognized_text))return;voiceAllowed=true;}if(!voiced)turnLatency.chat_ms=Math.round(performance.now()-turnLatency.started);saveLatency(turnLatency);session.current=result.session_id;const finalQuestion=result.recognized_text||text;showStudyText=isStudyQuestion(finalQuestion);if(showStudyText){if(!studyPanelId)studyPanelId=addStudyPanel(finalQuestion,result.reply);if(studyPanelId)updateStudyPanel(studyPanelId,finalQuestion,result.reply);}else if(studyPanelId&&!studyPanelsRef.current.find(panel=>panel.id===studyPanelId)?.reply){closeStudyPanel(studyPanelId);studyPanelId=null;}lastAnswer.current={question:finalQuestion,source,reply:result.reply};if(result.recognized_text)applyCardRequest(result.recognized_text);setDisplayTurn({question:finalQuestion,source,reply:result.reply});setGraphRevision(value=>value+1);
-      setTools(old=>[...old,...(result.tool_results||[])]);
+      const turnTools:ToolResult[]=result.tool_results||[];setTools(old=>[...old,...turnTools]);
+      if(showStudyText&&studyPanelId){const references=studyReferences(turnTools);if(references.length)changeStudyPanels(items=>items.map(panel=>panel.id===studyPanelId?{...panel,references}:panel));}
       const filmResult=result.tool_results?.find((r:any)=>r.name==='stremio_search'&&r.status==='completed');if(filmResult?.result){setStremio(filmResult.result);setModule(null);setChatOpen(false);}
       const mediaResult=result.tool_results?.find((r:any)=>r.name==='music_search'&&r.status==='completed');if(mediaResult?.result){music.current?.load(mediaResult.result);}
       const leadResult=result.tool_results?.find((r:any)=>r.name==='prospect_restaurants'&&r.status==='completed');if(leadResult?.result){setProspect({city:leadResult.result.city,category:leadResult.result.category,report:leadResult.result});setModule(null);setChatOpen(false);}

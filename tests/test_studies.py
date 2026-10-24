@@ -94,6 +94,16 @@ def test_study_intent_prefers_deep_explanation_and_allows_requested_complete_web
     assert not requests_exhaustive_lookup('Não pesquise na web; explique o conceito de fotossíntese.')
 
 
+def test_visual_explanation_intent_covers_people_processes_and_events_without_grabbing_small_talk():
+    assert is_study_request('Quem foi Sócrates?')
+    assert is_study_request('Como funciona um avião a jato?')
+    assert is_study_request('O que aconteceu na crise de 1929?')
+    assert is_study_request('Me conta sobre as ideias políticas de Darcy Ribeiro.')
+    assert is_study_request('Analise os argumentos de cada candidato nesta eleição.')
+    assert not is_study_request('Cronos, você está me ouvindo?')
+    assert not is_study_request('Coloca minha música preferida.')
+
+
 def test_web_source_is_saved_and_retrieved_by_indexed_text(tmp_path):
     store = StudyStore(tmp_path / 'study')
     subject = store.create_subject('História')
