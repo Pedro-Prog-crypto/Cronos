@@ -71,6 +71,7 @@ export default function App(){
   const studioHandle=useRef<SiteStudioHandle>(null);
   const [studio,setStudio]=useState<{brief:string;request:number}|null>(null);
   const [studyOpen,setStudyOpen]=useState(false);
+  const [focusedStudyPanel,setFocusedStudyPanel]=useState<string|null>(null);
   const [studyPanels,setStudyPanels]=useState<StudyPanelItem[]>([]);
   const studyPanelsRef=useRef<StudyPanelItem[]>([]);
   const activeStudyPanel=useRef<string|null>(null),expectedStudyTurn=useRef<string|null>(null);
@@ -89,12 +90,14 @@ export default function App(){
     const id=crypto.randomUUID();
     const item:StudyPanelItem={id,title:studyPanelTitle(question,reply),reply,slot,locked:false,minimized,createdAt:Date.now()};
     activeStudyPanel.current=id;
+    setFocusedStudyPanel(id);
     changeStudyPanels(items=>[...items,item].sort((a,b)=>a.slot-b.slot));
     return id;
   };
   const updateStudyPanel=(id:string,question:string,reply:string)=>changeStudyPanels(items=>items.map(panel=>panel.id===id?{...panel,title:studyPanelTitle(question,reply),reply}:panel));
-  const moveStudyPanel=(id:string,left:number,top:number)=>changeStudyPanels(items=>items.map(panel=>panel.id===id?{...panel,position:{left,top}}:panel));
-  const closeStudyPanel=(id:string)=>{if(activeStudyPanel.current===id)activeStudyPanel.current=null;changeStudyPanels(items=>items.filter(panel=>panel.id!==id));};
+  const focusStudyPanel=(id:string|null)=>{activeStudyPanel.current=id;setFocusedStudyPanel(id);};
+  const closeStudyPanel=(id:string)=>{const remaining=studyPanelsRef.current.filter(panel=>panel.id!==id&&!panel.minimized);if(activeStudyPanel.current===id)focusStudyPanel(remaining.at(-1)?.id||null);changeStudyPanels(items=>items.filter(panel=>panel.id!==id));};
+  const minimizeStudyPanel=(id:string)=>{const remaining=studyPanelsRef.current.filter(panel=>panel.id!==id&&!panel.minimized);if(activeStudyPanel.current===id)focusStudyPanel(remaining.at(-1)?.id||null);changeStudyPanels(items=>items.map(panel=>panel.id===id?{...panel,minimized:true}:panel));};
   const restoreStudyPanel=(id:string)=>{
     const current=studyPanelsRef.current;
     const target=current.find(panel=>panel.id===id);if(!target)return;
@@ -109,6 +112,7 @@ export default function App(){
       slot=[0,1,2].find(value=>!visible.some(panel=>panel.slot===value))??slot;
     }
     changeStudyPanels(items=>items.map(panel=>panel.id===id?{...panel,slot,minimized:false}:panel));
+    focusStudyPanel(id);
   };
   const [prospect,setProspect]=useState<{city:string;category:string;report?:any}|null>(null);
   const [minimizedWindows,setMinimizedWindows]=useState<string[]>([]);
@@ -254,7 +258,7 @@ export default function App(){
   const sendText=async(value:string,source:'text'|'transcription'='text',audio?:Blob)=>{
     const text=value.trim();if(!text||inFlight.current)return;if(!audio&&runCommand(text)){setDraft('');return;}
     if(!connected){tell('A conexão automática ainda não está disponível. Feche e abra o Kronos novamente.',true);return;}
-    let showStudyText=isStudyQuestion(text);if(!showStudyText)activeStudyPanel.current=null;let studyPanelId:string|null=showStudyText?addStudyPanel(text):null;
+    let showStudyText=isStudyQuestion(text);if(!showStudyText)focusStudyPanel(null);let studyPanelId:string|null=showStudyText?addStudyPanel(text):null;
     applyCardRequest(text,source==='text');if(!audio)setDisplayTurn({question:text,source,reply:''});setChatOpen(false);
     analysisSpeechQueue.current=[];inFlight.current=true;setBusy(true);voice.stop();if(autoVoice)voice.prepare();setDraft('');tell('Cronos está processando sua mensagem…');
     latency.current={turn_id:crypto.randomUUID(),source:source==='transcription'?'voice':'text',started:performance.now(),armed:false,chat_ms:0,...(source==='transcription'?recognition.current:{})};
@@ -366,7 +370,7 @@ export default function App(){
     <MusicPlayer ref={music} onWindowChange={setMusicWindow} onPlayback={setMusicPlaying} onTalk={async()=>{voice.stop();microphone.cancelCapture();await microphone.start();}} local={config?.privacy_mode==='local'} onError={message=>tell(message,true)}/>
     {notice&&error&&<div className="scene-notice" role="status">{notice}</div>}
     {note&&<WindowSurface minimized={minimizedWindows.includes('note')}><section className="note-window" aria-label="Nota Obsidian"><MinimizeWindow label="nota" onClick={()=>minimizeWindow('note')}/><button onClick={()=>setNote(null)} aria-label="Fechar nota"><X size={18}/></button><pre>{note.content}</pre></section></WindowSurface>}
-    {studyPanels.length>0&&!chatOpen&&!moduleActive&&!eyeActive&&!studyActive&&!studioActive&&<StudyExplanationPanel panels={studyPanels} onMinimize={id=>changeStudyPanels(items=>items.map(panel=>panel.id===id?{...panel,minimized:true}:panel))} onRestore={restoreStudyPanel} onClose={closeStudyPanel} onToggleLock={id=>changeStudyPanels(items=>items.map(panel=>panel.id===id?{...panel,locked:!panel.locked}:panel))} onMove={moveStudyPanel}/>}
+    {studyPanels.length>0&&!chatOpen&&!moduleActive&&!eyeActive&&!studyActive&&!studioActive&&<StudyExplanationPanel panels={studyPanels} activeId={focusedStudyPanel} onActivate={id=>focusStudyPanel(id)} onMinimize={minimizeStudyPanel} onRestore={restoreStudyPanel} onClose={closeStudyPanel} onToggleLock={id=>changeStudyPanels(items=>items.map(panel=>panel.id===id?{...panel,locked:!panel.locked}:panel))}/>}
     {displayTurn?.reply&&showSpokenCards&&!chatOpen&&!module&&!eyeOpen&&<AnswerCards reply={displayTurn.reply} layout={cardLayout}/>}
     {displayTurn&&displayTurn.source==='text'&&showSpokenCards&&!chatOpen&&!module&&!eyeOpen&&<MovableCardFrame className="spoken-question"><HolographicCard title="PERGUNTA" variant="ribbon" movable><p className="holo-text">{displayTurn.question}</p></HolographicCard></MovableCardFrame>}
     {chatOpen&&<WindowSurface minimized={minimizedWindows.includes('chat')}><section className="card-composer" aria-label="Escrever para Kronos"><HolographicCard title="PERGUNTA" variant="layered">

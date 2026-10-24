@@ -6,10 +6,12 @@ import hashlib
 import html
 import ipaddress
 import json
+import os
 import re
 import socket
 import sqlite3
 import time
+import unicodedata
 import uuid
 from datetime import datetime, timezone
 from html.parser import HTMLParser
@@ -40,6 +42,88 @@ def _safe_filename(value: str) -> str:
     if not name or not name.lower().endswith(".pdf"):
         raise ValueError("Escolha um arquivo PDF válido.")
     return name[:180]
+
+
+def _image_record(url: str, title: str, source_url: str, license_name: str = "", artist: str = "", provider: str = ""):
+    """Return only safe, attributed HTTPS media records for the UI."""
+    parsed = urlsplit(url or "")
+    source = urlsplit(source_url or "")
+    if parsed.scheme != "https" or not parsed.hostname or source.scheme not in {"https", "http"} or not source.hostname:
+        return None
+    if parsed.username or parsed.password or source.username or source.password:
+        return None
+    return {"title": str(title or "Imagem sem título")[:240], "url": parsed.geturl(),
+            "source_url": source.geturl(), "license": str(license_name or "")[:100],
+            "artist": str(artist or "")[:160], "provider": str(provider or "")[:40], "kind": "image"}
+
+
+def _media_search_terms(query: str) -> str:
+    normalized = "".join(char for char in unicodedata.normalize("NFD", query.casefold()) if not unicodedata.combining(char))
+    hints = (
+        (("socrates",), "Socrates ancient Greek philosopher Athens portrait bust sculpture"),
+        (("platao", "plato"), "Plato ancient Greek philosopher portrait sculpture Academy Athens"),
+        (("aristoteles", "aristotle"), "Aristotle ancient Greek philosopher portrait sculpture"),
+        (("primeira guerra", "world war i", "wwi"), "First World War archival photographs trenches soldiers map"),
+        (("segunda guerra", "world war ii", "wwii"), "Second World War archival photographs map soldiers"),
+        (("einstein",), "Albert Einstein portrait physics black and white photograph"),
+        (("napoleao", "napoleon"), "Napoleon Bonaparte historical portrait painting France"),
+    )
+    for keys, hint in hints:
+        if any(key in normalized for key in keys):
+            return f"{query.strip()} {hint}"[:200]
+    return query.strip()[:200]
+
+
+async def _commons_media(client: httpx.AsyncClient, query: str, limit: int):
+    params = {"action": "query", "generator": "search", "gsrsearch": query,
+              "gsrnamespace": 6, "gsrlimit": 50, "prop": "imageinfo",
+              "iiprop": "url|extmetadata", "iiurlwidth": 960, "format": "json", "formatversion": 2}
+    response = await client.get("https://commons.wikimedia.org/w/api.php", params=params)
+    response.raise_for_status()
+    pages = response.json().get("query", {}).get("pages", [])
+    images, videos = [], []
+    for page in pages:
+        info = (page.get("imageinfo") or [{}])[0]
+        metadata = info.get("extmetadata", {})
+        source = info.get("descriptionurl") or "https://commons.wikimedia.org"
+        direct = info.get("url") or ""
+        suffix = urlsplit(direct).path.lower().rsplit(".", 1)[-1] if "." in urlsplit(direct).path else ""
+        title = re.sub(r"^File:", "", page.get("title", ""))
+        license_name = re.sub(r"<[^>]+>", "", metadata.get("LicenseShortName", {}).get("value", ""))
+        artist = re.sub(r"<[^>]+>", "", metadata.get("Artist", {}).get("value", ""))
+        if suffix in {"webm", "ogv", "mp4"} and direct.startswith("https://upload.wikimedia.org/"):
+            poster = info.get("thumburl") or ""
+            if poster.startswith("https://upload.wikimedia.org/"):
+                videos.append({"title": str(title)[:240], "url": direct, "poster": poster,
+                               "source_url": source, "license": str(license_name)[:100],
+                               "artist": str(artist)[:160], "provider": "Wikimedia Commons", "kind": "video"})
+        else:
+            thumb = info.get("thumburl") or direct
+            if thumb.startswith("https://upload.wikimedia.org/"):
+                record = _image_record(thumb, title, source, license_name, artist, "Wikimedia Commons")
+                if record:
+                    images.append(record)
+        if len(images) >= limit and len(videos) >= 8:
+            break
+    return images[:limit], videos[:8]
+
+
+async def _openverse_images(client: httpx.AsyncClient, query: str, limit: int):
+    response = await client.get("https://api.openverse.org/v1/images/",
+                                params={"q": query, "page_size": min(40, limit)},
+                                headers={"Accept": "application/json"})
+    response.raise_for_status()
+    data = response.json()
+    records = []
+    for item in data.get("results", []):
+        image_url = item.get("thumbnail") or item.get("url")
+        record = _image_record(image_url, item.get("title", ""), item.get("foreign_landing_url") or item.get("url"),
+                               item.get("license", ""), item.get("creator", ""), "Openverse")
+        if record:
+            records.append(record)
+        if len(records) >= limit:
+            break
+    return records
 
 
 class StudyStore:
@@ -632,26 +716,52 @@ def install_studies(app, authenticate):
         return lesson
 
     @app.get("/studies/images", dependencies=auth)
-    async def search_images(query: str = Query(min_length=2, max_length=160)):
-        params = {"action": "query", "generator": "search", "gsrsearch": query,
-                  "gsrnamespace": 6, "gsrlimit": 6, "prop": "imageinfo", "iiprop": "url|extmetadata",
-                  "iiurlwidth": 700, "format": "json", "formatversion": 2}
+    async def search_images(query: str = Query(min_length=2, max_length=200), limit: int = Query(default=24, ge=6, le=36)):
+        """Collect an attributed media wall from multiple open media indexes.
+
+        This runs independently from chat/voice. Wikimedia is primary for both
+        stills and freely licensed clips; Openverse and optional DDGS fill the
+        wall when Commons has too few matches.
+        """
+        search_query = _media_search_terms(query)
+        headers = {"User-Agent": "CronosStudy/2.0 (educational visual references; local user request)"}
+        images, videos, tried, failures = [], [], [], []
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(8, connect=4), headers={"User-Agent": "CronosStudy/1.0 (local educational assistant)"}) as client:
-                response = await client.get("https://commons.wikimedia.org/w/api.php", params=params)
-                response.raise_for_status()
-                pages = response.json().get("query", {}).get("pages", [])
+            async with httpx.AsyncClient(timeout=httpx.Timeout(9, connect=5), headers=headers, follow_redirects=True) as client:
+                tried.append("Wikimedia Commons")
+                try:
+                    images, videos = await _commons_media(client, search_query, limit)
+                except (httpx.HTTPError, ValueError, KeyError, TypeError):
+                    failures.append("Wikimedia Commons")
+                if len(images) < min(12, limit):
+                    tried.append("Openverse")
+                    try:
+                        extra = await _openverse_images(client, search_query, limit - len(images))
+                        seen = {item["url"] for item in images}
+                        images.extend(item for item in extra if item["url"] not in seen)
+                    except (httpx.HTTPError, ValueError, KeyError, TypeError):
+                        failures.append("Openverse")
+                if len(images) < min(12, limit):
+                    tried.append("DuckDuckGo Images")
+                    try:
+                        from ddgs import DDGS
+                        proxy = os.getenv("DDGS_PROXY") or os.getenv("HTTPS_PROXY") or os.getenv("https_proxy")
+                        def search_ddgs():
+                            with DDGS(timeout=8, proxy=proxy) as search:
+                                return list(search.images(search_query, max_results=min(24, limit)))
+                        raw = await asyncio.wait_for(asyncio.to_thread(search_ddgs), timeout=10)
+                        seen = {item["url"] for item in images}
+                        for item in raw:
+                            record = _image_record(item.get("image") or item.get("thumbnail"), item.get("title", ""),
+                                                   item.get("url") or item.get("source"), "Search result", "", "DuckDuckGo")
+                            if record and record["url"] not in seen:
+                                images.append(record); seen.add(record["url"])
+                            if len(images) >= limit:
+                                break
+                    except Exception:
+                        failures.append("DuckDuckGo Images")
         except (httpx.HTTPError, ValueError):
-            return {"images": [], "message": "A busca de imagens está indisponível agora."}
-        images = []
-        for page in pages:
-            info = (page.get("imageinfo") or [{}])[0]
-            metadata = info.get("extmetadata", {})
-            source = info.get("descriptionurl") or "https://commons.wikimedia.org"
-            image_url = info.get("thumburl") or info.get("url")
-            if not image_url or not image_url.startswith("https://upload.wikimedia.org/"):
-                continue
-            images.append({"title": re.sub(r"^File:", "", page.get("title", "")), "url": image_url,
-                           "source_url": source, "license": re.sub(r"<[^>]+>", "", metadata.get("LicenseShortName", {}).get("value", ""))[:100],
-                           "artist": re.sub(r"<[^>]+>", "", metadata.get("Artist", {}).get("value", ""))[:160]})
-        return {"images": images}
+            failures.extend(source for source in ("Wikimedia Commons", "Openverse") if source not in failures)
+        images = images[:limit]
+        return {"images": images, "videos": videos[:8], "query": query.strip(), "search_query": search_query,
+                "providers_tried": tried, "message": "" if images else "Não consegui acessar as fontes de imagens agora. Confira a conexão e tente novamente." if failures else "As fontes responderam, mas não encontraram imagens para esta busca."}

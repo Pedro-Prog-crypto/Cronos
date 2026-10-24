@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from pypdf import PdfWriter
 
 from cronos.app import create_app
-from cronos.studies import LAYOUTS, MAX_LIBRARY_BYTES, MAX_PDF_BYTES, StudyStore, _PageText, _public_http_url
+from cronos.studies import LAYOUTS, MAX_LIBRARY_BYTES, MAX_PDF_BYTES, StudyStore, _PageText, _media_search_terms, _public_http_url
 from cronos.study_intent import is_study_request, requests_exhaustive_lookup
 from test_backend import AUTH, settings
 
@@ -102,6 +102,72 @@ def test_visual_explanation_intent_covers_people_processes_and_events_without_gr
     assert is_study_request('Analise os argumentos de cada candidato nesta eleição.')
     assert not is_study_request('Cronos, você está me ouvindo?')
     assert not is_study_request('Coloca minha música preferida.')
+
+
+def test_visual_media_search_expands_famous_subjects_into_searchable_image_terms():
+    terms = _media_search_terms('Sócrates e o julgamento')
+    assert 'Socrates ancient Greek philosopher' in terms
+    assert 'portrait bust sculpture' in terms
+    assert _media_search_terms('Restaurante Casa Azul') == 'Restaurante Casa Azul'
+
+
+def test_media_endpoint_returns_a_dense_openly_attributed_image_wall_and_licensed_video(settings, monkeypatch):
+    class Response:
+        def __init__(self, payload): self.payload = payload
+        def raise_for_status(self): pass
+        def json(self): return self.payload
+
+    class Client:
+        def __init__(self, *args, **kwargs): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        async def get(self, url, params=None, **kwargs):
+            pages=[]
+            for index in range(20):
+                is_video=index==0
+                ext='webm' if is_video else 'jpg'
+                base=f'https://upload.wikimedia.org/wikipedia/commons/demo/{index}.{ext}'
+                pages.append({'title':f'File:Visual {index}.{ext}','imageinfo':[{
+                    'url':base,'thumburl':base.replace(f'.{ext}', '.jpg'),
+                    'descriptionurl':f'https://commons.wikimedia.org/wiki/File:Visual_{index}',
+                    'extmetadata':{'LicenseShortName':{'value':'CC BY-SA'},'Artist':{'value':'Artist'}}}]})
+            return Response({'query':{'pages':pages}})
+
+    monkeypatch.setattr('cronos.studies.httpx.AsyncClient', Client)
+    with TestClient(create_app(settings)) as client:
+        response=client.get('/studies/images?query=S%C3%B3crates&limit=18',headers=AUTH)
+    assert response.status_code==200,response.text
+    result=response.json()
+    assert len(result['images'])==18
+    assert result['images'][0]['license']=='CC BY-SA'
+    assert result['videos'][0]['kind']=='video'
+    assert 'ancient Greek philosopher' in result['search_query']
+
+
+def test_media_endpoint_falls_back_to_openverse_when_commons_has_no_matches(settings, monkeypatch):
+    class Response:
+        def __init__(self,payload):self.payload=payload
+        def raise_for_status(self):pass
+        def json(self):return self.payload
+
+    class Client:
+        def __init__(self,*args,**kwargs):pass
+        async def __aenter__(self):return self
+        async def __aexit__(self,*args):pass
+        async def get(self,url,params=None,**kwargs):
+            if 'commons.wikimedia.org' in url:return Response({'query':{'pages':[]}})
+            items=[{'url':f'https://media.example/{i}.jpg','thumbnail':f'https://thumb.example/{i}.jpg',
+                    'foreign_landing_url':f'https://openverse.example/{i}','title':f'Open image {i}',
+                    'creator':'Public artist','license':'cc-by'} for i in range(params['page_size'])]
+            return Response({'results':items})
+
+    monkeypatch.setattr('cronos.studies.httpx.AsyncClient',Client)
+    with TestClient(create_app(settings)) as client:
+        response=client.get('/studies/images?query=filosofia&limit=12',headers=AUTH)
+    assert response.status_code==200,response.text
+    result=response.json()
+    assert len(result['images'])==12
+    assert {item['provider'] for item in result['images']}=={'Openverse'}
 
 
 def test_web_source_is_saved_and_retrieved_by_indexed_text(tmp_path):
