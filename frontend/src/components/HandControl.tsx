@@ -100,7 +100,7 @@ export function HandControl() {
   const leftDown = useRef(false);
   const leftCandidateAt = useRef(0);
   const rightPinched = useRef(false);
-  const lastPoint = useRef<XY>({ x: 0.5, y: 0.5 });
+  const filterPoint = useRef({ x: 0.5, y: 0.5, rawX: 0.5, rawY: 0.5, at: 0 });
   const lastMove = useRef(0);
   const lastScroll = useRef({ y: 0, at: 0 });
   const lastRight = useRef(0);
@@ -206,16 +206,23 @@ export function HandControl() {
     }
     twoHandZoomDistance.current = 0;
 
-    const firstCenter = palmCenter(first.points);
     const moveCursor = first.openPalm || first.pointPose || first.leftPinch || first.rightPinch;
     if (moveCursor) {
-      const anchor = first.pointPose && !first.openPalm ? first.points[8] : firstCenter;
-      const target = { x: Math.min(1, Math.max(0, 1 - anchor.x)), y: Math.min(1, Math.max(0, anchor.y)) };
-      const smooth = { x: lastPoint.current.x + (target.x - lastPoint.current.x) * 0.48, y: lastPoint.current.y + (target.y - lastPoint.current.y) * 0.48 };
-      lastPoint.current = smooth;
+      // Always map the index fingertip to the cursor. Adaptive smoothing
+      // calms small landmark jitter while following fast movement closely.
+      const tip = first.points[8];
+      const target = { x: Math.min(1, Math.max(0, 1 - tip.x)), y: Math.min(1, Math.max(0, tip.y)) };
+      const previous = filterPoint.current;
+      const dt = previous.at ? Math.max(0.008, (now - previous.at) / 1000) : 1 / 24;
+      const speed = Math.hypot(target.x - previous.rawX, target.y - previous.rawY) / dt;
+      const alpha = Math.min(0.88, Math.max(0.24, 0.24 + speed * 0.14));
+      const smooth = previous.at
+        ? { x: previous.x + (target.x - previous.x) * alpha, y: previous.y + (target.y - previous.y) * alpha }
+        : target;
+      filterPoint.current = { ...smooth, rawX: target.x, rawY: target.y, at: now };
       const dimensions = lastDimensions.current;
       setCursor({ x: smooth.x * dimensions.width, y: smooth.y * dimensions.height });
-      if (now - lastMove.current > 42) {
+      if (now - lastMove.current > 20) {
         send('move', smooth);
         lastMove.current = now;
       }
@@ -247,7 +254,7 @@ export function HandControl() {
       } else if (!previous.at || now - previous.at > 450) lastScroll.current = { y, at: now };
     } else lastScroll.current = { y: 0, at: 0 };
 
-    const instruction = first.openPalm ? 'Mão aberta move · pinça indicador arrasta · pinça médio clica com botão direito'
+    const instruction = first.openPalm ? 'Indicador guia o cursor · mão aberta não clica'
       : first.pointPose ? 'Indicador aponta e move · faça pinça para selecionar/arrastar'
       : first.leftPinch ? 'Pinça indicador mantida · arraste · solte para liberar'
         : first.rightPinch ? 'Clique direito'
@@ -291,7 +298,7 @@ export function HandControl() {
         };
       });
       camera.current = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 320, max: 480 }, height: { ideal: 240, max: 360 }, frameRate: { ideal: 18, max: 20 } },
+        video: { facingMode: 'user', width: { ideal: 320, max: 480 }, height: { ideal: 240, max: 360 }, frameRate: { ideal: 24, max: 30 } },
         audio: false,
       });
       camera.current.getVideoTracks()[0]?.addEventListener('ended', () => {
@@ -309,7 +316,7 @@ export function HandControl() {
       setActive(true);
       setStarting(false);
       setError('');
-      setStatus('Mão aberta ou indicador move · pinça indicador clica/arrasta · pinça médio clica com botão direito · dois dedos rolam · duas pinças fazem zoom');
+      setStatus('A ponta do indicador move · pinça indicador clica/arrasta · pinça médio clica com botão direito · dois dedos rolam · duas pinças fazem zoom');
       const tick = async () => {
         if (!enabled.current) return;
         const source = video.current;
@@ -321,7 +328,7 @@ export function HandControl() {
         }
         // Adaptive loop: process the next frame as soon as inference completes,
         // while leaving a small breather for lower-power laptops.
-        loop.current = window.setTimeout(() => void tick(), 34);
+        loop.current = window.setTimeout(() => void tick(), 20);
       };
       void tick();
     } catch (reason) {
