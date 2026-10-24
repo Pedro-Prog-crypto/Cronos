@@ -8,6 +8,7 @@ import ipaddress
 import json
 import os
 import re
+import secrets
 import socket
 import sqlite3
 import time
@@ -20,7 +21,7 @@ from urllib.parse import quote, urljoin, urlsplit, urlunsplit
 
 import httpx
 from fastapi import Depends, HTTPException, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
 MAX_PDF_BYTES = 100 * 1024 * 1024
@@ -29,6 +30,7 @@ MAX_LIBRARY_BYTES = 5 * 1024 * 1024 * 1024
 MAX_PDF_PAGES = 5000
 MAX_PAGE_CHARS = 25000
 MAX_SOURCE_CONTEXT = 18000
+MAX_STUDY_IMAGE_BYTES = 4 * 1024 * 1024
 LAYOUTS = ("guided", "library", "notebook", "socratic", "reading", "desk")
 
 
@@ -563,6 +565,18 @@ def _extract_pdf(path: Path):
 
 def install_studies(app, authenticate):
     auth = [Depends(authenticate)]
+    media_proxy_items: dict[str, tuple[str, str, float]] = {}
+
+    def proxy_media_url(record: dict) -> dict:
+        now = time.monotonic()
+        for token, (_, _, expires) in list(media_proxy_items.items()):
+            if expires <= now:
+                media_proxy_items.pop(token, None)
+        while len(media_proxy_items) >= 512:
+            media_proxy_items.pop(next(iter(media_proxy_items)))
+        token = secrets.token_urlsafe(18)
+        media_proxy_items[token] = (record["url"], record["source_url"], now + 1800)
+        return {**record, "proxy_url": f"/studies/media/{token}"}
 
     def store(request: Request):
         instance = getattr(request.app.state, "studies", None)
@@ -577,6 +591,63 @@ def install_studies(app, authenticate):
     async def overview(request: Request):
         db = store(request)
         return {"subjects": db.subjects(), "storage": db.storage(), "max_file_bytes": MAX_PDF_BYTES}
+
+    @app.get("/studies/media/{media_id}", dependencies=auth)
+    async def proxy_study_media(media_id: str):
+        """Fetch a result returned by our image search and stream a small safe image.
+
+        Browser image tags cannot attach Cronos's bearer token, so the UI fetches
+        this same-origin route with api() and renders a short-lived Blob URL.
+        Tokens address only search results held in this process; arbitrary URLs
+        cannot be supplied to this route.
+        """
+        entry = media_proxy_items.get(media_id)
+        if not entry or entry[2] <= time.monotonic():
+            media_proxy_items.pop(media_id, None)
+            raise HTTPException(404, "Essa imagem expirou. Atualize as imagens da cena.")
+        current, referer = entry[0], entry[1]
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+                   "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+                   "Referer": referer}
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(8, connect=4), headers=headers, follow_redirects=False) as client:
+                for _ in range(5):
+                    current = await asyncio.to_thread(_public_http_url, current)
+                    if urlsplit(current).scheme != "https":
+                        raise ValueError("A fonte da imagem não usa HTTPS.")
+                    async with client.stream("GET", current, follow_redirects=False) as upstream:
+                        if upstream.status_code in {301, 302, 303, 307, 308}:
+                            location = upstream.headers.get("location")
+                            if not location:
+                                raise ValueError("Redirecionamento sem destino.")
+                            current = urljoin(current, location)
+                            continue
+                        if upstream.status_code >= 400:
+                            raise ValueError("A fonte da imagem recusou o arquivo.")
+                        media_type = upstream.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+                        if media_type not in {"image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"}:
+                            raise ValueError("A fonte não devolveu uma imagem compatível.")
+                        length = upstream.headers.get("content-length")
+                        if length and int(length) > MAX_STUDY_IMAGE_BYTES:
+                            raise ValueError("A imagem excedeu o limite de 4 MiB.")
+                        data = bytearray()
+                        async for chunk in upstream.aiter_bytes(64 * 1024):
+                            data.extend(chunk)
+                            if len(data) > MAX_STUDY_IMAGE_BYTES:
+                                raise ValueError("A imagem excedeu o limite de 4 MiB.")
+                        payload = bytes(data)
+                        valid = (media_type == "image/jpeg" and payload.startswith(b"\xff\xd8\xff")
+                                 or media_type == "image/png" and payload.startswith(b"\x89PNG\r\n\x1a\n")
+                                 or media_type == "image/webp" and payload.startswith(b"RIFF") and payload[8:12] == b"WEBP"
+                                 or media_type == "image/gif" and payload.startswith((b"GIF87a", b"GIF89a"))
+                                 or media_type == "image/avif" and b"ftyp" in payload[:16])
+                        if not valid:
+                            raise ValueError("O arquivo recebido não passou na verificação de imagem.")
+                        return Response(payload, media_type=media_type,
+                                        headers={"Cache-Control": "private, max-age=900", "X-Content-Type-Options": "nosniff"})
+            raise ValueError("A imagem redirecionou vezes demais.")
+        except (httpx.HTTPError, OSError, ValueError):
+            raise HTTPException(502, "Não consegui carregar esta imagem agora; vou tentar outra da busca.") from None
 
     @app.post("/studies/subjects", dependencies=auth)
     async def create_subject(body: SubjectInput, request: Request):
@@ -752,7 +823,7 @@ def install_studies(app, authenticate):
                         raw = await asyncio.wait_for(asyncio.to_thread(search_ddgs), timeout=10)
                         seen = {item["url"] for item in images}
                         for item in raw:
-                            record = _image_record(item.get("image") or item.get("thumbnail"), item.get("title", ""),
+                            record = _image_record(item.get("thumbnail") or item.get("image"), item.get("title", ""),
                                                    item.get("url") or item.get("source"), "Search result", "", "DuckDuckGo")
                             if record and record["url"] not in seen:
                                 images.append(record); seen.add(record["url"])
@@ -763,5 +834,6 @@ def install_studies(app, authenticate):
         except (httpx.HTTPError, ValueError):
             failures.extend(source for source in ("Wikimedia Commons", "Openverse") if source not in failures)
         images = images[:limit]
+        images = [proxy_media_url(image) for image in images]
         return {"images": images, "videos": videos[:8], "query": query.strip(), "search_query": search_query,
                 "providers_tried": tried, "message": "" if images else "Não consegui acessar as fontes de imagens agora. Confira a conexão e tente novamente." if failures else "As fontes responderam, mas não encontraram imagens para esta busca."}

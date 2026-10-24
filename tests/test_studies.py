@@ -132,14 +132,28 @@ def test_media_endpoint_returns_a_dense_openly_attributed_image_wall_and_license
                     'descriptionurl':f'https://commons.wikimedia.org/wiki/File:Visual_{index}',
                     'extmetadata':{'LicenseShortName':{'value':'CC BY-SA'},'Artist':{'value':'Artist'}}}]})
             return Response({'query':{'pages':pages}})
+        def stream(self, method, url, **kwargs):
+            class Stream:
+                status_code=200
+                headers={'content-type':'image/jpeg','content-length':'3'}
+                async def __aenter__(self): return self
+                async def __aexit__(self,*args): pass
+                async def aiter_bytes(self,chunk_size=65536): yield b'\xff\xd8\xff'
+            return Stream()
 
     monkeypatch.setattr('cronos.studies.httpx.AsyncClient', Client)
+    monkeypatch.setattr('cronos.studies._public_http_url', lambda value: value)
     with TestClient(create_app(settings)) as client:
         response=client.get('/studies/images?query=S%C3%B3crates&limit=18',headers=AUTH)
+        image_response=client.get(response.json()['images'][0]['proxy_url'],headers=AUTH)
     assert response.status_code==200,response.text
     result=response.json()
     assert len(result['images'])==18
     assert result['images'][0]['license']=='CC BY-SA'
+    assert result['images'][0]['proxy_url'].startswith('/studies/media/')
+    assert image_response.status_code==200
+    assert image_response.headers['content-type']=='image/jpeg'
+    assert image_response.content==b'\xff\xd8\xff'
     assert result['videos'][0]['kind']=='video'
     assert 'ancient Greek philosopher' in result['search_query']
 
