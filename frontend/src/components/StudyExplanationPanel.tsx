@@ -10,12 +10,11 @@ const mediaCache=new Map<string,{media:StoryMedia;expires:number}>();
 export type StudyPanelItem={id:string;title:string;reply:string;slot:number;locked:boolean;minimized:boolean;createdAt:number;position?:{left:number;top:number};spokenChunk?:string;spokenChunkIndex?:number;references?:Array<{title:string;url:string;excerpt?:string}>};
 type Props={panels:StudyPanelItem[];activeId?:string|null;speaking?:boolean;generating?:boolean;onClose:(id:string)=>void};
 
-function StudyStory({panel,speaking=false,generating=false,onClose}:{panel:StudyPanelItem;speaking?:boolean;generating?:boolean;onClose:()=>void}){
+function StudyStory({panel,onClose}:{panel:StudyPanelItem;onClose:()=>void}){
  const slides=useMemo(()=>visualSlides(panel.reply,panel.title),[panel.reply,panel.title]);
  const active=spokenSlideIndex(slides,panel.spokenChunk||'',0),slide=slides[active];
  const [images,setImages]=useState<StoryImage[]>([]),[imageSources,setImageSources]=useState<Record<string,string>>({}),[loadState,setLoadState]=useState<'waiting'|'loading'|'ready'|'failed'>('waiting'),[photosLoading,setPhotosLoading]=useState(false),[failedCount,setFailedCount]=useState(0),[retry,setRetry]=useState(0);
  const visibleImages=images.filter(image=>Boolean(imageSources[image.proxy_url]));
- const moving=speaking||generating||visibleImages.length>0;
  useEffect(()=>{
   let alive=true;
   const key=slide.query.toLocaleLowerCase('pt-BR');
@@ -61,7 +60,7 @@ function StudyStory({panel,speaking=false,generating=false,onClose}:{panel:Study
   return rowIndex%2?shifted.reverse():shifted;
  });
  return <div className="study-cinema" style={{'--film-duration':duration} as React.CSSProperties}>
-  <div className={`study-film-stage${moving?' is-moving':''}`} aria-label="Mural de imagens relacionadas à explicação">
+  <div className="study-film-stage is-moving" aria-label="Mural de imagens relacionadas à explicação">
    {filmRows.map((row,rowIndex)=><div className={`study-film-row is-row-${rowIndex+1}`} key={rowIndex}>
     <div className="study-film-track">
      {[0,1].flatMap(copy=>row.map((image,index)=><figure className="study-film-frame" key={`${rowIndex}-${copy}-${index}-${image.proxy_url}`}>
@@ -77,9 +76,9 @@ function StudyStory({panel,speaking=false,generating=false,onClose}:{panel:Study
  </div>;
 }
 
-export function StudyExplanationPanel({panels,activeId,speaking=false,generating=false,onClose}:Props){
+export function StudyExplanationPanel({panels,activeId,onClose}:Props){
  const ordered=panels.slice().sort((a,b)=>a.createdAt-b.createdAt);
  const active=activeId?ordered.find(panel=>panel.id===activeId&&!panel.minimized):undefined;
  if(!active)return null;
- return <StudyStory key={active.id} panel={active} speaking={speaking} generating={generating} onClose={()=>onClose(active.id)}/>;
+ return <StudyStory key={active.id} panel={active} onClose={()=>onClose(active.id)}/>;
 }
