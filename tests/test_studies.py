@@ -146,6 +146,7 @@ def test_media_endpoint_returns_a_dense_openly_attributed_image_wall_and_license
     with TestClient(create_app(settings)) as client:
         response=client.get('/studies/images?query=S%C3%B3crates&limit=18',headers=AUTH)
         image_response=client.get(response.json()['images'][0]['proxy_url'],headers=AUTH)
+        poster_response=client.get(response.json()['videos'][0]['poster_proxy_url'],headers=AUTH)
     assert response.status_code==200,response.text
     result=response.json()
     assert len(result['images'])==18
@@ -155,6 +156,8 @@ def test_media_endpoint_returns_a_dense_openly_attributed_image_wall_and_license
     assert image_response.headers['content-type']=='image/jpeg'
     assert image_response.content==b'\xff\xd8\xff'
     assert result['videos'][0]['kind']=='video'
+    assert result['videos'][0]['poster_proxy_url'].startswith('/studies/media/')
+    assert poster_response.status_code==200 and poster_response.content==b'\xff\xd8\xff'
     assert 'ancient Greek philosopher' in result['search_query']
 
 

@@ -835,5 +835,12 @@ def install_studies(app, authenticate):
             failures.extend(source for source in ("Wikimedia Commons", "Openverse") if source not in failures)
         images = images[:limit]
         images = [proxy_media_url(image) for image in images]
-        return {"images": images, "videos": videos[:8], "query": query.strip(), "search_query": search_query,
+        safe_videos = []
+        for video in videos[:8]:
+            poster = _image_record(video.get("poster", ""), video.get("title", "Vídeo relacionado"),
+                                   video.get("source_url", ""), video.get("license", ""),
+                                   video.get("artist", ""), video.get("provider", ""))
+            if poster:
+                safe_videos.append({**video, "poster_proxy_url": proxy_media_url(poster)["proxy_url"]})
+        return {"images": images, "videos": safe_videos, "query": query.strip(), "search_query": search_query,
                 "providers_tried": tried, "message": "" if images else "Não consegui acessar as fontes de imagens agora. Confira a conexão e tente novamente." if failures else "As fontes responderam, mas não encontraram imagens para esta busca."}
