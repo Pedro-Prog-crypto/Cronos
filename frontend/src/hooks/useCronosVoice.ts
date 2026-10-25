@@ -68,8 +68,12 @@ export function useCronosVoice({preferences,streaming,onSpeechStart,onSpeechChun
       const chunks=speechChunks(text);
       const fetchChunk=async(part:string)=>{
         const speed=prefs.current?.voice_speed,started=performance.now();
-        try{const response=await api(pcm?'/voice/pcm':'/voice/speech',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:part,...(speed!==undefined?{speed}:{})}),signal:controller.signal});return {response:pcm?response:null,blob:pcm?null:await response.blob(),error:null,speed,elapsed:performance.now()-started};}
-        catch(error){return {response:null,blob:null,error,speed,elapsed:performance.now()-started};}
+        let error:unknown;
+        for(let attempt=0;attempt<3;attempt++){
+          try{const response=await api(pcm?'/voice/pcm':'/voice/speech',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:part,...(speed!==undefined?{speed}:{})}),signal:controller.signal});return {response:pcm?response:null,blob:pcm?null:await response.blob(),error:null,speed,elapsed:performance.now()-started};}
+          catch(caught){error=caught;if(controller.signal.aborted||attempt===2)break;await new Promise(resolve=>setTimeout(resolve,250*(attempt+1)));}
+        }
+        return {response:null,blob:null,error,speed,elapsed:performance.now()-started};
       };
       // Start the next synthesis as soon as the final reply arrives, while
       // the introduction is still playing. Keep one playback/cancellation session.
@@ -156,7 +160,7 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
   const keywordSocket=useRef<WebSocket|null>(null),keywordReady=useRef(false),keywordError=useRef(false);
   const [wakeOpen,setWakeOpen]=useState(false),wakeUntil=useRef(0);
   const captureVersion=useRef(0),resumeAfter=useRef(0);
-  const resources=useRef<{stream?:MediaStream;recorded?:MediaStream;context?:AudioContext;recorder?:MediaRecorder;node?:AudioWorkletNode;timer?:ReturnType<typeof setInterval>;abort?:AbortController;vad?:Awaited<ReturnType<typeof createSpeechDetector>>}>({});
+  const resources=useRef<{stream?:MediaStream;recorded?:MediaStream;context?:AudioContext;recorder?:MediaRecorder;node?:AudioWorkletNode;timer?:ReturnType<typeof setInterval>;abort?:AbortController;vad?:Awaited<ReturnType<typeof createSpeechDetector>>;submit?:()=>void}>({});
   const cancelCapture=useCallback(()=>{captureVersion.current++;processing.current=false;wakeUntil.current=0;resumeAfter.current=performance.now()+250;resources.current.abort?.abort();resources.current.node?.port.postMessage({blocked:true});if(resources.current.recorder?.state==='recording')resources.current.recorder.stop();audioLevelSource.current=0;if(mounted.current){setWakeOpen(false);setCapturing(false);setTranscribing(false);}},[]);
   const stop=useCallback(()=>{
     enabled.current=false;captureVersion.current++;processing.current=false;resources.current.abort?.abort();
@@ -166,7 +170,7 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
     if(resources.current.node){resources.current.node.port.onmessage=null;try{resources.current.node.disconnect();}catch{}resources.current.node=undefined;}
     resources.current.recorded?.getTracks().forEach(track=>track.stop());resources.current.recorded=undefined;
     resources.current.stream?.getTracks().forEach(track=>{track.onended=null;track.stop();});const closing=resources.current.context;if(closing&&closing.state!=='closed')void closing.close().catch(()=>{});
-    resources.current.stream=undefined;resources.current.context=undefined;audioLevelSource.current=0;
+    resources.current.stream=undefined;resources.current.context=undefined;resources.current.submit=undefined;audioLevelSource.current=0;
     if(mounted.current){setRecording(false);setCapturing(false);setStarting(false);setTranscribing(false);}
   },[]);
   const start=useCallback(async()=>{
@@ -187,6 +191,7 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
         let initialize:(error?:Error)=>void=()=>{};
         node.port.onmessage=async event=>{
           if(event.data.vadReady){initialize();return;}if(event.data.vadError){initialize(new Error('Não foi possível iniciar a detecção local de voz.'));return;}
+          if(event.data.empty){latest.current.onError('Ainda não há fala gravada para enviar. Fale perto do microfone e tente novamente.');return;}
           if(event.data.keywordPre){const socket=keywordSocket.current,frames=event.data.keywordPre as Int16Array;if(keywordReady.current&&socket?.readyState===WebSocket.OPEN&&socket.bufferedAmount<12800)for(let offset=0;offset<frames.length;offset+=1600)socket.send(frames.slice(offset,offset+1600).buffer);return;}
           if(event.data.keyword){const socket=keywordSocket.current;if(keywordReady.current&&socket?.readyState===WebSocket.OPEN&&socket.bufferedAmount<12800)socket.send(event.data.keyword.buffer);return;}
           if(typeof event.data.active==='boolean'){if(mounted.current)setCapturing(event.data.active&&(!latest.current.interrupt?.wakeOnly||wakeUntil.current>performance.now()));return;}
@@ -242,6 +247,7 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
           }catch(error){if(enabled.current&&!abort.signal.aborted)latest.current.onError(error instanceof Error?error.message:'Transcrição indisponível.');}
           finally{if(version===captureVersion.current){processing.current=false;if(mounted.current)setTranscribing(false);}}
         };
+        resources.current.submit=()=>{if(recorder.state==='recording'){heard=true;discard=false;recorder.stop();}};
         recorder.start(500);
       };
       setRecording(true);setStarting(false);
@@ -267,7 +273,12 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
     finally{opening.current=false;if(mounted.current)setStarting(false);}
   },[stop]);
   const toggle=useCallback(()=>{if(enabled.current&&resources.current.context?.state==='suspended'){return resources.current.context.resume().catch(()=>{stop();latest.current.onError('Clique novamente para reconectar o microfone.');});}if(enabled.current){stop();return Promise.resolve();}return start();},[start,stop]);
-  const keywordActive=Boolean(interrupt?.active||(interrupt?.wakeOnly&&!blocked&&!wakeOpen));
+  const submit=useCallback(()=>{
+    if(!enabled.current||processing.current)return;
+    if(resources.current.node){resources.current.node.port.postMessage({flush:true});return;}
+    resources.current.submit?.();
+  },[]);
+  const keywordActive=Boolean((interrupt?.active&&!blocked)||(interrupt?.wakeOnly&&!blocked&&!wakeOpen));
   useEffect(()=>{if(!wakeOpen)return;const timeout=setTimeout(()=>{wakeUntil.current=0;setWakeOpen(false);setCapturing(false);},65000);return()=>clearTimeout(timeout);},[wakeOpen]);
   useEffect(()=>{
     if(!recording||!keywordActive)return;
@@ -283,5 +294,5 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
     return()=>{alive=false;clearTimeout(retry);keywordReady.current=false;if(keywordSocket.current===socket)keywordSocket.current=null;resources.current.node?.port.postMessage({keyword:false});socket?.close();};
   },[recording,keywordActive,wakeOpen,interrupt?.active]);
   useEffect(()=>()=>{mounted.current=false;stop();},[stop]);
-  return {recording,capturing,starting,transcribing,audioLevelSource,toggle,start,stop,cancelCapture};
+  return {recording,capturing,starting,transcribing,audioLevelSource,toggle,start,stop,cancelCapture,submit};
 }

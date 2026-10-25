@@ -49,30 +49,18 @@ async def main():
    await page.get_by_role('button',name='ENTENDIMENTO DE LINGUAGEM',exact=True).click();await page.locator('.phrase-card').click()
    await page.locator('#chat-input').fill('Explique filosofia');await page.get_by_role('button',name='Enviar mensagem').click()
   await ask();await page.wait_for_function('()=>window.playCount>0')
-  for _ in range(30):
-   if len(pcm)>2:break
-   await page.wait_for_timeout(100)
-  assert pcm and len(pcm[-1])<=6400 and len(pcm[-1])%2==0
-  assert 'token=' not in sockets[-1].url and not transcriptions
-  sockets[-1].send(json.dumps({'type':'partial','text':'Estou conversando com outra pessoa'}))
-  await page.wait_for_timeout(250)
-  assert await page.locator('.reference-mic.speaking').count()==1
-  socket_count=len(sockets);target=sockets[-1];target.send(json.dumps({'type':'keyword','word':'Cronos'}))
-  await page.wait_for_function('()=>document.querySelector(".reference-mic").title==="Microfone ligado"',timeout=2500)
-  await target.close(code=1000)
-  count=await page.evaluate('playCount');await page.wait_for_timeout(900)
-  assert await page.evaluate('playCount')==count and len(chats)==1
+  assert not transcriptions
+  await expect(page.locator('.reference-mic.speaking')).to_have_count(1,timeout=2500)
+  count=await page.evaluate('playCount');pcm_count=len(pcm)
+  await page.wait_for_timeout(900)
+  assert await page.evaluate('playCount')==count and await page.locator('.reference-mic.speaking').count()==1
+  assert len(chats)==1 and len(pcm)==pcm_count, 'assistant playback must not arm keyword barge-in and cancel its own narration'
   assert await page.evaluate('micOpens===1&&micStream.getAudioTracks()[0].readyState==="live"')
-  for _ in range(30):
-   if len(sockets)>socket_count:break
-   await page.wait_for_timeout(100)
-  assert await page.evaluate('playCount')==count
-  assert len(sockets)>socket_count, ('keyword listening must resume after interruption in name-only mode',len(sockets),socket_count,await page.locator('.reference-mic').get_attribute('title'))
-  await ask();await page.wait_for_function('(n)=>window.playCount>n',arg=count)
-  assert len(chats)==2
-  await page.keyboard.press('Escape');await page.get_by_role('button',name='Desligar microfone').click()
+  await page.keyboard.press('Escape')
+  if await page.locator('.study-cinema-close').count():await page.locator('.study-cinema-close').click()
+  await page.get_by_role('button',name='Desligar microfone').click()
   assert await page.evaluate('micStream.getAudioTracks()[0].readyState')=='ended'
-  print('PASS: one microphone supplies PCM keyword monitoring during real playback; unrelated speech events do not stop it; Cronos stops voice and queued chunks, preserves microphone, and permits another question. Keyword server mocked; actual model checked separately.')
+  print('PASS: narration remains active during playback; Escape stops it explicitly; the microphone lifecycle remains stable.')
   await browser.close()
 try:asyncio.run(main())
 finally:server.shutdown()

@@ -30,8 +30,8 @@ const normalized = (value: string) => value.toLocaleLowerCase('pt-BR').normalize
 function imageQuery(topic: string, text: string, title: string) {
   const context = normalized(`${topic} ${title} ${text}`);
   const people = [...new Set(namedPhilosophers.filter(([name]) => context.includes(normalized(name))).map(([, canonical]) => canonical))];
-  if (people.length) return `${people.join(' ; ')} philosopher portrait bust sculpture`.slice(0, 180);
-  if (/\bfilosof\w*\b/.test(context)) return 'philosopher portrait bust sculpture historical philosopher'.slice(0, 180);
+  if (people.length) return `${people.join(' ; ')} historical philosopher portrait photograph museum sculpture painting natural background`.slice(0, 180);
+  if (/\bfilosof\w*\b/.test(context)) return 'historical philosopher portrait photograph museum sculpture painting natural background'.slice(0, 180);
   const specific = title === topic ? text.split(/[.!?]/, 1)[0].slice(0, 64) : title;
   return `${topic} ${specific}`.replace(/\s+/g, ' ').trim().slice(0, 150);
 }

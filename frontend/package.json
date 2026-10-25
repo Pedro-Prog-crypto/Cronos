@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "node scripts/build-studio-3d.mjs && vite build && node scripts/licenses.mjs",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test:study-images": "node scripts/test-study-image-dedupe.mjs"
   },
   "dependencies": {
     "@echogarden/fvad-wasm": "0.2.0",

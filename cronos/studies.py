@@ -80,12 +80,34 @@ def _image_record(url: str, title: str, source_url: str, license_name: str = "",
             "artist": str(artist or "")[:160], "provider": str(provider or "")[:40], "kind": "image"}
 
 
+def _dedupe_study_images(images: list[dict]) -> list[dict]:
+    """Remove repeated URLs/titles and obvious stock/transparent cutouts from a study wall."""
+    urls, titles, result = set(), set(), []
+    for image in images:
+        parsed = urlsplit(str(image.get("url", "")))
+        path = re.sub(r"/\d+px-([^/]+)$", r"/\1", parsed.path, flags=re.I).casefold()
+        url_key = f"{(parsed.hostname or '').casefold()}{path}"
+        title = "".join(char for char in unicodedata.normalize("NFD", str(image.get("title", "")).casefold())
+                        if not unicodedata.combining(char))
+        title_key = re.sub(r"[^\w]+", " ", re.sub(r"\.(?:jpe?g|png|webp|gif|avif)$", "", title)).strip()
+        if not url_key or url_key in urls or (len(title_key) > 5 and title_key in titles):
+            continue
+        if re.search(r"\b(?:shutterstock|alamy|dreamstime|stock photo|clipart|sticker|transparent background|png cutout)\b",
+                     f"{title} {image.get('provider', '')}", re.I):
+            continue
+        urls.add(url_key)
+        if len(title_key) > 5:
+            titles.add(title_key)
+        result.append(image)
+    return result
+
+
 def _media_search_terms(query: str) -> str:
     normalized = "".join(char for char in unicodedata.normalize("NFD", query.casefold()) if not unicodedata.combining(char))
     hints = (
-        (("socrates",), "Socrates ancient Greek philosopher Athens portrait bust sculpture"),
-        (("platao", "plato"), "Plato ancient Greek philosopher portrait sculpture Academy Athens"),
-        (("aristoteles", "aristotle"), "Aristotle ancient Greek philosopher portrait sculpture"),
+        (("socrates",), "Socrates ancient Greek philosopher Athens historical photograph museum portrait bust sculpture natural background"),
+        (("platao", "plato"), "Plato ancient Greek philosopher Academy Athens historical photograph museum portrait sculpture natural background"),
+        (("aristoteles", "aristotle"), "Aristotle ancient Greek philosopher historical photograph museum portrait sculpture natural background"),
         (("primeira guerra", "world war i", "wwi"), "First World War archival photographs trenches soldiers map"),
         (("segunda guerra", "world war ii", "wwii"), "Second World War archival photographs map soldiers"),
         (("einstein",), "Albert Einstein portrait physics black and white photograph"),
@@ -95,7 +117,7 @@ def _media_search_terms(query: str) -> str:
         if any(key in normalized for key in keys):
             return f"{query.strip()} {hint}"[:200]
     if re.search(r"\b(?:filosof\w*|philosoph\w*|pensador(?:es)?)\b", normalized):
-        return f"{query.strip()} historical philosopher portrait bust sculpture"[:200]
+        return f"{query.strip()} historical philosopher portrait bust sculpture photograph museum painting natural background"[:200]
     return query.strip()[:200]
 
 
@@ -144,9 +166,9 @@ async def _wikipedia_portraits(client: httpx.AsyncClient, query: str, limit: int
     return results[:limit]
 
 
-async def _commons_media(client: httpx.AsyncClient, query: str, limit: int):
+async def _commons_media(client: httpx.AsyncClient, query: str, limit: int, offset: int = 0):
     params = {"action": "query", "generator": "search", "gsrsearch": query,
-              "gsrnamespace": 6, "gsrlimit": 50, "prop": "imageinfo",
+              "gsrnamespace": 6, "gsrlimit": 50, "gsroffset": offset, "prop": "imageinfo",
               "iiprop": "url|extmetadata", "iiurlwidth": 960, "format": "json", "formatversion": 2}
     response = await client.get("https://commons.wikimedia.org/w/api.php", params=params)
     response.raise_for_status()
@@ -178,9 +200,9 @@ async def _commons_media(client: httpx.AsyncClient, query: str, limit: int):
     return images[:limit], videos[:8]
 
 
-async def _openverse_images(client: httpx.AsyncClient, query: str, limit: int):
+async def _openverse_images(client: httpx.AsyncClient, query: str, limit: int, page: int = 1):
     response = await client.get("https://api.openverse.org/v1/images/",
-                                params={"q": query, "page_size": min(40, limit)},
+                                params={"q": query, "page_size": min(40, limit), "page": page},
                                 headers={"Accept": "application/json"})
     response.raise_for_status()
     data = response.json()
@@ -855,7 +877,8 @@ def install_studies(app, authenticate):
         return lesson
 
     @app.get("/studies/images", dependencies=auth)
-    async def search_images(query: str = Query(min_length=2, max_length=200), limit: int = Query(default=24, ge=6, le=36)):
+    async def search_images(query: str = Query(min_length=2, max_length=200), limit: int = Query(default=24, ge=6, le=36),
+                            attempt: int = Query(default=0, ge=0, le=20)):
         """Collect an attributed media wall from multiple open media indexes.
 
         This runs independently from chat/voice. Wikimedia is primary for both
@@ -869,27 +892,26 @@ def install_studies(app, authenticate):
             async with httpx.AsyncClient(timeout=httpx.Timeout(9, connect=5), headers=headers, follow_redirects=True) as client:
                 tried.append("Wikimedia Commons")
                 try:
-                    images, videos = await _commons_media(client, search_query, limit)
+                    images, videos = await _commons_media(client, search_query, limit, offset=attempt * limit)
                 except (httpx.HTTPError, ValueError, KeyError, TypeError):
                     failures.append("Wikimedia Commons")
                 images, videos = _filter_philosopher_images(images, videos, search_query)
+                images = _dedupe_study_images(images)
                 try:
                     portraits = await _wikipedia_portraits(client, search_query, min(limit, 6))
                     portraits, _ = _filter_philosopher_images(portraits, [], search_query)
-                    portrait_urls = {item["url"] for item in portraits}
-                    images = portraits + [item for item in images if item["url"] not in portrait_urls]
+                    images = _dedupe_study_images(portraits + images)
                 except (httpx.HTTPError, ValueError, KeyError, TypeError):
                     failures.append("Wikipédia")
-                if len(images) < min(12, limit):
+                if len(images) < min(24, limit):
                     tried.append("Openverse")
                     try:
-                        extra = await _openverse_images(client, search_query, limit - len(images))
+                        extra = await _openverse_images(client, search_query, limit - len(images), page=attempt + 1)
                         extra, _ = _filter_philosopher_images(extra, [], search_query)
-                        seen = {item["url"] for item in images}
-                        images.extend(item for item in extra if item["url"] not in seen)
+                        images = _dedupe_study_images(images + extra)
                     except (httpx.HTTPError, ValueError, KeyError, TypeError):
                         failures.append("Openverse")
-                if len(images) < min(12, limit):
+                if len(images) < min(24, limit):
                     tried.append("DuckDuckGo Images")
                     try:
                         from ddgs import DDGS
@@ -906,16 +928,13 @@ def install_studies(app, authenticate):
                             if record:
                                 extra.append(record)
                         extra, _ = _filter_philosopher_images(extra, [], search_query)
-                        for record in extra:
-                            if record["url"] not in seen:
-                                images.append(record); seen.add(record["url"])
-                            if len(images) >= limit:break
+                        images = _dedupe_study_images(images + [record for record in extra if record["url"] not in seen])
                     except Exception:
                         failures.append("DuckDuckGo Images")
         except (httpx.HTTPError, ValueError):
             failures.extend(source for source in ("Wikimedia Commons", "Openverse") if source not in failures)
         images, videos = _filter_philosopher_images(images, videos, search_query)
-        images = images[:limit]
+        images = _dedupe_study_images(images)[:limit]
         images = [proxy_media_url(image) for image in images]
         safe_videos = []
         for video in videos[:8]:

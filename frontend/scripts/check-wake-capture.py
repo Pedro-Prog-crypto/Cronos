@@ -60,6 +60,7 @@ async def main():
   # An additional spoken phrase still requires a fresh Cronos activation.
   await page.evaluate('()=>{micGain.gain.value=.25;setTimeout(()=>micGain.gain.value=0,850)}')
   await page.wait_for_timeout(2300);assert len(calls)==1
+  if await page.locator('.study-cinema-close').count():await page.locator('.study-cinema-close').click()
   await page.get_by_role('button',name='Desligar microfone').click()
   assert await page.evaluate('micStream.getAudioTracks()[0].readyState')=='ended'
   print('PASS: actual voice without a wake word sends no cloud/ASR request; a woken question closes with continuous noise in '+str(round(calls[0]-start-850))+' ms after speech stops; exactly one request, microphone stays open, and a fresh phrase needs a new wake word. Keyword/provider responses mocked.')

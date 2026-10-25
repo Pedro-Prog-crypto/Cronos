@@ -22,3 +22,4 @@
 
 .analysis-panel.kind-document{left:8%;right:auto}
 .reference-screen{position:static;flex:0 0 36px;width:36px;height:36px;display:grid;place-items:center;border:1px solid #31ddff;border-radius:50%;color:#7aeaff;background:#031823d9;cursor:pointer}.reference-screen:hover{box-shadow:0 0 12px #1bd9ff70}.analysis-panel.kind-screen{left:auto;right:8%}
+.reference-send-audio{position:static;flex:0 0 36px;width:36px;height:36px;display:grid;place-items:center;border:1px solid #5ceecb;border-radius:50%;color:#a9ffe9;background:#03241f;box-shadow:0 0 13px #00d6a844;cursor:pointer}.reference-send-audio:hover:not(:disabled){background:#075044;box-shadow:0 0 18px #00e0ae88}.reference-send-audio:disabled{opacity:.42;cursor:wait}

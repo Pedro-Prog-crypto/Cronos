@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from pypdf import PdfWriter
 
 from cronos.app import create_app
-from cronos.studies import LAYOUTS, MAX_LIBRARY_BYTES, MAX_PDF_BYTES, StudyStore, _PageText, _filter_philosopher_images, _media_search_terms, _public_http_url, _wikipedia_portraits
+from cronos.studies import LAYOUTS, MAX_LIBRARY_BYTES, MAX_PDF_BYTES, StudyStore, _PageText, _dedupe_study_images, _filter_philosopher_images, _media_search_terms, _public_http_url, _wikipedia_portraits
 from cronos.study_intent import is_study_request, requests_exhaustive_lookup
 from test_backend import AUTH, settings
 
@@ -118,6 +118,16 @@ def test_philosopher_image_filter_rejects_unrelated_search_results():
     assert [item['title'] for item in kept]==['Socrates bust in Athens','Plato marble portrait']
     generic,_=_filter_philosopher_images(images,[],'historical philosopher portrait bust sculpture')
     assert [item['title'] for item in generic]==['Socrates bust in Athens','Plato marble portrait']
+
+
+def test_study_image_deduplication_removes_url_aliases_repeated_titles_and_stock_cutouts():
+    images=[
+        {'url':'https://upload.wikimedia.org/a/960px-Socrates.jpg?width=960','title':'Socrates statue'},
+        {'url':'https://upload.wikimedia.org/a/Socrates.jpg','title':'Socrates statue'},
+        {'url':'https://example.org/stock.png','title':'Socrates Stock Photo','provider':'Search result'},
+        {'url':'https://example.org/plato.jpg','title':'Plato marble bust'},
+    ]
+    assert [item['title'] for item in _dedupe_study_images(images)]==['Socrates statue','Plato marble bust']
 
 
 def test_named_philosophers_get_direct_biography_portrait_anchors():
