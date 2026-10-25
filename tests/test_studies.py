@@ -1,11 +1,12 @@
 import io
+import asyncio
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 from pypdf import PdfWriter
 
 from cronos.app import create_app
-from cronos.studies import LAYOUTS, MAX_LIBRARY_BYTES, MAX_PDF_BYTES, StudyStore, _PageText, _media_search_terms, _public_http_url
+from cronos.studies import LAYOUTS, MAX_LIBRARY_BYTES, MAX_PDF_BYTES, StudyStore, _PageText, _filter_philosopher_images, _media_search_terms, _public_http_url, _wikipedia_portraits
 from cronos.study_intent import is_study_request, requests_exhaustive_lookup
 from test_backend import AUTH, settings
 
@@ -111,6 +112,30 @@ def test_visual_media_search_expands_famous_subjects_into_searchable_image_terms
     assert _media_search_terms('Restaurante Casa Azul') == 'Restaurante Casa Azul'
 
 
+def test_philosopher_image_filter_rejects_unrelated_search_results():
+    images=[{'title':'Socrates bust in Athens'},{'title':'Honda CG 125 motorcycle'},{'title':'Plato marble portrait'}]
+    kept,_=_filter_philosopher_images(images,[],'Socrates Plato philosopher portrait')
+    assert [item['title'] for item in kept]==['Socrates bust in Athens','Plato marble portrait']
+    generic,_=_filter_philosopher_images(images,[],'historical philosopher portrait bust sculpture')
+    assert [item['title'] for item in generic]==['Socrates bust in Athens','Plato marble portrait']
+
+
+def test_named_philosophers_get_direct_biography_portrait_anchors():
+    class Response:
+        def raise_for_status(self): pass
+        def json(self):
+            return {'query':{'pages':[{'title':'Socrates','fullurl':'https://en.wikipedia.org/wiki/Socrates',
+                'thumbnail':{'source':'https://upload.wikimedia.org/socrates.jpg'}}]}}
+    class Client:
+        async def get(self,url,params=None):
+            assert 'Socrates' in params['titles']
+            return Response()
+    results=asyncio.run(_wikipedia_portraits(Client(),'Socrates philosopher portrait',6))
+    assert len(results)==1
+    assert results[0]['title'].startswith('Socrates')
+    assert results[0]['source_url']=='https://en.wikipedia.org/wiki/Socrates'
+
+
 def test_media_endpoint_returns_a_dense_openly_attributed_image_wall_and_licensed_video(settings, monkeypatch):
     class Response:
         def __init__(self, payload): self.payload = payload
@@ -127,7 +152,8 @@ def test_media_endpoint_returns_a_dense_openly_attributed_image_wall_and_license
                 is_video=index==0
                 ext='webm' if is_video else 'jpg'
                 base=f'https://upload.wikimedia.org/wikipedia/commons/demo/{index}.{ext}'
-                pages.append({'title':f'File:Visual {index}.{ext}','imageinfo':[{
+                label='Socrates archival portrait' if 'socrates' in params['gsrsearch'].casefold() else 'Visual'
+                pages.append({'title':f'File:{label} {index}.{ext}','imageinfo':[{
                     'url':base,'thumburl':base.replace(f'.{ext}', '.jpg'),
                     'descriptionurl':f'https://commons.wikimedia.org/wiki/File:Visual_{index}',
                     'extmetadata':{'LicenseShortName':{'value':'CC BY-SA'},'Artist':{'value':'Artist'}}}]})
@@ -174,7 +200,7 @@ def test_media_endpoint_falls_back_to_openverse_when_commons_has_no_matches(sett
         async def get(self,url,params=None,**kwargs):
             if 'commons.wikimedia.org' in url:return Response({'query':{'pages':[]}})
             items=[{'url':f'https://media.example/{i}.jpg','thumbnail':f'https://thumb.example/{i}.jpg',
-                    'foreign_landing_url':f'https://openverse.example/{i}','title':f'Open image {i}',
+                    'foreign_landing_url':f'https://openverse.example/{i}','title':f'Open philosophy philosopher image {i}',
                     'creator':'Public artist','license':'cc-by'} for i in range(params['page_size'])]
             return Response({'results':items})
 

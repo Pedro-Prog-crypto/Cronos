@@ -29,13 +29,13 @@
 
 /* Full-screen narrated visual wall: no topic header, chapter controls, transcript, or orb. */
 .study-cinema{position:fixed;z-index:250;inset:0;overflow:hidden;isolation:isolate;background:#020711;color:#f4f8ff;font-family:'Space Grotesk','Plus Jakarta Sans',sans-serif}
-.study-cinema-backdrop{position:absolute;z-index:-2;inset:-8%;background-image:var(--cinema-backdrop);background-position:center;background-size:cover;filter:blur(34px) brightness(.34) saturate(1.2);opacity:.64;transform:scale(1.08);transition:opacity .35s ease}
-.study-cinema:before{content:"";position:absolute;z-index:-1;inset:0;pointer-events:none;background:linear-gradient(180deg,#02071140 0%,#02071108 30%,#02071116 70%,#0207117d 100%),radial-gradient(ellipse at center,transparent 35%,#02071170 100%)}
-.study-film-stage{position:absolute;inset:0;overflow:hidden;mask-image:linear-gradient(90deg,transparent 0,#000 3%,#000 97%,transparent 100%);}
-.study-film-track{position:absolute;left:0;top:0;bottom:0;display:flex;align-items:center;gap:clamp(2px,.25vw,5px);width:max-content;height:100%;animation:study-film-traverse var(--film-duration,52s) linear infinite;animation-play-state:paused;will-change:transform}
+.study-film-stage{position:absolute;inset:0;display:grid;grid-template-rows:repeat(2,minmax(0,1fr));gap:3px;overflow:hidden;background:#020711}
+.study-film-row{position:relative;min-width:0;min-height:0;overflow:hidden;mask-image:linear-gradient(90deg,transparent 0,#000 2%,#000 98%,transparent 100%)}
+.study-film-track{position:absolute;left:0;top:0;bottom:0;display:flex;align-items:center;gap:3px;width:max-content;height:100%;animation:study-film-traverse var(--film-duration,52s) linear infinite;animation-play-state:paused;will-change:transform}
 .study-film-stage.is-moving .study-film-track{animation-play-state:running}
+.study-film-row.is-lower .study-film-track{animation-duration:calc(var(--film-duration,52s) * 1.19);animation-delay:-11s}
 .study-film-frame{position:relative;display:grid;place-items:center;flex:0 0 auto;width:max-content;height:100%;min-width:0;margin:0;overflow:hidden;background:transparent;border:0;box-shadow:none}
-.study-film-frame img{display:block;width:auto;height:auto;max-width:min(70vw,1280px);max-height:82vh;object-fit:contain;filter:drop-shadow(0 12px 30px #0009);animation:study-film-arrive .55s ease both}
+.study-film-frame img{display:block;width:auto;height:auto;max-width:min(90vw,1500px);max-height:49vh;object-fit:contain;filter:drop-shadow(0 8px 20px #0008);animation:study-film-arrive .55s ease both}
 .study-film-frame video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:transparent}
 .study-cinematic-caption{position:absolute;z-index:4;max-width:min(78vw,1120px);padding:clamp(8px,1vw,15px) clamp(12px,1.45vw,22px);pointer-events:none;color:#f8fbff;text-wrap:pretty;font:600 clamp(19px,2.6vw,38px)/1.22 'Rajdhani','Space Grotesk',sans-serif;letter-spacing:.012em;text-shadow:0 3px 18px #000,0 1px 4px #000;background:linear-gradient(90deg,#03101cbf,#061629b5 78%,transparent);border-left:3px solid #65dcff;box-shadow:0 10px 42px #0004;animation:study-caption-in .34s cubic-bezier(.18,.78,.25,1) both}
 .study-caption-text{display:block}.study-caption-highlight{display:inline-block;margin-inline:.12em;color:#fff;font-family:'Rajdhani',sans-serif;font-size:1.18em;font-weight:700;letter-spacing:.035em;text-shadow:0 0 16px #35cfff,0 2px 9px #000;background:linear-gradient(transparent 72%,#3de0ff90 72%);}
@@ -48,7 +48,7 @@
 .study-cinematic-caption.is-vertical .study-caption-highlight{transform:rotate(90deg);margin-inline:.48em}
 .study-cinema-close{position:absolute;z-index:6;top:clamp(10px,1.5vh,20px);right:clamp(10px,1.5vw,22px);display:grid;place-items:center;width:38px;height:38px;color:#eaf8ff;background:#03101c88;border:1px solid #8ce7ff80;border-radius:50%;box-shadow:0 0 18px #20caff28;cursor:pointer;opacity:.78;transition:opacity .16s,transform .16s,border-color .16s}
 .study-cinema-close:hover{opacity:1;transform:scale(1.06);border-color:#9cf1ff}
-.study-cinema-credit{position:absolute;z-index:5;right:14px;bottom:11px;display:inline-flex;align-items:center;gap:5px;padding:5px 7px;color:#d4edfb;background:#04101c8c;border-radius:3px;text-decoration:none;font:600 9px Rajdhani,sans-serif;letter-spacing:.12em;opacity:.68}
+.study-cinema-credit{position:absolute;z-index:5;right:14px;bottom:11px;display:grid;place-items:center;width:28px;height:28px;color:#d4edfb;background:#04101c8c;border:1px solid #d4edfb33;border-radius:50%;text-decoration:none;opacity:.42}
 .study-cinema-credit:hover{opacity:1}
 .study-cinema-status,.study-cinema-fallback{position:absolute;z-index:3;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;gap:10px;max-width:min(90vw,560px);padding:14px 18px;color:#d6f4ff;background:#041321d9;border:1px solid #4cbde580;border-radius:5px;box-shadow:0 8px 34px #0008;font:700 11px Rajdhani,sans-serif;letter-spacing:.14em;text-align:center}
 .study-cinema-status i{width:10px;height:10px;border:2px solid #64dfff;border-right-color:transparent;border-radius:50%;animation:study-spin .8s linear infinite}
@@ -58,8 +58,8 @@
 @keyframes study-film-traverse{to{transform:translateX(-50%)}}
 @keyframes study-film-arrive{from{opacity:.45;filter:blur(4px) drop-shadow(0 12px 30px #0009)}to{opacity:1;filter:drop-shadow(0 12px 30px #0009)}}
 @keyframes study-caption-in{from{opacity:0;filter:blur(5px);translate:0 12px}to{opacity:1;filter:blur(0);translate:0 0}}
-@media(max-width:700px){.study-film-frame img{max-width:88vw;max-height:72vh}.study-cinematic-caption{max-width:88vw;font-size:clamp(18px,5vw,28px)}.study-cinematic-caption.is-left{left:5vw;max-width:76vw}.study-cinematic-caption.is-right{right:5vw;max-width:76vw}.study-cinematic-caption.is-tilted{left:7vw;bottom:18vh}.study-cinematic-caption.is-vertical{right:5vw;max-width:66vw}.study-cinema-close{width:34px;height:34px}}
-@media(prefers-reduced-motion:reduce){.study-film-track{animation:none!important;left:50%;transform:translateX(-50%)}.study-film-track .study-film-frame:nth-child(n+2){display:none}.study-cinematic-caption,.study-film-frame img{animation:none!important}}
+@media(max-width:700px){.study-film-stage{grid-template-rows:repeat(2,minmax(0,1fr));gap:2px}.study-film-track{gap:2px}.study-film-frame img{max-width:88vw;max-height:49vh}.study-cinema-close{width:34px;height:34px}}
+@media(prefers-reduced-motion:reduce){.study-film-track{animation:none!important;left:50%;transform:translateX(-50%)}.study-film-track .study-film-frame:nth-child(n+2){display:none}.study-film-frame img{animation:none!important}}
 .study-dossier-stack{display:block;overflow:hidden;}
 .study-dossier{position:absolute;left:0;top:0;width:clamp(280px,30vw,560px);height:min(68vh,720px);}
 .study-dossier-head{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;}

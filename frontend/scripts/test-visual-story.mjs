@@ -33,11 +33,16 @@ for(let topic=0;topic<200;topic++){
 }
 const spokenLesson='Sócrates viveu em Atenas e questionava as certezas dos cidadãos. Seu método ficou conhecido como diálogo socrático. Ele perguntava para revelar contradições no raciocínio. Foi condenado à morte em 399 antes de Cristo. A acusação dizia que corrompia os jovens. Sócrates aceitou a sentença e bebeu cicuta.';
 const spokenScenes=visualSlides(spokenLesson,'Sócrates');
-assert(spokenScenes.length===3,'a spoken paragraph should become changing visual scenes');
-assert(spokenScenes.every(scene=>scene.query.includes('Sócrates')),'each visual scene must search for its subject');
+assert(spokenScenes.length===6,'each narrated sentence should become a changing visual scene');
+assert(spokenScenes.every(scene=>/socrates/i.test(scene.query)),'each visual scene must search for its subject');
 for(let index=0;index<spokenScenes.length;index++){
   const marker=spokenScenes[index].text.split(/[.!?]/,1)[0];
   assert(spokenSlideIndex(spokenScenes,marker,0)===index,`spoken paragraph ${index} did not select its matching scene`);
 }
+const philosophers=visualSlides('Sócrates questionava os atenienses. Platão fundou a Academia. Aristóteles ensinou Alexandre.', 'Qual filósofo foi mais importante?');
+assert(philosophers.length===3,'a multi-philosopher answer should produce one image search per narrated person');
+assert(/socrates/i.test(philosophers[0].query),'first philosopher portrait query is not specific');
+assert(/plato/i.test(philosophers[1].query),'second philosopher portrait query is not specific');
+assert(/aristotle/i.test(philosophers[2].query),'third philosopher portrait query is not specific');
 if(scenarios<1200||checks<10000)throw new Error(`Insufficient validation: ${scenarios} scenarios, ${checks} checks`);
 console.log(`${scenarios} synthetic narrative scenarios passed; ${checks} assertions passed. These validate chapter splitting, topic-specific media queries, boundary isolation, and narration-to-scene matching; they are not live image-provider/browser end-to-end tests.`);

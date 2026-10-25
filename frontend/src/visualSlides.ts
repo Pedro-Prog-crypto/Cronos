@@ -8,6 +8,34 @@ const clean = (value: string) => value
 
 const generic = /^(?:vis[aã]o geral|contexto|introdu[cç][aã]o|resumo|ideia central|conclus[aã]o|o que voc[eê] precisa saber)$/i;
 
+const namedPhilosophers: Array<[string, string]> = [
+  ['socrates','Socrates'],['platao','Plato'],['plato','Plato'],['aristoteles','Aristotle'],['aristotle','Aristotle'],
+  ['kant','Immanuel Kant'],['nietzsche','Friedrich Nietzsche'],['descartes','Rene Descartes'],['confucio','Confucius'],
+  ['confucius','Confucius'],['maquiavel','Niccolo Machiavelli'],['machiavelli','Niccolo Machiavelli'],['epicuro','Epicurus'],
+  ['epicurus','Epicurus'],['dostoievski','Fyodor Dostoevsky'],['dostoevsky','Fyodor Dostoevsky'],['marx','Karl Marx'],
+  ['karl marx','Karl Marx'],['simone de beauvoir','Simone de Beauvoir'],['sartre','Jean-Paul Sartre'],['spinoza','Baruch Spinoza'],
+  ['santo agostinho','Augustine of Hippo'],['tomás de aquino','Thomas Aquinas'],['thomas aquinas','Thomas Aquinas'],
+  ['heraclito','Heraclitus'],['heraclitus','Heraclitus'],['pitagoras','Pythagoras'],['pythagoras','Pythagoras'],
+  ['democrito','Democritus'],['democritus','Democritus'],['seneca','Seneca'],['sêneca','Seneca'],
+  ['marco aurelio','Marcus Aurelius'],['marcus aurelius','Marcus Aurelius'],['hobbes','Thomas Hobbes'],['thomas hobbes','Thomas Hobbes'],
+  ['locke','John Locke'],['john locke','John Locke'],['hume','David Hume'],['david hume','David Hume'],
+  ['rousseau','Jean-Jacques Rousseau'],['hegel','Georg Wilhelm Friedrich Hegel'],['kierkegaard','Søren Kierkegaard'],
+  ['camus','Albert Camus'],['hannah arendt','Hannah Arendt'],['wittgenstein','Ludwig Wittgenstein'],
+  ['foucault','Michel Foucault'],['derrida','Jacques Derrida'],['rawls','John Rawls'],['ayn rand','Ayn Rand'],
+  ['laozi','Laozi'],['lao tse','Laozi'],['sun tzu','Sun Tzu'],['rumi','Rumi'],['avicenna','Avicenna'],
+  ['ibn sina','Avicenna'],['al-ghazali','Al-Ghazali'],['mencius','Mencius'],
+];
+
+const normalized = (value: string) => value.toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+function imageQuery(topic: string, text: string, title: string) {
+  const context = normalized(`${topic} ${title} ${text}`);
+  const people = [...new Set(namedPhilosophers.filter(([name]) => context.includes(normalized(name))).map(([, canonical]) => canonical))];
+  if (people.length) return `${people.join(' ; ')} philosopher portrait bust sculpture`.slice(0, 180);
+  if (/\bfilosof\w*\b/.test(context)) return 'philosopher portrait bust sculpture historical philosopher'.slice(0, 180);
+  const specific = title === topic ? text.split(/[.!?]/, 1)[0].slice(0, 64) : title;
+  return `${topic} ${specific}`.replace(/\s+/g, ' ').trim().slice(0, 150);
+}
+
 export function visualSlides(reply: string, topic: string): VisualSlide[] {
   const text = reply.trim();
   if (!text) return [{ id: 'overview', title: topic, text: 'Preparando a explicação…', query: topic }];
@@ -26,7 +54,7 @@ export function visualSlides(reply: string, topic: string): VisualSlide[] {
   for (const section of sections) {
     const sentences = section.text.split(/(?<=[.!?])\s+(?=[\p{Lu}0-9])/u).map(clean).filter(Boolean);
     const groups: string[][] = [];
-    for (let index = 0; index < sentences.length; index += 2) groups.push(sentences.slice(index, index + 2));
+    for (let index = 0; index < sentences.length; index++) groups.push(sentences.slice(index, index + 1));
     if (!groups.length) groups.push([section.text]);
     for (let index = 0; index < groups.length; index++) {
       const content = groups[index].join(' ');
@@ -35,17 +63,14 @@ export function visualSlides(reply: string, topic: string): VisualSlide[] {
       const title = groups.length === 1 || generic.test(section.title)
         ? section.title
         : index === 0 ? section.title : shortExcerpt || `${section.title} · parte ${index + 1}`;
-      const previous = scenes.at(-1);
-      if (content.length < 36 && previous) previous.text += ` ${content}`;
-      else scenes.push({ title, text: content });
+      scenes.push({ title, text: content });
       if (scenes.length >= 12) break;
     }
     if (scenes.length >= 12) break;
   }
   return scenes.slice(0, 12).map((slide, index) => {
     const title = !slide.title || generic.test(slide.title) ? `${topic} · parte ${index + 1}` : slide.title;
-    const specific = title === topic ? slide.text.split(/[.!?]/, 1)[0].slice(0, 64) : title;
-    const query = `${topic} ${specific}`.replace(/\s+/g, ' ').trim().slice(0, 150);
+    const query = imageQuery(topic, slide.text, title);
     return { id: `scene-${index}`, title, text: slide.text, query: query || topic };
   });
 }

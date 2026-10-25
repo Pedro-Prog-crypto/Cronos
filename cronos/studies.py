@@ -32,6 +32,27 @@ MAX_PAGE_CHARS = 25000
 MAX_SOURCE_CONTEXT = 18000
 MAX_STUDY_IMAGE_BYTES = 4 * 1024 * 1024
 LAYOUTS = ("guided", "library", "notebook", "socratic", "reading", "desk")
+_PHILOSOPHER_ALIASES = {
+    "socrates": ("socrates", "sokrates"), "plato": ("plato", "platao"),
+    "aristotle": ("aristotle", "aristoteles"), "immanuel kant": ("kant",),
+    "friedrich nietzsche": ("nietzsche",), "rené descartes": ("descartes",),
+    "confucius": ("confucius", "confucio"), "niccolò machiavelli": ("machiavelli", "maquiavel"),
+    "epicurus": ("epicurus", "epicuro"), "fyodor dostoevsky": ("dostoevsky", "dostoievski"),
+    "marx": ("karl marx", "marx"), "simone de beauvoir": ("simone de beauvoir",),
+    "jean-paul sartre": ("sartre",), "baruch spinoza": ("spinoza",), "augustine of hippo": ("augustine", "santo agostinho"),
+    "thomas aquinas": ("thomas aquinas", "tomas de aquino"),
+    "heraclitus": ("heraclitus", "heraclito"), "pythagoras": ("pythagoras", "pitagoras"),
+    "democritus": ("democritus", "democrito"), "seneca": ("seneca", "sêneca"),
+    "marcus aurelius": ("marcus aurelius", "marco aurelio"), "thomas hobbes": ("thomas hobbes", "hobbes"),
+    "john locke": ("john locke", "locke"), "david hume": ("david hume", "hume"),
+    "rousseau": ("rousseau",), "georg wilhelm friedrich hegel": ("hegel",), "søren kierkegaard": ("kierkegaard",),
+    "albert camus": ("albert camus", "camus"), "hannah arendt": ("hannah arendt",),
+    "ludwig wittgenstein": ("wittgenstein",), "michel foucault": ("michel foucault", "foucault"),
+    "jacques derrida": ("jacques derrida", "derrida"), "john rawls": ("john rawls", "rawls"),
+    "ayn rand": ("ayn rand",), "laozi": ("laozi", "lao tse"), "sun tzu": ("sun tzu",),
+    "rumi": ("rumi",), "avicenna": ("avicenna", "ibn sina"), "al ghazali": ("al ghazali", "al-ghazali"),
+    "mencius": ("mencius",),
+}
 
 
 def _now() -> str:
@@ -73,7 +94,54 @@ def _media_search_terms(query: str) -> str:
     for keys, hint in hints:
         if any(key in normalized for key in keys):
             return f"{query.strip()} {hint}"[:200]
+    if re.search(r"\b(?:filosof\w*|philosoph\w*|pensador(?:es)?)\b", normalized):
+        return f"{query.strip()} historical philosopher portrait bust sculpture"[:200]
     return query.strip()[:200]
+
+
+def _filter_philosopher_images(images: list[dict], videos: list[dict], query: str):
+    """Discard unrelated image-search hits for philosophy requests (e.g. random products)."""
+    normalized = "".join(char for char in unicodedata.normalize("NFD", query.casefold()) if not unicodedata.combining(char))
+    philosopher_request = bool(re.search(r"\b(?:filosof\w*|philosoph\w*|pensador(?:es)?)\b", normalized))
+    if not philosopher_request:
+        return images, videos
+    requested = [aliases for aliases in _PHILOSOPHER_ALIASES.values()
+                 if any(alias in normalized for alias in aliases)]
+
+    def relevant(title: str) -> bool:
+        item = "".join(char for char in unicodedata.normalize("NFD", str(title).casefold()) if not unicodedata.combining(char))
+        if requested:
+            return any(alias in item for aliases in requested for alias in aliases)
+        return ("philosoph" in item or "pensador" in item
+                or any(alias in item for aliases in _PHILOSOPHER_ALIASES.values() for alias in aliases))
+
+    return ([image for image in images if relevant(image.get("title", ""))],
+            [video for video in videos if relevant(video.get("title", ""))])
+
+
+async def _wikipedia_portraits(client: httpx.AsyncClient, query: str, limit: int) -> list[dict]:
+    """Fetch article lead portraits for named philosophers as reliable visual anchors."""
+    normalized = "".join(char for char in unicodedata.normalize("NFD", query.casefold()) if not unicodedata.combining(char))
+    people = [(canonical, aliases) for canonical, aliases in _PHILOSOPHER_ALIASES.items()
+              if any(alias in normalized for alias in aliases)]
+    if not people:
+        return []
+    titles = [canonical.title() for canonical, _ in people[:min(limit, 6)]]
+    response = await client.get("https://en.wikipedia.org/w/api.php", params={
+        "action": "query", "prop": "pageimages|info", "titles": "|".join(titles),
+        "piprop": "thumbnail", "pithumbsize": 1280, "inprop": "url",
+        "redirects": 1, "format": "json", "formatversion": 2,
+    })
+    response.raise_for_status()
+    pages = response.json().get("query", {}).get("pages", [])
+    results = []
+    for page in pages:
+        image_url = page.get("thumbnail", {}).get("source", "")
+        record = _image_record(image_url, f"{page.get('title', 'Filósofo')} — retrato biográfico",
+                               page.get("fullurl") or "https://en.wikipedia.org/", "", "", "Wikipedia")
+        if record:
+            results.append(record)
+    return results[:limit]
 
 
 async def _commons_media(client: httpx.AsyncClient, query: str, limit: int):
@@ -804,10 +872,19 @@ def install_studies(app, authenticate):
                     images, videos = await _commons_media(client, search_query, limit)
                 except (httpx.HTTPError, ValueError, KeyError, TypeError):
                     failures.append("Wikimedia Commons")
+                images, videos = _filter_philosopher_images(images, videos, search_query)
+                try:
+                    portraits = await _wikipedia_portraits(client, search_query, min(limit, 6))
+                    portraits, _ = _filter_philosopher_images(portraits, [], search_query)
+                    portrait_urls = {item["url"] for item in portraits}
+                    images = portraits + [item for item in images if item["url"] not in portrait_urls]
+                except (httpx.HTTPError, ValueError, KeyError, TypeError):
+                    failures.append("Wikipédia")
                 if len(images) < min(12, limit):
                     tried.append("Openverse")
                     try:
                         extra = await _openverse_images(client, search_query, limit - len(images))
+                        extra, _ = _filter_philosopher_images(extra, [], search_query)
                         seen = {item["url"] for item in images}
                         images.extend(item for item in extra if item["url"] not in seen)
                     except (httpx.HTTPError, ValueError, KeyError, TypeError):
@@ -822,17 +899,22 @@ def install_studies(app, authenticate):
                                 return list(search.images(search_query, max_results=min(24, limit)))
                         raw = await asyncio.wait_for(asyncio.to_thread(search_ddgs), timeout=10)
                         seen = {item["url"] for item in images}
+                        extra = []
                         for item in raw:
                             record = _image_record(item.get("thumbnail") or item.get("image"), item.get("title", ""),
                                                    item.get("url") or item.get("source"), "Search result", "", "DuckDuckGo")
-                            if record and record["url"] not in seen:
+                            if record:
+                                extra.append(record)
+                        extra, _ = _filter_philosopher_images(extra, [], search_query)
+                        for record in extra:
+                            if record["url"] not in seen:
                                 images.append(record); seen.add(record["url"])
-                            if len(images) >= limit:
-                                break
+                            if len(images) >= limit:break
                     except Exception:
                         failures.append("DuckDuckGo Images")
         except (httpx.HTTPError, ValueError):
             failures.extend(source for source in ("Wikimedia Commons", "Openverse") if source not in failures)
+        images, videos = _filter_philosopher_images(images, videos, search_query)
         images = images[:limit]
         images = [proxy_media_url(image) for image in images]
         safe_videos = []
