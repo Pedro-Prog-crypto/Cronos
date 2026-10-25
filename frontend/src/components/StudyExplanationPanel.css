@@ -29,13 +29,15 @@
 
 /* Full-screen narrated visual wall: no topic header, chapter controls, transcript, or orb. */
 .study-cinema{position:fixed;z-index:250;inset:0;overflow:hidden;isolation:isolate;background:#020711;color:#f4f8ff;font-family:'Space Grotesk','Plus Jakarta Sans',sans-serif}
-.study-film-stage{position:absolute;inset:0;display:grid;grid-template-rows:repeat(2,minmax(0,1fr));gap:3px;overflow:hidden;background:#020711}
+.study-film-stage{position:absolute;inset:0;display:grid;grid-template-rows:repeat(4,minmax(0,1fr));gap:2px;overflow:hidden;background:#020711}
 .study-film-row{position:relative;min-width:0;min-height:0;overflow:hidden;mask-image:linear-gradient(90deg,transparent 0,#000 2%,#000 98%,transparent 100%)}
 .study-film-track{position:absolute;left:0;top:0;bottom:0;display:flex;align-items:center;gap:3px;width:max-content;height:100%;animation:study-film-traverse var(--film-duration,52s) linear infinite;animation-play-state:paused;will-change:transform}
 .study-film-stage.is-moving .study-film-track{animation-play-state:running}
-.study-film-row.is-lower .study-film-track{animation-duration:calc(var(--film-duration,52s) * 1.19);animation-delay:-11s}
+.study-film-row.is-row-2 .study-film-track{animation-duration:calc(var(--film-duration,52s) * 1.11);animation-delay:-7s}
+.study-film-row.is-row-3 .study-film-track{animation-duration:calc(var(--film-duration,52s) * .93);animation-delay:-15s}
+.study-film-row.is-row-4 .study-film-track{animation-duration:calc(var(--film-duration,52s) * 1.21);animation-delay:-22s}
 .study-film-frame{position:relative;display:grid;place-items:center;flex:0 0 auto;width:max-content;height:100%;min-width:0;margin:0;overflow:hidden;background:transparent;border:0;box-shadow:none}
-.study-film-frame img{display:block;width:auto;height:auto;max-width:min(90vw,1500px);max-height:49vh;object-fit:contain;filter:drop-shadow(0 8px 20px #0008);animation:study-film-arrive .55s ease both}
+.study-film-frame img{display:block;width:auto;height:auto;max-width:min(85vw,1400px);max-height:24.5vh;object-fit:contain;filter:drop-shadow(0 5px 14px #0008);animation:study-film-arrive .55s ease both}
 .study-film-frame video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:transparent}
 .study-cinematic-caption{position:absolute;z-index:4;max-width:min(78vw,1120px);padding:clamp(8px,1vw,15px) clamp(12px,1.45vw,22px);pointer-events:none;color:#f8fbff;text-wrap:pretty;font:600 clamp(19px,2.6vw,38px)/1.22 'Rajdhani','Space Grotesk',sans-serif;letter-spacing:.012em;text-shadow:0 3px 18px #000,0 1px 4px #000;background:linear-gradient(90deg,#03101cbf,#061629b5 78%,transparent);border-left:3px solid #65dcff;box-shadow:0 10px 42px #0004;animation:study-caption-in .34s cubic-bezier(.18,.78,.25,1) both}
 .study-caption-text{display:block}.study-caption-highlight{display:inline-block;margin-inline:.12em;color:#fff;font-family:'Rajdhani',sans-serif;font-size:1.18em;font-weight:700;letter-spacing:.035em;text-shadow:0 0 16px #35cfff,0 2px 9px #000;background:linear-gradient(transparent 72%,#3de0ff90 72%);}
@@ -58,7 +60,7 @@
 @keyframes study-film-traverse{to{transform:translateX(-50%)}}
 @keyframes study-film-arrive{from{opacity:.45;filter:blur(4px) drop-shadow(0 12px 30px #0009)}to{opacity:1;filter:drop-shadow(0 12px 30px #0009)}}
 @keyframes study-caption-in{from{opacity:0;filter:blur(5px);translate:0 12px}to{opacity:1;filter:blur(0);translate:0 0}}
-@media(max-width:700px){.study-film-stage{grid-template-rows:repeat(2,minmax(0,1fr));gap:2px}.study-film-track{gap:2px}.study-film-frame img{max-width:88vw;max-height:49vh}.study-cinema-close{width:34px;height:34px}}
+@media(max-width:700px){.study-film-stage{grid-template-rows:repeat(4,minmax(0,1fr));gap:2px}.study-film-track{gap:2px}.study-film-frame img{max-width:88vw;max-height:24.5vh}.study-cinema-close{width:34px;height:34px}}
 @media(prefers-reduced-motion:reduce){.study-film-track{animation:none!important;left:50%;transform:translateX(-50%)}.study-film-track .study-film-frame:nth-child(n+2){display:none}.study-film-frame img{animation:none!important}}
 .study-dossier-stack{display:block;overflow:hidden;}
 .study-dossier{position:absolute;left:0;top:0;width:clamp(280px,30vw,560px);height:min(68vh,720px);}
