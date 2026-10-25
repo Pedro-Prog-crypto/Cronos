@@ -7,6 +7,16 @@ export function isStudyQuestion(text:string){
   || /\b(?:historia|filosofia|biologia|matematica|fisica|quimica|geografia|portugues|literatura|sociologia|prova|vestibular|enem|pais|guerra mundial|revolucao|filosofo|equacao|teorema|celula|mitocondria|fotossintese|primeira guerra|segunda guerra)\b/.test(value);
 }
 
+// A request to put a written passage on the ordinary answer surface is not an
+// invitation to open the full-screen, voice-synchronized visual presentation.
+export function isExplicitTextDisplay(text:string){
+ const value=normalize(text);
+ const asksForText=/\b(?:texto|passagem|resposta escrita)\b/.test(value);
+ const asksToShow=/\b(?:me mostre|mostre|mostrar|exiba|exibir|coloque|colocar|abra|abrir|escreva|escrever)\b/.test(value);
+ const explicitlyWantsLesson=/\b(?:explique|explica|me ensine|ensine|aula|apresente de forma imersiva)\b/.test(value);
+ return asksForText&&asksToShow&&!explicitlyWantsLesson;
+}
+
 export function studyPanelTitle(question:string,reply=''){
  const isGeneric=(value:string)=>!value||/^(?:ideia central|explicacao|contexto|introducao|conclusao|resumo|resposta)$/i.test(normalize(value));
  const heading=reply.match(/^\s*#{1,3}\s+(.+)$/m)?.[1];
