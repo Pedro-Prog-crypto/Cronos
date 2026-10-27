@@ -22,7 +22,7 @@ def test_voice_trigger_exact_phrase_confidence_and_cooldown():
     trigger=wake.Trigger({'activation_phrase':'abrir cronos','pause_phrase':'pausar cronos','resume_phrase':'retomar cronos'})
     for text in ('abrir chrome','abrir cronos e apagar arquivos','executar powershell','[unk]',''):
         assert not trigger.accept(result(text),now=100)
-    assert not trigger.accept(result('abrir cronos',.5),now=100)
+    assert not trigger.accept(result('abrir cronos',.49),now=100)
     assert not trigger.accept({'text':'abrir cronos'},now=100)
     assert trigger.accept(result('Abrir Cronos'),now=100)
     assert not trigger.accept(result('cronos abrir'),now=110)
@@ -43,6 +43,26 @@ def test_wake_phrases_are_user_configurable_and_persisted(tmp_path,monkeypatch):
     assert trigger.action(result('Pastel azul'),now=110) is None
     assert trigger.action(result('voltar ao trabalho'),now=103)=='resumed'
     assert not wake.paused()
+
+
+def test_default_voice_commands_accept_spoken_variants_and_report_recognition(tmp_path,monkeypatch):
+    monkeypatch.setattr(wake,'root',lambda:tmp_path)
+    trigger=wake.Trigger(wake.DEFAULT_SETTINGS)
+    assert trigger.action(result('pausar cronos'),now=100)=='paused'
+    assert trigger.last_action=='paused' and trigger.last_heard=='pausar cronos'
+    assert trigger.action(result('cronos'),now=101) is None
+    assert trigger.last_action=='ignored_while_paused'
+    assert trigger.action(result('abrir cronos'),now=102) is None
+    assert trigger.action(result('retomar cronos'),now=103)=='resumed'
+    assert trigger.action(result('abrir cronos'),now=104)=='activate'
+
+
+def test_custom_activation_has_open_alias_and_preserves_exact_phrase_priority():
+    config={'activation_phrase':'pastel azul','pause_phrase':'pausar cronos','resume_phrase':'retomar cronos'}
+    commands=wake.command_phrases(config)
+    assert commands['pastel azul']=='activate'
+    assert commands['abrir pastel azul']=='activate'
+    assert commands['pausar cronos']=='paused'
 
 
 @pytest.mark.parametrize('values',[
@@ -143,4 +163,16 @@ def test_status_expires_and_does_not_store_audio(tmp_path,monkeypatch):
     assert wake.status()['state']=='listening'
     monkeypatch.setattr(wake.time,'time',lambda:121)
     assert wake.status()['state']=='stopped'
-    assert set(json.loads((tmp_path/'status.json').read_text()))=={'state','heartbeat','last_opened'}
+    assert set(json.loads((tmp_path/'status.json').read_text()))=={'state','heartbeat','last_opened','worker_version'}
+
+
+def test_status_heartbeat_keeps_last_recognition_without_recording_audio(tmp_path,monkeypatch):
+    monkeypatch.setattr(wake,'root',lambda:tmp_path)
+    wake._write_status('listening',last_heard='pausar cronos',last_action='paused',
+                       last_confidence=.92,greeting_status='windows_voice')
+    wake._write_status('listening')
+    result=wake.status()
+    assert result['last_heard']=='pausar cronos'
+    assert result['last_action']=='paused'
+    assert result['last_confidence']==.92
+    assert result['greeting_status']=='windows_voice'

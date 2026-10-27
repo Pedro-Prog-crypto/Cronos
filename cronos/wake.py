@@ -30,6 +30,8 @@ DEFAULT_SETTINGS = {
 PHRASES = {"abrir cronos", "abrir kronos", "cronos abrir", "kronos abrir"}  # compatibilidade antiga
 MODEL_LAYOUTS = (("am/final.mdl", "conf/model.conf"),
                  ("final.mdl", "mfcc.conf", "HCLr.fst", "Gr.fst"))
+WAKE_VERSION = 3
+WAKE_GREETING = "Pois não, senhor? O que deseja?"
 
 
 def normalize_phrase(value):
@@ -54,6 +56,38 @@ def validate_settings(data):
         raise ValueError("Ativação, pausa e retomada precisam usar frases diferentes.")
     result["start_with_windows"] = bool(data.get("start_with_windows", False))
     return result
+
+
+def command_phrases(config):
+    """Command grammar with the chosen phrases and natural Portuguese aliases."""
+    activation = config["activation_phrase"]
+    normalized_activation = normalize_phrase(activation)
+    commands = {}
+    exact = ((config["activation_phrase"], "activate"),
+             (config["pause_phrase"], "paused"),
+             (config["resume_phrase"], "resumed"))
+    for phrase, action in exact:
+        commands[normalize_phrase(phrase)] = action
+
+    def alias(phrase, action):
+        key = normalize_phrase(phrase)
+        if key:
+            commands.setdefault(key, action)
+
+    if normalized_activation in {"cronos", "kronos", "chronos"}:
+        for phrase in ("cronos", "kronos", "chronos", "abrir cronos", "abrir kronos",
+                       "cronos abrir", "kronos abrir", "abre cronos"):
+            alias(phrase, "activate")
+    else:
+        alias("abrir " + activation, "activate")
+        alias("abre " + activation, "activate")
+    for phrase in ("pausar cronos", "pausa cronos", "pausar " + activation,
+                   "pausa " + activation, "pausar escuta", "parar escuta"):
+        alias(phrase, "paused")
+    for phrase in ("retomar cronos", "voltar cronos", "ativar cronos",
+                   "retomar escuta", "continuar escuta"):
+        alias(phrase, "resumed")
+    return commands
 
 
 def settings():
@@ -117,7 +151,8 @@ def status():
         data = json.loads((folder / "status.json").read_text())
         age = time.time() - float(data["heartbeat"])
         if 0 <= age < 20 or data.get("state") == "error":
-            result.update({key: data[key] for key in ("state", "last_opened") if key in data})
+            result.update({key: data[key] for key in ("state", "last_opened", "worker_version", "last_heard",
+                                                       "last_action", "last_confidence", "greeting_status") if key in data})
             reasons = {"dependency_missing", "microphone_unavailable", "model_or_platform_unavailable", "audio_library_or_device_unavailable", "unknown"}
             if data.get("reason") in reasons:
                 result["reason"] = data["reason"]
@@ -128,10 +163,32 @@ def status():
     return result
 
 
-def _write_status(state, last_opened=None, reason=None):
+def _write_status(state, last_opened=None, reason=None, *, last_heard=None, last_action=None,
+                  last_confidence=None, greeting_status=None):
     folder = root(); folder.mkdir(parents=True, exist_ok=True)
     temporary = folder / "status.tmp"
-    data = {"state": state, "heartbeat": time.time(), "last_opened": last_opened}
+    # Heartbeats must not erase the last recognition diagnostic. Otherwise the
+    # UI shows the phrase for five seconds and then silently clears it.
+    try:
+        previous = json.loads((folder / "status.json").read_text(encoding="utf-8"))
+        if not isinstance(previous, dict):
+            previous = {}
+    except (OSError, ValueError, TypeError):
+        previous = {}
+    data = {key: previous[key] for key in
+            ("last_opened", "last_heard", "last_action", "last_confidence", "greeting_status")
+            if key in previous}
+    data.update({"state": state, "heartbeat": time.time(),
+                 "last_opened": last_opened if last_opened is not None else data.get("last_opened"),
+                 "worker_version": WAKE_VERSION})
+    if last_heard is not None:
+        data["last_heard"] = str(last_heard)[:80]
+    if last_action is not None:
+        data["last_action"] = str(last_action)[:32]
+    if last_confidence is not None:
+        data["last_confidence"] = round(float(last_confidence), 3)
+    if greeting_status is not None:
+        data["greeting_status"] = str(greeting_status)[:24]
     if reason:
         data["reason"] = reason
     temporary.write_text(json.dumps(data))
@@ -203,18 +260,25 @@ class Trigger:
         self.last_activation = float("-inf")
         self.last_transition = float("-inf")
         self.config = validate_settings(config or settings())
+        self.commands = command_phrases(self.config)
+        self.last_heard = ""
+        self.last_action = "unrecognized"
+        self.last_confidence = 0.0
 
     def action(self, result, now=None):
         now = time.monotonic() if now is None else now
         text = normalize_phrase(result.get("text", ""))
         words = result.get("result", [])
         confidence = sum(word.get("conf", 0) for word in words) / len(words) if words else 0
-        action = ("paused" if text == normalize_phrase(self.config["pause_phrase"]) else
-                  "resumed" if text == normalize_phrase(self.config["resume_phrase"]) else
-                  "activate" if text == normalize_phrase(self.config["activation_phrase"]) else None)
+        action = self.commands.get(text)
+        self.last_heard = text[:80]
+        self.last_confidence = confidence
+        self.last_action = action or "unrecognized"
         cooldown = 20 if action == "activate" else 2
         last_action = self.last_activation if action == "activate" else self.last_transition
-        if confidence < .75 or action is None or now - last_action < cooldown:
+        if confidence < .50 or action is None or now - last_action < cooldown:
+            if action is not None and confidence < .50:
+                self.last_action = "low_confidence"
             return None
         if action == "paused":
             self.last_transition = now
@@ -225,6 +289,7 @@ class Trigger:
             set_paused(False)
             return "resumed"
         if paused():
+            self.last_action = "ignored_while_paused"
             return None
         self.last_activation = now
         return "activate"
@@ -265,8 +330,25 @@ def start():
     if sys.platform != "win32":
         raise ValueError("O iniciador deve executar no Windows do usuário.")
     verify_model()
-    if not status()["dependencies_installed"]:
+    current = status()
+    if not current["dependencies_installed"]:
         raise ValueError('Instale o extra wake: python -m pip install -e ".[wake]".')
+    if current.get("state") in {"listening", "paused"}:
+        if current.get("worker_version") == WAKE_VERSION:
+            return {"requested": True, "already_running": True,
+                    "note": "O ouvinte atualizado já está ativo e carrega as frases salvas."}
+        # Stop an older listener from another Cronos installation. Both builds
+        # share the per-user wake folder and mutex, so otherwise its old grammar
+        # could keep ignoring the newly configured commands.
+        stop()
+        deadline = time.monotonic() + 6
+        while time.monotonic() < deadline:
+            current = status()
+            if current.get("state") not in {"listening", "paused"}:
+                break
+            time.sleep(.1)
+        else:
+            raise ValueError("O ouvinte antigo não encerrou. Use Parar ouvinte e tente Iniciar novamente.")
     project = Path(__file__).resolve().parent.parent
     subprocess.Popen([str(python_windowless()), "-m", "cronos.wake"], cwd=project, shell=False,
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -315,6 +397,54 @@ def startup(enabled):
     return {"start_with_windows": True}
 
 
+def speak_activation_greeting():
+    """Speak the wake acknowledgement with the configured Cronos voice when possible."""
+    if sys.platform != "win32":
+        return "unavailable"
+    project = Path(__file__).resolve().parent.parent
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(project / ".env", override=False)
+        from cronos.config import Settings
+        configured = Settings.from_env()
+        if configured.privacy_mode == "online" and configured.fish_key and configured.fish_model:
+            import asyncio
+            import winsound
+            from fishaudio import AsyncFishAudio
+
+            async def synthesize():
+                client = AsyncFishAudio(api_key=configured.fish_key, timeout=12.0)
+                async with client:
+                    return await client.tts.convert(
+                        model=configured.fish_model, text=WAKE_GREETING,
+                        reference_id=configured.fish_reference or None,
+                        format="wav", speed=configured.fish_speed, latency=configured.fish_latency)
+
+            audio = asyncio.run(synthesize())
+            winsound.PlaySound(audio, winsound.SND_MEMORY | winsound.SND_NODEFAULT)
+            return "cronos_voice"
+    except Exception:
+        pass
+    # Offline fallback: use an installed Portuguese Windows speech voice. The
+    # command is constant, hidden, and never includes user-provided text.
+    try:
+        import ctypes
+        from ctypes import wintypes
+        directory = ctypes.create_unicode_buffer(32768)
+        if not ctypes.windll.kernel32.GetWindowsDirectoryW(directory, len(directory)):
+            return "unavailable"
+        executable = Path(directory.value) / "System32/WindowsPowerShell/v1.0/powershell.exe"
+        script = "$v=New-Object -ComObject SAPI.SpVoice; $voices=$v.GetVoices(); "
+        script += "for($i=0;$i -lt $voices.Count;$i++){if($voices.Item($i).GetDescription() -match 'Portugu|Brazil|Brasil|Francisca'){ $v.Voice=$voices.Item($i); break }}; "
+        script += "$null=$v.Speak('Pois não, senhor? O que deseja?')"
+        process = subprocess.run([str(executable), "-NoProfile", "-NonInteractive", "-Command", script],
+                                 shell=False, capture_output=True, timeout=12,
+                                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        return "windows_voice" if process.returncode == 0 else "unavailable"
+    except Exception:
+        return "unavailable"
+
+
 def listen():
     if sys.platform != "win32":
         raise ValueError("Execute no seu Windows.")
@@ -326,7 +456,7 @@ def listen():
         from vosk import KaldiRecognizer, Model, SetLogLevel
         SetLogLevel(-1)
         config = settings()
-        phrases = [config["activation_phrase"], config["pause_phrase"], config["resume_phrase"]]
+        phrases = list(command_phrases(config))
         acoustic_model = Model(str(model))
         grammar = json.dumps([*phrases, "[unk]"], ensure_ascii=False)
         recognizer = KaldiRecognizer(acoustic_model, 16000, grammar)
@@ -350,7 +480,7 @@ def listen():
                         next_stamp = None
                     if next_stamp != settings_stamp:
                         config = settings()
-                        phrases = [config["activation_phrase"], config["pause_phrase"], config["resume_phrase"]]
+                        phrases = list(command_phrases(config))
                         recognizer = KaldiRecognizer(acoustic_model, 16000,
                                                      json.dumps([*phrases, "[unk]"], ensure_ascii=False))
                         recognizer.SetWords(True)
@@ -370,8 +500,16 @@ def listen():
                                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                              creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
                             opened = datetime.now(timezone.utc).isoformat()
-                        if action in {"activate", "paused", "resumed"}:
-                            _write_status("paused" if paused() else "listening", opened)
+                            greeting_status = speak_activation_greeting()
+                            if frames:
+                                while True:
+                                    try: frames.get_nowait()
+                                    except queue.Empty: break
+                        else:
+                            greeting_status = None
+                        _write_status("paused" if paused() else "listening", opened,
+                                      last_heard=trigger.last_heard, last_action=trigger.last_action,
+                                      last_confidence=trigger.last_confidence, greeting_status=greeting_status)
         finally:
             _write_status("stopped", opened)
 

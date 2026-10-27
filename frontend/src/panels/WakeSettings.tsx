@@ -3,7 +3,7 @@ import {api,jsonApi} from '../api';
 import {Mic,Pause,Play,Save,Volume2} from 'lucide-react';
 
 type WakeConfig={activation_phrase:string;pause_phrase:string;resume_phrase:string;start_with_windows:boolean};
-type WakeStatus={windows_available:boolean;model_installed:boolean;dependencies_installed:boolean;state:string;paused:boolean;settings:WakeConfig;reason?:string};
+type WakeStatus={windows_available:boolean;model_installed:boolean;dependencies_installed:boolean;state:string;paused:boolean;settings:WakeConfig;reason?:string;last_heard?:string;last_action?:string;last_confidence?:number;greeting_status?:string};
 const defaults:WakeConfig={activation_phrase:'cronos',pause_phrase:'pausar cronos',resume_phrase:'retomar cronos',start_with_windows:false};
 
 export function WakeSettings({onPrepare}:{onPrepare:()=>void}){
@@ -30,6 +30,7 @@ export function WakeSettings({onPrepare}:{onPrepare:()=>void}){
   </div>
   {(!data?.model_installed||!data?.dependencies_installed)&&<small>Antes de iniciar a escuta global, prepare o modelo local. As dependências de áudio vêm com a instalação completa do Cronos.</small>}
   {data?.reason&&<small>O ouvinte parou por uma falha local ({data.reason}).</small>}
+  <div className="wake-recognition" role="status"><b>ÚLTIMO RECONHECIMENTO</b><span>{data?.last_heard||'Diga uma das frases configuradas para testar o microfone.'}</span>{data?.last_heard&&<small>{({activate:'Chamou o Cronos',paused:'Pausa reconhecida',resumed:'Retomada reconhecida',ignored_while_paused:'Comando ignorado: o ouvinte está pausado',low_confidence:'Frase ouvida, mas a confiança ficou baixa',unrecognized:'O microfone ouviu fala, mas não reconheceu uma frase configurada'} as Record<string,string>)[data.last_action||'unrecognized']||'Frase ouvida'}{typeof data?.last_confidence==='number'?` · confiança ${Math.round(data.last_confidence*100)}%`:''}{data?.greeting_status?` · retorno de voz: ${data.greeting_status==='cronos_voice'?'voz configurada do Cronos':data.greeting_status==='windows_voice'?'voz do Windows': 'indisponível'}`:''}</small>}</div>
   {message&&<p role="status" className="wake-message">{message}</p>}
  </section>;
 }
