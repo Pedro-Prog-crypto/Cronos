@@ -9,6 +9,8 @@ type StoryImage={title:string;url:string;proxy_url:string;source_url:string;lice
 type StoryMedia={images:StoryImage[]};
 const mediaCache=new Map<string,{media:StoryMedia;expires:number}>();
 const mediaInflight=new Map<string,Promise<StoryMedia>>();
+const PHOTO_WALL_TARGET=8;
+const PHOTO_WALL_DEADLINE_MS=6500;
 export type StudyPanelItem={id:string;title:string;reply:string;slot:number;locked:boolean;minimized:boolean;createdAt:number;position?:{left:number;top:number};spokenChunk?:string;spokenChunkIndex?:number;references?:Array<{title:string;url:string;excerpt?:string}>};
 type Props={panels:StudyPanelItem[];activeId?:string|null;speaking?:boolean;generating?:boolean;onClose:(id:string)=>void};
 
@@ -59,15 +61,16 @@ function StudyStory({panel,onClose}:{panel:StudyPanelItem;onClose:()=>void}){
   if(!images.length){setImageSources({});setFailedCount(0);setPhotosLoading(false);return;}
   const controller=new AbortController(),objectUrls:string[]=[];setImageSources({});setFailedCount(0);setPhotosLoading(true);
   let next=0,successes=0,failures=0;const acceptedHashes:string[]=[];
-  const worker=async()=>{while(next<images.length&&successes<18&&!controller.signal.aborted){const image=images[next++];try{
+  const deadline=window.setTimeout(()=>{controller.abort();setPhotosLoading(false);},PHOTO_WALL_DEADLINE_MS);
+  const worker=async()=>{while(next<images.length&&successes<PHOTO_WALL_TARGET&&!controller.signal.aborted){const image=images[next++];try{
    const response=await api(image.proxy_url,{signal:controller.signal}),blob=await response.blob();
    if(!blob.type.startsWith('image/'))throw new Error('A fonte não devolveu uma imagem.');
    const objectUrl=URL.createObjectURL(blob),probe=new Image();probe.src=objectUrl;try{await probe.decode();}catch(error){URL.revokeObjectURL(objectUrl);throw error;}if(probe.naturalWidth<120||probe.naturalHeight<90){URL.revokeObjectURL(objectUrl);continue;}
    const canvas=document.createElement('canvas');canvas.width=9;canvas.height=8;const context=canvas.getContext('2d',{willReadFrequently:true});if(context){context.drawImage(probe,0,0,9,8);const pixels=context.getImageData(0,0,9,8).data;let hash='',transparent=0;for(let i=3;i<pixels.length;i+=4)if(pixels[i]<220)transparent++;if(transparent>pixels.length/4*.12){URL.revokeObjectURL(objectUrl);continue;}for(let y=0;y<8;y++)for(let x=0;x<8;x++){const left=(y*9+x)*4,right=left+4;const gray=(index:number)=>pixels[index]*.299+pixels[index+1]*.587+pixels[index+2]*.114;hash+=gray(left)>gray(right)?'1':'0';}if(isNearDuplicateHash(hash,acceptedHashes,3)){URL.revokeObjectURL(objectUrl);continue;}acceptedHashes.push(hash);}
    objectUrls.push(objectUrl);successes++;setImageSources(previous=>({...previous,[image.proxy_url]:objectUrl}));
   }catch{if(!controller.signal.aborted){failures++;setFailedCount(failures);}}}};
-  void Promise.all(Array.from({length:3},()=>worker())).finally(()=>{if(!controller.signal.aborted)setPhotosLoading(false);});
-  return()=>{controller.abort();objectUrls.forEach(URL.revokeObjectURL);};
+  void Promise.all(Array.from({length:Math.min(8,images.length)},()=>worker())).finally(()=>{window.clearTimeout(deadline);setPhotosLoading(false);});
+  return()=>{window.clearTimeout(deadline);controller.abort();objectUrls.forEach(URL.revokeObjectURL);};
  },[images]);
  const showFallback=loadState==='failed'&&!visibleImages.length||images.length>0&&!photosLoading&&!visibleImages.length;
  return <div className="study-cinema" aria-label={`Imagens relacionadas a ${panel.title}`}>
@@ -83,7 +86,7 @@ function StudyStory({panel,onClose}:{panel:StudyPanelItem;onClose:()=>void}){
    </div>)}
   </div>
   {(loadState==='loading'&&!images.length||photosLoading&&!visibleImages.length)&&<div className="study-cinema-status"><i/><span>BUSCANDO IMAGENS PARA A EXPLICAÇÃO</span></div>}
-  {showFallback&&<div className="study-cinema-fallback"><span>SEM IMAGENS CONFIÁVEIS NESTA BUSCA</span><button type="button" onClick={()=>setRetry(value=>value+1)}><RotateCw size={15}/> TENTAR OUTRAS IMAGENS</button><div><a href={`https://commons.wikimedia.org/wiki/Special:MediaSearch?type=image&search=${encodeURIComponent(collectionQuery)}`} target="_blank" rel="noreferrer">WIKIMEDIA <ExternalLink size={12}/></a><a href={`https://openverse.org/search/image?q=${encodeURIComponent(collectionQuery)}`} target="_blank" rel="noreferrer">OPENVERSE <ExternalLink size={12}/></a></div></div>}
+  {showFallback&&<div className="study-cinema-fallback"><span>{images.length?'As imagens desta busca não carregaram a tempo.':'Nenhuma imagem relacionada foi encontrada nesta busca.'}</span><button type="button" onClick={()=>setRetry(value=>value+1)}><RotateCw size={15}/> TENTAR OUTRAS IMAGENS</button><div><a href={`https://commons.wikimedia.org/wiki/Special:MediaSearch?type=image&search=${encodeURIComponent(collectionQuery)}`} target="_blank" rel="noreferrer">WIKIMEDIA <ExternalLink size={12}/></a><a href={`https://openverse.org/search/image?q=${encodeURIComponent(collectionQuery)}`} target="_blank" rel="noreferrer">OPENVERSE <ExternalLink size={12}/></a></div></div>}
   {visibleImages.length>0&&<a className="study-cinema-credit" href={visibleImages[0].source_url} target="_blank" rel="noreferrer" aria-label="Abrir a fonte das imagens" title="Abrir a fonte das imagens"><ExternalLink size={14}/></a>}
   <button className="study-cinema-close" type="button" onClick={onClose} aria-label="Fechar apresentação" title="Fechar"><X size={20}/></button>
  </div>;

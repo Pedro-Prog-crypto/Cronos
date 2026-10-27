@@ -761,8 +761,8 @@ def install_studies(app, authenticate):
                    "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
                    "Referer": referer}
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(8, connect=4), headers=headers, follow_redirects=False) as client:
-                for _ in range(5):
+            async with httpx.AsyncClient(timeout=httpx.Timeout(5, connect=2), headers=headers, follow_redirects=False) as client:
+                for _ in range(3):
                     current = await asyncio.to_thread(_public_http_url, current)
                     if urlsplit(current).scheme != "https":
                         raise ValueError("A fonte da imagem não usa HTTPS.")

@@ -5,6 +5,7 @@ import importlib.util
 import json
 import os
 import queue
+import re
 import subprocess
 import sys
 import tempfile
@@ -30,7 +31,7 @@ DEFAULT_SETTINGS = {
 PHRASES = {"abrir cronos", "abrir kronos", "cronos abrir", "kronos abrir"}  # compatibilidade antiga
 MODEL_LAYOUTS = (("am/final.mdl", "conf/model.conf"),
                  ("final.mdl", "mfcc.conf", "HCLr.fst", "Gr.fst"))
-WAKE_VERSION = 3
+WAKE_VERSION = 4
 WAKE_GREETING = "Pois não, senhor? O que deseja?"
 
 
@@ -87,6 +88,13 @@ def command_phrases(config):
     for phrase in ("retomar cronos", "voltar cronos", "ativar cronos",
                    "retomar escuta", "continuar escuta"):
         alias(phrase, "resumed")
+    # The bundled Portuguese Vosk vocabulary does not contain the proper name
+    # "Cronos". It commonly decodes the same pronunciation as "cromos". Keep
+    # both spellings in the grammar and map them to the same safe fixed action.
+    for phrase, action in tuple(commands.items()):
+        phonetic = re.sub(r"\b(?:cronos|kronos|chronos)\b", "cromos", phrase)
+        if phonetic != phrase:
+            commands.setdefault(phonetic, action)
     return commands
 
 
@@ -326,6 +334,14 @@ def python_windowless():
     return candidate if candidate.exists() else Path(sys.executable)
 
 
+def app_launch_module():
+    """Use the standalone Cronos window when its WebView dependency exists."""
+    try:
+        return "cronos.desktop" if importlib.util.find_spec("webview") else "cronos.browser"
+    except (ImportError, ValueError):
+        return "cronos.browser"
+
+
 def start():
     if sys.platform != "win32":
         raise ValueError("O iniciador deve executar no Windows do usuário.")
@@ -413,7 +429,7 @@ def speak_activation_greeting():
             from fishaudio import AsyncFishAudio
 
             async def synthesize():
-                client = AsyncFishAudio(api_key=configured.fish_key, timeout=12.0)
+                client = AsyncFishAudio(api_key=configured.fish_key, timeout=5.0)
                 async with client:
                     return await client.tts.convert(
                         model=configured.fish_model, text=WAKE_GREETING,
@@ -438,7 +454,7 @@ def speak_activation_greeting():
         script += "for($i=0;$i -lt $voices.Count;$i++){if($voices.Item($i).GetDescription() -match 'Portugu|Brazil|Brasil|Francisca'){ $v.Voice=$voices.Item($i); break }}; "
         script += "$null=$v.Speak('Pois não, senhor? O que deseja?')"
         process = subprocess.run([str(executable), "-NoProfile", "-NonInteractive", "-Command", script],
-                                 shell=False, capture_output=True, timeout=12,
+                                 shell=False, capture_output=True, timeout=5,
                                  creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         return "windows_voice" if process.returncode == 0 else "unavailable"
     except Exception:
@@ -495,7 +511,12 @@ def listen():
                     if recognizer.AcceptWaveform(frame):
                         action = trigger.action(json.loads(recognizer.Result()))
                         if action == "activate":
-                            subprocess.Popen([str(python_windowless()), "-m", "cronos.browser"],
+                            # Prefer the packaged desktop shell. It safely
+                            # restores its existing window when already open;
+                            # browser.py is retained for installations without
+                            # pywebview.
+                            module = app_launch_module()
+                            subprocess.Popen([str(python_windowless()), "-m", module],
                                              cwd=Path(__file__).resolve().parent.parent, shell=False,
                                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                              creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))

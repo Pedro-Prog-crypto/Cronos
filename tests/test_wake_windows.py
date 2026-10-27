@@ -48,6 +48,13 @@ def test_wake_phrases_are_user_configurable_and_persisted(tmp_path,monkeypatch):
 def test_default_voice_commands_accept_spoken_variants_and_report_recognition(tmp_path,monkeypatch):
     monkeypatch.setattr(wake,'root',lambda:tmp_path)
     trigger=wake.Trigger(wake.DEFAULT_SETTINGS)
+    phrases=wake.command_phrases(wake.DEFAULT_SETTINGS)
+    assert phrases['cromos']=='activate'
+    assert phrases['abrir cromos']=='activate'
+    assert phrases['pausar cromos']=='paused'
+    assert phrases['retomar cromos']=='resumed'
+    assert trigger.action(result('cromos'),now=90)=='activate'
+    trigger=wake.Trigger(wake.DEFAULT_SETTINGS)
     assert trigger.action(result('pausar cronos'),now=100)=='paused'
     assert trigger.last_action=='paused' and trigger.last_heard=='pausar cronos'
     assert trigger.action(result('cronos'),now=101) is None
@@ -55,6 +62,13 @@ def test_default_voice_commands_accept_spoken_variants_and_report_recognition(tm
     assert trigger.action(result('abrir cronos'),now=102) is None
     assert trigger.action(result('retomar cronos'),now=103)=='resumed'
     assert trigger.action(result('abrir cronos'),now=104)=='activate'
+
+
+def test_desktop_voice_activation_prefers_the_cronos_window(monkeypatch):
+    monkeypatch.setattr(wake.importlib.util,'find_spec',lambda name:object() if name=='webview' else None)
+    assert wake.app_launch_module()=='cronos.desktop'
+    monkeypatch.setattr(wake.importlib.util,'find_spec',lambda name:None)
+    assert wake.app_launch_module()=='cronos.browser'
 
 
 def test_custom_activation_has_open_alias_and_preserves_exact_phrase_priority():
