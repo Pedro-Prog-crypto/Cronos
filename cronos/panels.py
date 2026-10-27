@@ -28,7 +28,7 @@ class Preferences(BaseModel):
     model_config = ConfigDict(extra='forbid')
     context_messages: int = Field(default=40, ge=2, le=100)
     language: Literal['pt-BR', 'en-US', 'es-ES'] = 'pt-BR'
-    response_style: Literal['natural', 'concise', 'detailed'] = 'natural'
+    response_style: Literal['natural', 'concise', 'detailed'] = 'detailed'
     called_only: bool = False
     auto_index: bool = True
     save_diary: bool = True
@@ -79,6 +79,13 @@ class PanelState:
                     data=json.loads(row[0]);data['called_only']=False
                     payload=json.dumps(data);db.execute('UPDATE panel_preferences SET payload=? WHERE id=1',(payload,));row=(payload,)
                 db.execute('INSERT INTO panel_migrations(name) VALUES(?)',('continuous-conversation-v2',))
+            if not db.execute('SELECT 1 FROM panel_migrations WHERE name=?',('detailed-responses-v1',)).fetchone():
+                if row:
+                    data=json.loads(row[0])
+                    if data.get('response_style','natural')=='natural':
+                        data['response_style']='detailed'
+                        payload=json.dumps(data);db.execute('UPDATE panel_preferences SET payload=? WHERE id=1',(payload,));row=(payload,)
+                db.execute('INSERT INTO panel_migrations(name) VALUES(?)',('detailed-responses-v1',))
         self.preferences = Preferences(context_messages=state.engine.settings.context_messages,
                                        voice_speed=state.engine.settings.fish_speed,
                                        commands_enabled=state.engine.settings.allow_executables)

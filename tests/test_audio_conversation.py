@@ -1,4 +1,5 @@
 import asyncio,io,json,wave
+from urllib.parse import quote
 from dataclasses import replace
 from types import SimpleNamespace as NS
 from fastapi.testclient import TestClient
@@ -6,6 +7,7 @@ import pytest
 from cronos.app import create_app
 from cronos import gemini_live
 from cronos.reply_stream import transcript_sink
+from cronos.providers import ProviderError
 from test_backend import settings,AUTH
 
 
@@ -122,6 +124,55 @@ def test_audio_waits_briefly_for_late_input_transcription(settings):
         async def __aexit__(self,*args):pass
     result=asyncio.run(gemini_live.turn(NS(aio=NS(live=NS(connect=lambda **kw:Connection()))),settings.gemini_live_model,'persona',[{'role':'user','content':'Pergunta falada','audio_pcm':b'\0\0'*400}]))
     assert result['recognized_text']=='Quem foi Sócrates?' and session.rounds==2
+
+
+def test_missing_live_transcript_emits_no_partial_reply_and_is_recoverable(settings):
+    raw=json.dumps({'tool_calls':[],'reply':'Não deve aparecer antes da transcrição.','topics':[]})
+    delivered=[]
+    class Session:
+        async def send_realtime_input(self,**kw):pass
+        async def receive(self):
+            yield NS(server_content=NS(output_transcription=NS(text=raw),turn_complete=True))
+    class Connection:
+        async def __aenter__(self):return Session()
+        async def __aexit__(self,*args):pass
+    async def run():
+        from cronos.reply_stream import reply_sink
+        async def sink(text):delivered.append(text)
+        token=reply_sink.set(sink)
+        try:
+            with pytest.raises(ProviderError) as error:
+                await gemini_live.turn(NS(aio=NS(live=NS(connect=lambda **kw:Connection()))),settings.gemini_live_model,'persona',[{'role':'user','content':'Pergunta falada','audio_pcm':b'\0\0'*400}])
+            assert getattr(error.value,'kind',None)=='audio_transcription_missing'
+        finally:reply_sink.reset(token)
+    asyncio.run(run())
+    assert delivered==[]
+
+
+def test_live_transcription_failure_falls_back_to_configured_asr_and_preserves_question(settings):
+    question='Cronos, explique quem foi Zeus em detalhes.'
+    heard='Pergunta anterior: quem foi Zeus. Trecho já ouvido: Zeus era filho de Cronos.'
+    class ASR:
+        async def transcribe(self,**kwargs):
+            assert kwargs['audio']==wav() and kwargs['language']=='pt'
+            return NS(text=question)
+    class Fish:
+        asr=ASR()
+        async def __aenter__(self):return self
+        async def __aexit__(self,*args):pass
+    class Provider:
+        async def reply(self,system,messages):
+            if messages[-1].get('audio_pcm'):
+                raise ProviderError('Sem transcrição do Live',502,kind='audio_transcription_missing')
+            assert 'Trecho já ouvido' in system and 'não repita toda a explicação' in system
+            return {'reply':'Zeus era o principal deus do Olimpo.','topics':[],'tool_calls':[]}
+    with TestClient(create_app(replace(settings,gemini_transport='live',fish_key='configured'),Provider(),fish_factory=Fish)) as client:
+        response=client.post('/chat/audio/stream',headers={**AUTH,'Content-Type':'audio/wav','X-Cronos-Heard-Context':quote(heard,safe='')},content=wav())
+        events=[json.loads(line) for line in response.text.splitlines()]
+        assert [event['type'] for event in events if event['type'] in {'transcript','result'}]==['transcript','result']
+        assert events[0]['text']==question
+        assert events[-1]['result']['recognized_text']==question
+        assert events[-1]['result']['reply']=='Zeus era o principal deus do Olimpo.'
 
 
 def test_partial_input_transcript_is_not_used_as_a_complete_command(settings):

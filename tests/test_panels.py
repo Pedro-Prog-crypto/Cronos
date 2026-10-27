@@ -59,6 +59,16 @@ def test_permissions_enforced_and_revocation_cancels_pending_action(settings):
         assert denied['status']=='failed'
 
 
+def test_detailed_is_the_default_and_short_style_remains_a_user_choice(settings):
+    with TestClient(create_app(settings)) as client:
+        preferences=client.get('/panels',headers=AUTH).json()['preferences']
+        assert preferences['response_style']=='detailed'
+        concise=client.patch('/panels/preferences',json={'response_style':'concise'},headers=AUTH)
+        assert concise.status_code==200 and concise.json()['preferences']['response_style']=='concise'
+    with TestClient(create_app(settings)) as client:
+        assert client.get('/panels',headers=AUTH).json()['preferences']['response_style']=='concise'
+
+
 def test_backup_uses_consistent_sqlite_and_only_markdown(settings):
     with TestClient(create_app(settings)) as client:
         (settings.vault/'Temas'/'Platao.md').write_text('# Platão\nTexto de teste.')

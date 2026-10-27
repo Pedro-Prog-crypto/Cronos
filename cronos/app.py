@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 import secrets
 from pathlib import Path
 from contextlib import asynccontextmanager
@@ -31,6 +32,7 @@ from cronos.panels import PanelState, install_panels
 class ChatInput(BaseModel):
     message: str = Field(min_length=1, max_length=16000)
     session_id: UUID | None = None
+    heard_context: str | None = Field(default=None, max_length=10000)
 
 
 class SpeechInput(BaseModel):
@@ -270,7 +272,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         request.app.state.features.record("language", "passed", "Uma conversa foi processada e salva. Não certifica precisão de todas as respostas.")
         return result
 
-    async def conversation_stream(session,message,request,audio=None):
+    async def conversation_stream(session,message,request,audio=None,audio_fallback=None,heard_context=None):
         from cronos.reply_stream import reply_sink,intro_sink,transcript_sink
         async def events():
             panels=request.app.state.panels;panels.active+=1
@@ -296,7 +298,22 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 token=reply_sink.set(ready);intro_token=intro_sink.set(intro);transcript_token=transcript_sink.set(transcript)
                 try:
                     async with request.app.state.lock:
-                        try:result=await request.app.state.engine.chat(session,message,**({'audio':audio} if audio is not None else {}))
+                        try:
+                            try:
+                                options={'audio':audio} if audio is not None else {}
+                                if heard_context:options['heard_context']=heard_context
+                                result=await request.app.state.engine.chat(session,message,**options)
+                            except ProviderError as exc:
+                                if audio is None or audio_fallback is None or exc.kind!='audio_transcription_missing' or spoken is not None or intro_text is not None:
+                                    raise
+                                recognized=await transcribe_fallback(audio_fallback)
+                                if not recognized:raise ProviderError('A gravação foi mantida, mas não consegui reconhecer a pergunta. Tente novamente ou use o botão de envio de texto.',502) from None
+                                await transcript(recognized)
+                                if panels.preferences.called_only and not re.search(r'\b(?:cronos|kronos|chronos)\b',recognized,re.I):
+                                    result={'session_id':str(session),'reply':'','recognized_text':recognized,'ignored':True,'topics':[],'notes':[],'tool_results':[],'warnings':[],'timings_ms':{}}
+                                else:
+                                    result=await request.app.state.engine.chat(session,recognized,**({'heard_context':heard_context} if heard_context else {}))
+                                    result['recognized_text']=recognized
                         finally:request.app.state.engine.phase='idle'
                     if not result.get('ignored') and ((spoken is not None and spoken!=result['reply']) or (intro_text is not None and not result['reply'].startswith(intro_text))):
                         raise ProviderError('A resposta transmitida não corresponde ao resultado final.',502)
@@ -327,7 +344,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
     @app.post("/chat/stream", dependencies=[Depends(authenticate)])
     async def stream_chat(body: ChatInput, request: Request):
         if not body.message.strip():raise HTTPException(422,"A mensagem não pode ser vazia.")
-        return await conversation_stream(body.session_id or uuid4(),body.message,request)
+        return await conversation_stream(body.session_id or uuid4(),body.message,request,heard_context=body.heard_context)
 
     @app.post('/chat/audio/stream',dependencies=[Depends(authenticate)])
     async def stream_audio(request: Request,session_id: UUID | None = None):
@@ -341,11 +358,14 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
             if size>2*1024*1024:raise HTTPException(413,'Áudio ultrapassa o limite de 2 MiB.')
             chunks.append(chunk)
         from cronos.recognition import read_pcm,check_signal
+        audio_wav=b''.join(chunks)
         try:
-            pcm=read_pcm(b''.join(chunks))
+            pcm=read_pcm(audio_wav)
             check_signal(pcm)
         except ValueError as exc:raise HTTPException(422,str(exc)) from None
-        return await conversation_stream(session_id or uuid4(),'Pergunta falada',request,pcm)
+        from urllib.parse import unquote
+        heard_context=unquote(request.headers.get('X-Cronos-Heard-Context','')[:30000])[:10000] or None
+        return await conversation_stream(session_id or uuid4(),'Pergunta falada',request,pcm,audio_fallback=audio_wav,heard_context=heard_context)
 
     @app.get("/conversations/{session_id}", dependencies=[Depends(authenticate)])
     async def conversation(session_id: UUID, request: Request):
@@ -427,6 +447,23 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
             return fish_factory()
         from fishaudio import AsyncFishAudio
         return AsyncFishAudio(api_key=settings.fish_key, timeout=30.0)
+
+    async def transcribe_fallback(audio_wav: bytes) -> str:
+        """Recover an utterance when Gemini Live fails to emit input transcription."""
+        if settings.transcription_provider == 'vosk':
+            try:return (await asyncio.to_thread(local_recognizer.transcribe,audio_wav)).strip()
+            except ValueError as exc:raise ProviderError(str(exc),503) from None
+        try:
+            client=await fish_client()
+            async with client:
+                result=await client.asr.transcribe(audio=audio_wav,language='pt')
+            text=str(getattr(result,'text','') or '').strip()
+            if not text:raise ProviderError('O reconhecimento alternativo não encontrou fala inteligível.',502)
+            return text
+        except ProviderError:
+            raise
+        except Exception:
+            raise ProviderError('O reconhecimento alternativo de voz falhou. A gravação ficou preservada; tente novamente ou envie a pergunta por texto.',502) from None
 
     active_fish_model = settings.fish_model
 

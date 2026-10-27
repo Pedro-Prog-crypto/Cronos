@@ -35,8 +35,10 @@ def entries(source):
         bundled_image = path.suffix in {'.jpg','.png','.webp'} and str(path.parent) in {'cronos/studio/media', 'cronos/ui/assets'}
         bundled_hand_runtime = str(path.parent) == 'cronos/ui/assets' and path.suffix in {'.wasm','.data','.tflite','.binarypb'}
         bundled_reference = (name.startswith('cronos/studio/mistral_original/') and path.suffix in {'.txt','.json'}) or (str(path.parent) == 'cronos/studio/threed/vendor' and path.suffix in {'.txt','.json'})
+        ui_runtime = (name.startswith(('cronos/ui/assets/','cronos/ui/cesium/','cronos/ui/licenses/'))
+                     and path.suffix.lower() in {'.js','.mjs','.cjs','.css','.html','.json','.txt','.png','.jpg','.jpeg','.webp','.svg','.gif','.wasm','.data','.tflite','.binarypb','.woff','.woff2','.xml'})
         if (not name.startswith('cronos/') or '\\' in name or ':' in name or any(p.startswith('.') for p in path.parts)
-            or path.name.lower() in PRIVATE or not (path.suffix in {'.py','.js','.css','.html'} or bundled_image or bundled_hand_runtime or bundled_reference)):
+            or path.name.lower() in PRIVATE or not (path.suffix in {'.py','.js','.css','.html'} or bundled_image or bundled_hand_runtime or bundled_reference or ui_runtime)):
             raise ValueError('O manifesto inclui um destino fora do codigo permitido.')
         origin=regular(source/name)
         if not origin.is_file() or digest(origin)!=expected:raise ValueError('Pacote incompleto ou alterado: '+name)

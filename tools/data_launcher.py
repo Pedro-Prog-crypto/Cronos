@@ -31,7 +31,7 @@ def unpack(destination, encoded=PAYLOAD_BASE64, checksum=PAYLOAD_SHA256):
     destination=Path(destination)
     with zipfile.ZipFile(io.BytesIO(raw)) as package:
         infos=package.infolist()
-        if len(infos)>300 or sum(i.file_size for i in infos)>60*1024*1024:raise ValueError('Pacote interno invalido.')
+        if len(infos)>1500 or sum(i.file_size for i in infos)>150*1024*1024:raise ValueError('Pacote interno invalido.')
         for info in infos:
             path=PurePosixPath(info.filename)
             if path.is_absolute() or any(part in {'.','..'} or ':' in part or '\\' in part for part in path.parts):raise ValueError('Caminho interno invalido.')

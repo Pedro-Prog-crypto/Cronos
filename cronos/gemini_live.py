@@ -28,7 +28,7 @@ def make_client(key):
 async def turn(client,model,system,messages,thinking_budget=0):
     from google.genai import types
     started=time.perf_counter();metrics={}
-    delivered=False;intro_delivered=False;turn_finished=False
+    delivered=False;intro_delivered=False;turn_finished=False;input_finished=False
     audio=messages[-1].get('audio_pcm') if messages else None
     config=types.LiveConnectConfig(response_modalities=['AUDIO'],output_audio_transcription={},thinking_config=types.ThinkingConfig(thinking_budget=thinking_budget),system_instruction=system+'\n'+OUTPUT_RULES,**({'input_audio_transcription':{},'realtime_input_config':{'automatic_activity_detection':{'disabled':True}}} if audio is not None else {}))
     async with client.aio.live.connect(model=model,config=config) as session:
@@ -51,24 +51,25 @@ async def turn(client,model,system,messages,thinking_budget=0):
             await session.send_realtime_input(activity_end=types.ActivityEnd())
         sent=time.perf_counter();chunks=[];input_chunks=[];transcript_delivered=False
         async def drain():
-            nonlocal delivered,intro_delivered,transcript_delivered,turn_finished
+            nonlocal delivered,intro_delivered,transcript_delivered,turn_finished,input_finished
             async for response in session.receive():
                 content=getattr(response,'server_content',None)
                 recognized=getattr(content,'input_transcription',None)
                 if getattr(recognized,'text',None):input_chunks.append(recognized.text)
                 if audio is not None and getattr(recognized,'finished',False) and input_chunks and not transcript_delivered:
+                    input_finished=True
                     await deliver_transcript(''.join(input_chunks).strip());transcript_delivered=True
                 transcription=getattr(content,'output_transcription',None)
                 if getattr(transcription,'text',None):
                     if not chunks:metrics['first_transcription_ms']=round((time.perf_counter()-sent)*1000)
                     chunks.append(transcription.text)
                     candidate=re.sub(r'^```(?:json)?\s*|\s*```$','', ''.join(chunks).strip(),flags=re.I)
-                    if not intro_delivered:
+                    if not intro_delivered and (audio is None or transcript_delivered):
                         intro=ready_intro(candidate)
                         if intro:
                             await deliver_intro(intro);intro_delivered=True
                             metrics['intro_ready_ms']=round((time.perf_counter()-sent)*1000)
-                    if not delivered:
+                    if not delivered and (audio is None or transcript_delivered):
                         early=ready_reply(candidate)
                         if early:
                             await deliver(early);delivered=True
@@ -77,10 +78,10 @@ async def turn(client,model,system,messages,thinking_budget=0):
                         try:parse_live_output(candidate)
                         except ProviderError:pass
                         else:
-                            if audio is None or input_chunks:return True  # Full payload and actual spoken question are available.
+                            if audio is None or transcript_delivered:return True  # Full payload and actual spoken question are available.
                 if getattr(content,'turn_complete',False):
                     turn_finished=True
-                    return audio is None or bool(input_chunks)
+                    return audio is None or transcript_delivered
             return False
         complete=await drain()
         if not complete:
@@ -89,13 +90,16 @@ async def turn(client,model,system,messages,thinking_budget=0):
         raw=''.join(chunks).strip()
         # Some Live models wrap valid structured output in markdown fences.
         raw=re.sub(r'^```(?:json)?\s*|\s*```$','',raw,flags=re.I)
+        if audio is not None:
+            recognized=''.join(input_chunks).strip()
+            if not recognized or len(recognized)>16000 or not input_finished:
+                raise ProviderError('Gemini não retornou uma transcrição válida da pergunta falada.',502,kind='audio_transcription_missing')
         result,recovered=parse_live_output(raw,complete=complete,allow_plain=turn_finished)
         metrics['format_recovered']=recovered
         if audio is not None:
-            recognized=''.join(input_chunks).strip()
-            if not recognized or len(recognized)>16000:raise ProviderError('Gemini não retornou uma transcrição válida da pergunta falada.',502)
             result['recognized_text']=recognized
             if not transcript_delivered:await deliver_transcript(recognized)
+            if not delivered:await deliver(result['reply']);delivered=True
         metrics['response_ready_ms']=round((time.perf_counter()-sent)*1000)
         conversation_metrics.save_live(metrics)
         return result
@@ -125,7 +129,7 @@ async def reply(settings,system,messages):
             usage.audit(model,502,characters)
             message='Gemini Live: '+str(exc)
             record_gemini_error(502,message)
-            raise ProviderError(message,502) from None
+            raise ProviderError(message,502,kind=exc.kind) from None
         except asyncio.TimeoutError:
             usage.audit(model,504,characters)
             last=ProviderError('Gemini Live: tempo de resposta esgotado; verificando a próxima rota Live disponível.',504)
