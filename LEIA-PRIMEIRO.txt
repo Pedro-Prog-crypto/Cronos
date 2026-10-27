@@ -7,10 +7,13 @@ que voce migrar ficam guardados aqui; ele nao precisa abrir outra instalacao.
 PRIMEIRA INSTALACAO
 1. Extraia o ZIP inteiro para uma pasta permanente, por exemplo Documentos\Cronos.
 2. Feche o Cronos antigo.
-3. Execute MIGRAR-DADOS-DA-VERSAO-ANTIGA.bat e escolha a pasta antiga do Cronos.
-   O migrador copia .env, integracoes, vault/memorias e personalidade. Ele cria uma
-   copia de seguranca dos dados que ja existirem na pasta nova. A pasta antiga nao
-   e alterada. O arquivo .env e as chaves nunca sao enviados ao GitHub.
+3. Para importar dados, copie a pasta antiga completa para Dados-Para-Importar e
+   execute IMPORTAR-DADOS-PARA-CRONOS.bat. Com .env e vault, ele importa integracoes,
+   memorias e personalidade, guardando os dados atuais em .cronos-migracao-backups.
+   Se copiar somente um vault, ele mescla notas e anexos sem sobrescrever arquivos;
+   o banco SQLite antigo fica preservado na origem e nao e mesclado. A origem e mantida.
+   Notas Markdown no vault sao indexadas automaticamente. Chaves e vault privado nunca
+   vao para o GitHub.
 4. Execute ABRIR-CRONOS.bat. Na primeira vez ele instala as dependencias nesta pasta;
    isso exige Python 3.11+ de 64 bits e acesso a internet. Depois, basta usar esse
    mesmo arquivo para abrir o Cronos.

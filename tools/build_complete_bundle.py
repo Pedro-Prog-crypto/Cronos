@@ -6,7 +6,7 @@ import subprocess
 import zipfile
 
 ROOT=Path(__file__).resolve().parents[1]
-EXTRA=['docs/INTEGRACAO-MISTRAL-3D.md','docs/STUDIO_DE_SITES.md','ABRIR-CRONOS.bat','Instalar-Cronos.bat','MIGRAR-DADOS-DA-VERSAO-ANTIGA.bat','Criar-Atalho-Cronos.vbs','LEIA-PRIMEIRO.txt','tools/migrate_local_data.py','tools/apply_interface_update.py','tools/start_bundle.py','tools/launch_bundle.vbs','tools/interface_update_manifest.json']
+EXTRA=['docs/INTEGRACAO-MISTRAL-3D.md','docs/STUDIO_DE_SITES.md','ABRIR-CRONOS.bat','Instalar-Cronos.bat','MIGRAR-DADOS-DA-VERSAO-ANTIGA.bat','IMPORTAR-DADOS-PARA-CRONOS.bat','Criar-Atalho-Cronos.vbs','LEIA-PRIMEIRO.txt','tools/migrate_local_data.py','tools/import_vault_folder.py','tools/apply_interface_update.py','tools/start_bundle.py','tools/launch_bundle.vbs','tools/interface_update_manifest.json']
 
 
 def build_patch():

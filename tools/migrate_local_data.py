@@ -110,7 +110,11 @@ def _copy_tree(source: Path, destination: Path) -> None:
 def migrate(selected: Path, target: Path) -> Path:
     selected = selected.expanduser().resolve(strict=True)
     target = target.expanduser().resolve(strict=True)
-    if selected == target or selected in target.parents or target in selected.parents:
+    # A designated drop folder inside the new installation is safe: migration
+    # only replaces .env, vault, providers and personality, never this source.
+    # Arbitrary nested folders remain rejected to avoid selecting live data.
+    drop_folder = (target / "Dados-Para-Importar").resolve()
+    if selected == target or selected in target.parents or (target in selected.parents and selected != drop_folder):
         raise ValueError("Escolha a pasta da versão antiga. Ela não pode ser a pasta nova nem conter a pasta nova.")
 
     data = _data_root(selected)
