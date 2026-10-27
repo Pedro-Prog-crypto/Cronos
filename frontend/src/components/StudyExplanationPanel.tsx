@@ -8,6 +8,7 @@ import './StudyExplanationPanel.css';
 type StoryImage={title:string;url:string;proxy_url:string;source_url:string;license:string;artist:string;provider?:string;kind?:'image'};
 type StoryMedia={images:StoryImage[]};
 const mediaCache=new Map<string,{media:StoryMedia;expires:number}>();
+const mediaInflight=new Map<string,Promise<StoryMedia>>();
 export type StudyPanelItem={id:string;title:string;reply:string;slot:number;locked:boolean;minimized:boolean;createdAt:number;position?:{left:number;top:number};spokenChunk?:string;spokenChunkIndex?:number;references?:Array<{title:string;url:string;excerpt?:string}>};
 type Props={panels:StudyPanelItem[];activeId?:string|null;speaking?:boolean;generating?:boolean;onClose:(id:string)=>void};
 
@@ -29,10 +30,11 @@ function StudyStory({panel,onClose}:{panel:StudyPanelItem;onClose:()=>void}){
    setImages(cached.media.images);setLoadState(cached.media.images.length?'ready':'failed');return()=>{alive=false;};
   }
   if(cached)mediaCache.delete(key);
-  const controller=new AbortController();setLoadState('loading');
-  void api(`/studies/images?query=${encodeURIComponent(collectionQuery)}&limit=18&attempt=${retry}`,{signal:controller.signal})
-   .then(response=>response.json()).then((data:any)=>{
-    if(!alive)return;
+  setLoadState('loading');
+  let request=mediaInflight.get(key);
+  if(!request){
+   request=api(`/studies/images?query=${encodeURIComponent(collectionQuery)}&limit=18&attempt=${retry}`)
+    .then(response=>{if(!response.ok)throw new Error('A busca de imagens falhou.');return response.json();}).then((data:any)=>{
     const urls=new Set<string>(),titles=new Set<string>();
     const results:StoryImage[]=(data.images||[]).filter((item:StoryImage)=>{
      const url=normalizedImageUrl(item.url),title=normalizedImageTitle(item.title);
@@ -41,10 +43,17 @@ function StudyStory({panel,onClose}:{panel:StudyPanelItem;onClose:()=>void}){
      urls.add(url);if(title.length>5)titles.add(title);return true;
     }).slice(0,18);
     const media={images:results};
-    if(results.length)mediaCache.set(key,{media,expires:Date.now()+20*60*1000});
+    mediaCache.set(key,{media,expires:Date.now()+20*60*1000});
+    return media;
+   }).finally(()=>mediaInflight.delete(key));
+   mediaInflight.set(key,request);
+  }
+  void request.then(media=>{
+    if(!alive)return;
+    const results=media.images;
     setImages(results);setFailedCount(0);setLoadState(results.length?'ready':'failed');
-   }).catch(()=>{if(alive&&!controller.signal.aborted)setLoadState('failed');});
-  return()=>{alive=false;controller.abort();};
+   }).catch(()=>{if(alive)setLoadState('failed');});
+  return()=>{alive=false;};
  },[collectionQuery,panel.reply.length,retry]);
  useEffect(()=>{
   if(!images.length){setImageSources({});setFailedCount(0);setPhotosLoading(false);return;}
