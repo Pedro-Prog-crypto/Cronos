@@ -24,23 +24,15 @@ export function hammingDistance(left:string,right:string){
  return distance;
 }
 
-export function isNearDuplicateHash(candidate:string,accepted:string[],maxDistance=4){
+export function isNearDuplicateHash(candidate:string,accepted:string[],maxDistance=1){
  return accepted.some(hash=>hammingDistance(candidate,hash)<=maxDistance);
 }
 
-export function selectWallImages<T>(images:T[],scene:number,limit=8):T[]{
- if(!images.length||limit<1)return [];
- const count=Math.min(images.length,limit),start=((Math.max(0,scene)*6)%images.length);
- return Array.from({length:count},(_,index)=>images[(start+index)%images.length]);
-}
-
-export function wallGridLayout(count:number){
- const n=Math.max(0,Math.min(8,Math.floor(count)));
- if(n<=2)return {columns:Math.max(1,n),rows:1,lastSpan:1};
- if(n===3)return {columns:2,rows:2,lastSpan:2};
- if(n===4)return {columns:2,rows:2,lastSpan:1};
- if(n===5)return {columns:3,rows:2,lastSpan:2};
- if(n===6)return {columns:3,rows:2,lastSpan:1};
- if(n===7)return {columns:4,rows:2,lastSpan:2};
- return {columns:4,rows:2,lastSpan:1};
+export function partitionWallImages<T>(images:T[],offset=0,rowCount=4):T[][]{
+ if(!images.length||rowCount<1)return [];
+ const start=((Math.max(0,Math.floor(offset))%images.length)+images.length)%images.length;
+ const rotated=images.slice(start).concat(images.slice(0,start));
+ const rows=Array.from({length:Math.min(rowCount,rotated.length)},()=>[] as T[]);
+ rotated.forEach((image,index)=>rows[index%rows.length].push(image));
+ return rows;
 }

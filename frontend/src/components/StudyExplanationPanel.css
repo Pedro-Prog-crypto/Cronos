@@ -68,6 +68,20 @@
 @keyframes study-wall-photo{from{transform:scale(1)}to{transform:scale(1.055)}}
 @media(max-width:700px){.study-visual-mosaic{gap:2px}.study-visual-tile img{animation-duration:28s}}
 @media(prefers-reduced-motion:reduce){.study-visual-mosaic,.study-visual-tile,.study-visual-tile img{animation:none}}
+.study-film-wall{position:absolute;inset:0;display:grid;grid-template-rows:repeat(4,minmax(0,1fr));gap:3px;overflow:hidden;background:#020711}
+.study-film-lane{position:relative;min-width:0;min-height:0;overflow:hidden;mask-image:linear-gradient(90deg,transparent,#000 1.5%,#000 98.5%,transparent)}
+.study-film-lane-track{position:absolute;inset:0 auto 0 0;display:flex;width:max-content;height:100%;animation:study-lane-left var(--lane-duration,30s) linear infinite;will-change:transform}
+.study-film-lane.lane-2 .study-film-lane-track{animation-duration:calc(var(--lane-duration,30s)*1.08);animation-delay:-5s}
+.study-film-lane.lane-3 .study-film-lane-track{animation-duration:calc(var(--lane-duration,30s)*.94);animation-delay:-11s}
+.study-film-lane.lane-4 .study-film-lane-track{animation-duration:calc(var(--lane-duration,30s)*1.14);animation-delay:-17s}
+.study-film-lane-set{display:flex;flex:none;align-items:stretch;gap:3px;height:100%;width:max-content}
+.study-film-tile{position:relative;flex:none;width:var(--lane-tile-width,clamp(112px,16.6667vw,380px));height:100%;min-width:0;margin:0;overflow:hidden;background:#07101c}
+.study-film-tile img{display:block;width:100%;height:100%;object-fit:cover;object-position:center;filter:saturate(.98) contrast(1.04);transform:scale(1.025);transition:filter .4s ease,transform 5s ease}
+.study-film-tile:hover img{filter:saturate(1.1) contrast(1.07);transform:scale(1.07)}
+.study-film-tile:after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,#02071120,transparent 24%,transparent 78%,#02071135);border-right:1px solid #8ddcff30}
+@keyframes study-lane-left{to{transform:translateX(-50%)}}
+@media(max-width:700px){.study-film-wall{gap:2px}.study-film-lane-set{gap:2px}.study-film-lane-track{--lane-tile-width:max(33.333vw,calc(100vw / 3))}}
+@media(prefers-reduced-motion:reduce){.study-film-lane-track{animation-duration:90s}}
 @keyframes study-film-traverse{to{transform:translateX(-50%)}}
 @keyframes study-film-arrive{from{opacity:.45;filter:blur(4px) drop-shadow(0 12px 30px #0009)}to{opacity:1;filter:drop-shadow(0 12px 30px #0009)}}
 @keyframes study-caption-in{from{opacity:0;filter:blur(5px);translate:0 12px}to{opacity:1;filter:blur(0);translate:0 0}}
