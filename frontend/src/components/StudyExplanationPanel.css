@@ -57,6 +57,17 @@
 .study-cinema-fallback{flex-direction:column;gap:10px;letter-spacing:.08em}
 .study-cinema-fallback button,.study-cinema-fallback a{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:7px 10px;color:#dff8ff;background:#07314a;border:1px solid #47bde4;border-radius:3px;font:700 10px Rajdhani,sans-serif;text-decoration:none;cursor:pointer}
 .study-cinema-fallback>div{display:flex;gap:8px}
+.study-visual-mosaic{position:absolute;inset:0;display:grid;grid-template-columns:repeat(var(--wall-columns,4),minmax(0,1fr));grid-template-rows:repeat(var(--wall-rows,2),minmax(0,1fr));grid-auto-flow:row dense;gap:clamp(2px,.35vw,6px);overflow:hidden;background:#020711;animation:study-wall-change .55s ease both}
+.study-visual-tile{position:relative;min-width:0;min-height:0;margin:0;overflow:hidden;background:radial-gradient(ellipse at center,#10243a,#030912 78%);animation:study-wall-tile-in .5s cubic-bezier(.2,.7,.2,1) both;animation-delay:calc(min(var(--tile-index,0),7)*45ms)}
+.study-visual-tile img{display:block;width:100%;height:100%;object-fit:cover;object-position:center;filter:saturate(.96) contrast(1.04);animation:study-wall-photo 16s ease-in-out infinite alternate;will-change:transform}
+.study-visual-tile:nth-child(3n) img{animation-duration:19s;animation-delay:-5s}
+.study-visual-tile:nth-child(3n + 1) img{animation-duration:22s;animation-delay:-9s}
+.study-visual-mosaic:after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,#02071128,transparent 18%,transparent 82%,#02071140);box-shadow:inset 0 0 100px #02071166}
+@keyframes study-wall-change{from{opacity:.35;filter:blur(5px)}to{opacity:1;filter:blur(0)}}
+@keyframes study-wall-tile-in{from{opacity:0;transform:scale(.975)}to{opacity:1;transform:scale(1)}}
+@keyframes study-wall-photo{from{transform:scale(1)}to{transform:scale(1.055)}}
+@media(max-width:700px){.study-visual-mosaic{gap:2px}.study-visual-tile img{animation-duration:28s}}
+@media(prefers-reduced-motion:reduce){.study-visual-mosaic,.study-visual-tile,.study-visual-tile img{animation:none}}
 @keyframes study-film-traverse{to{transform:translateX(-50%)}}
 @keyframes study-film-arrive{from{opacity:.45;filter:blur(4px) drop-shadow(0 12px 30px #0009)}to{opacity:1;filter:drop-shadow(0 12px 30px #0009)}}
 @keyframes study-caption-in{from{opacity:0;filter:blur(5px);translate:0 12px}to{opacity:1;filter:blur(0);translate:0 0}}

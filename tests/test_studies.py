@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from pypdf import PdfWriter
 
 from cronos.app import create_app
-from cronos.studies import LAYOUTS, MAX_LIBRARY_BYTES, MAX_PDF_BYTES, StudyStore, _PageText, _dedupe_study_images, _filter_philosopher_images, _media_search_terms, _public_http_url, _wikipedia_portraits
+from cronos.studies import LAYOUTS, MAX_LIBRARY_BYTES, MAX_PDF_BYTES, StudyStore, _PageText, _dedupe_study_images, _filter_philosopher_images, _filter_visual_subject, _media_search_terms, _public_http_url, _wikipedia_portraits
 from cronos.study_intent import is_study_request, requests_exhaustive_lookup
 from test_backend import AUTH, settings
 
@@ -118,6 +118,18 @@ def test_philosopher_image_filter_rejects_unrelated_search_results():
     assert [item['title'] for item in kept]==['Socrates bust in Athens','Plato marble portrait']
     generic,_=_filter_philosopher_images(images,[],'historical philosopher portrait bust sculpture')
     assert [item['title'] for item in generic]==['Socrates bust in Athens','Plato marble portrait']
+
+
+def test_napoleon_image_filter_rejects_random_food_and_chinese_multiplication_results():
+    images=[
+        {'title':'Napoleon Bonaparte in his coronation robes'},
+        {'title':'Napoleon at the Battle of Austerlitz'},
+        {'title':'Fried chicken sandwich with fries'},
+        {'title':'Multiplication table 125 in Chinese'},
+        {'title':'Napoleon cake dessert recipe'},
+    ]
+    kept,_=_filter_visual_subject(images,[],'Quem foi Napoleão Bonaparte? Napoleon Bonaparte historical portrait painting France campaign uniform')
+    assert [item['title'] for item in kept]==['Napoleon Bonaparte in his coronation robes','Napoleon at the Battle of Austerlitz']
 
 
 def test_study_image_deduplication_removes_url_aliases_repeated_titles_and_stock_cutouts():

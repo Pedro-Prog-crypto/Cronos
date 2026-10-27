@@ -2,7 +2,7 @@ import React,{useEffect,useMemo,useState} from 'react';
 import {ExternalLink,RotateCw,X} from 'lucide-react';
 import {api} from '../api';
 import {spokenSlideIndex,visualSlides} from '../visualSlides';
-import {isNearDuplicateHash,normalizedImageTitle,normalizedImageUrl} from '../studyImageDedupe';
+import {isNearDuplicateHash,normalizedImageTitle,normalizedImageUrl,selectWallImages,wallGridLayout} from '../studyImageDedupe';
 import './StudyExplanationPanel.css';
 
 type StoryImage={title:string;url:string;proxy_url:string;source_url:string;license:string;artist:string;provider?:string;kind?:'image'};
@@ -13,12 +13,15 @@ type Props={panels:StudyPanelItem[];activeId?:string|null;speaking?:boolean;gene
 
 function StudyStory({panel,onClose}:{panel:StudyPanelItem;onClose:()=>void}){
  const slides=useMemo(()=>visualSlides(panel.reply,panel.title),[panel.reply,panel.title]);
- const active=spokenSlideIndex(slides,panel.spokenChunk||'',0),slide=slides[active];
+ const active=spokenSlideIndex(slides,panel.spokenChunk||'',0);
+ const collectionQuery=slides[0]?.query||panel.title;
  const [images,setImages]=useState<StoryImage[]>([]),[imageSources,setImageSources]=useState<Record<string,string>>({}),[loadState,setLoadState]=useState<'waiting'|'loading'|'ready'|'failed'>('waiting'),[photosLoading,setPhotosLoading]=useState(false),[failedCount,setFailedCount]=useState(0),[retry,setRetry]=useState(0);
  const visibleImages=images.filter(image=>Boolean(imageSources[image.proxy_url]));
+ const wallImages=useMemo(()=>selectWallImages(visibleImages,active,8),[visibleImages,active]);
+ const wallLayout=wallGridLayout(wallImages.length);
  useEffect(()=>{
   let alive=true;
-  const key=`${slide.query.toLocaleLowerCase('pt-BR')}|tentativa:${retry}`;
+  const key=`${collectionQuery.toLocaleLowerCase('pt-BR')}|tentativa:${retry}`;
   if(panel.reply.length<=80){setLoadState('waiting');return()=>{alive=false;};}
   const cached=mediaCache.get(key);
   if(cached&&cached.expires>Date.now()){
@@ -26,7 +29,7 @@ function StudyStory({panel,onClose}:{panel:StudyPanelItem;onClose:()=>void}){
   }
   if(cached)mediaCache.delete(key);
   const controller=new AbortController();setLoadState('loading');
-  void api(`/studies/images?query=${encodeURIComponent(slide.query)}&limit=36&attempt=${retry}`,{signal:controller.signal})
+  void api(`/studies/images?query=${encodeURIComponent(collectionQuery)}&limit=36&attempt=${retry}`,{signal:controller.signal})
    .then(response=>response.json()).then((data:any)=>{
     if(!alive)return;
     const urls=new Set<string>(),titles=new Set<string>();
@@ -41,7 +44,7 @@ function StudyStory({panel,onClose}:{panel:StudyPanelItem;onClose:()=>void}){
     setImages(results);setFailedCount(0);setLoadState(results.length?'ready':'failed');
    }).catch(()=>{if(alive&&!controller.signal.aborted)setLoadState('failed');});
   return()=>{alive=false;controller.abort();};
- },[slide.query,panel.reply.length,retry]);
+ },[collectionQuery,panel.reply.length,retry]);
  useEffect(()=>{
   if(!images.length){setImageSources({});setFailedCount(0);setPhotosLoading(false);return;}
   const controller=new AbortController(),objectUrls:string[]=[];setImageSources({});setFailedCount(0);setPhotosLoading(true);
@@ -57,25 +60,14 @@ function StudyStory({panel,onClose}:{panel:StudyPanelItem;onClose:()=>void}){
   return()=>{controller.abort();objectUrls.forEach(URL.revokeObjectURL);};
  },[images]);
  const showFallback=loadState==='failed'&&!visibleImages.length||images.length>0&&!photosLoading&&!visibleImages.length;
- const duration=`${Math.max(34,visibleImages.length*1.5)}s`;
- const filmRows=Array.from({length:4},(_,rowIndex)=>{
-  const lane=visibleImages.filter((_,imageIndex)=>imageIndex%4===rowIndex);
-  const offset=lane.length?(rowIndex*3)%lane.length:0;
-  const shifted=[...lane.slice(offset),...lane.slice(0,offset)];
-  return rowIndex%2?shifted.reverse():shifted;
- });
- return <div className="study-cinema" style={{'--film-duration':duration} as React.CSSProperties}>
-  <div className="study-film-stage is-moving" aria-label="Mural de imagens relacionadas à explicação">
-   {filmRows.map((row,rowIndex)=><div className={`study-film-row is-row-${rowIndex+1}`} key={rowIndex}>
-    <div className="study-film-track">
-     {[0,1].flatMap(copy=>row.map((image,index)=><figure className="study-film-frame" key={`${rowIndex}-${copy}-${index}-${image.proxy_url}`}>
-       <img src={imageSources[image.proxy_url]} alt={copy===0?image.title:''} decoding="async" onError={()=>setImageSources(previous=>{const next={...previous};delete next[image.proxy_url];return next;})}/>
-      </figure>))}
-    </div>
-   </div>)}
+ return <div className="study-cinema" aria-label={`Imagens relacionadas a ${panel.title}`}>
+  <div className="study-visual-mosaic" style={{'--wall-columns':wallLayout.columns,'--wall-rows':wallLayout.rows} as React.CSSProperties}>
+   {wallImages.map((image,index)=><figure className="study-visual-tile" key={`${active}-${image.proxy_url}`} style={{'--tile-index':index,...(index===wallImages.length-1&&wallLayout.lastSpan>1?{gridColumn:`span ${wallLayout.lastSpan}`}:{})} as React.CSSProperties}>
+    <img src={imageSources[image.proxy_url]} alt={image.title} decoding="async" onError={()=>setImageSources(previous=>{const next={...previous};delete next[image.proxy_url];return next;})}/>
+   </figure>)}
   </div>
   {(loadState==='loading'&&!images.length||photosLoading&&!visibleImages.length)&&<div className="study-cinema-status"><i/><span>BUSCANDO IMAGENS PARA A EXPLICAÇÃO</span></div>}
-  {showFallback&&<div className="study-cinema-fallback"><span>AS IMAGENS NÃO CARREGARAM</span><button type="button" onClick={()=>setRetry(value=>value+1)}><RotateCw size={15}/> TENTAR OUTRAS IMAGENS</button><div><a href={`https://commons.wikimedia.org/wiki/Special:MediaSearch?type=image&search=${encodeURIComponent(slide.query)}`} target="_blank" rel="noreferrer">WIKIMEDIA <ExternalLink size={12}/></a><a href={`https://openverse.org/search/image?q=${encodeURIComponent(slide.query)}`} target="_blank" rel="noreferrer">OPENVERSE <ExternalLink size={12}/></a></div></div>}
+  {showFallback&&<div className="study-cinema-fallback"><span>SEM IMAGENS CONFIÁVEIS NESTA BUSCA</span><button type="button" onClick={()=>setRetry(value=>value+1)}><RotateCw size={15}/> TENTAR OUTRAS IMAGENS</button><div><a href={`https://commons.wikimedia.org/wiki/Special:MediaSearch?type=image&search=${encodeURIComponent(collectionQuery)}`} target="_blank" rel="noreferrer">WIKIMEDIA <ExternalLink size={12}/></a><a href={`https://openverse.org/search/image?q=${encodeURIComponent(collectionQuery)}`} target="_blank" rel="noreferrer">OPENVERSE <ExternalLink size={12}/></a></div></div>}
   {visibleImages.length>0&&<a className="study-cinema-credit" href={visibleImages[0].source_url} target="_blank" rel="noreferrer" aria-label="Abrir a fonte das imagens" title="Abrir a fonte das imagens"><ExternalLink size={14}/></a>}
   <button className="study-cinema-close" type="button" onClick={onClose} aria-label="Fechar apresentação" title="Fechar"><X size={20}/></button>
  </div>;

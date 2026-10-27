@@ -53,6 +53,19 @@ _PHILOSOPHER_ALIASES = {
     "rumi": ("rumi",), "avicenna": ("avicenna", "ibn sina"), "al ghazali": ("al ghazali", "al-ghazali"),
     "mencius": ("mencius",),
 }
+_VISUAL_SUBJECT_ALIASES = {
+    **_PHILOSOPHER_ALIASES,
+    "napoleon bonaparte": ("napoleon bonaparte", "napoleon", "napoleao", "bonaparte"),
+    "albert einstein": ("albert einstein", "einstein"),
+    "first world war": ("first world war", "world war i", "wwi", "primeira guerra", "1a guerra mundial"),
+    "second world war": ("second world war", "world war ii", "wwii", "segunda guerra", "2a guerra mundial"),
+    "julius caesar": ("julius caesar", "julius cesar", "julio cesar"),
+    "cleopatra": ("cleopatra", "cleopatra vii", "cleopatra do egito"),
+    "alexander the great": ("alexander the great", "alexandre o grande", "alexander iii"),
+    "abraham lincoln": ("abraham lincoln", "lincoln"),
+}
+_VISUAL_STOP_WORDS = set("a an and as at by de da das do dos e em para por com um uma o os the of who what when where why how was were is are foi era sobre quem qual quais historia history imagens imagem fotos foto picture pictures images portrait portraits painting paintings photograph photographs historical ancient museum sculpture natural background related explain explained tell me most important during vida dele ele ela they this that essas esses cada parte conceito causa causas efeito efeitos movimento movimento a civilização civilizacoes guerra mundial famoso famous biography biografia".split())
+_VISUAL_EXCLUDE_TERMS = ("cake", "dessert", "recipe", "food", "chicken", "fried", "multiplication", "times table", "tabuada", "homework", "worksheet")
 
 
 def _now() -> str:
@@ -111,7 +124,7 @@ def _media_search_terms(query: str) -> str:
         (("primeira guerra", "world war i", "wwi"), "First World War archival photographs trenches soldiers map"),
         (("segunda guerra", "world war ii", "wwii"), "Second World War archival photographs map soldiers"),
         (("einstein",), "Albert Einstein portrait physics black and white photograph"),
-        (("napoleao", "napoleon"), "Napoleon Bonaparte historical portrait painting France"),
+        (("napoleao", "napoleon", "bonaparte"), "Napoleon Bonaparte historical portrait painting France campaign uniform"),
     )
     for keys, hint in hints:
         if any(key in normalized for key in keys):
@@ -119,6 +132,42 @@ def _media_search_terms(query: str) -> str:
     if re.search(r"\b(?:filosof\w*|philosoph\w*|pensador(?:es)?)\b", normalized):
         return f"{query.strip()} historical philosopher portrait bust sculpture photograph museum painting natural background"[:200]
     return query.strip()[:200]
+
+
+def _filter_visual_subject(images: list[dict], videos: list[dict], query: str):
+    """Keep image hits tied to the requested person, event, or concrete topic."""
+    normalized = "".join(char for char in unicodedata.normalize("NFD", query.casefold()) if not unicodedata.combining(char))
+    requested = [aliases for aliases in _VISUAL_SUBJECT_ALIASES.values()
+                 if any(alias in normalized for alias in aliases)]
+
+    def fold(value: str) -> str:
+        return "".join(char for char in unicodedata.normalize("NFD", str(value).casefold()) if not unicodedata.combining(char))
+
+    if requested:
+        def named_relevant(item: dict) -> bool:
+            title = fold(item.get("title", ""))
+            if any(term in title for term in _VISUAL_EXCLUDE_TERMS):
+                return False
+            if any(alias in {"napoleon", "napoleao"} for aliases in requested for alias in aliases) and any(
+                term in title for term in ("napoleon cake", "gateau napoleon")
+            ):
+                return False
+            return any(alias in title for aliases in requested for alias in aliases)
+        return [item for item in images if named_relevant(item)], [item for item in videos if named_relevant(item)]
+
+    if re.search(r"\b(?:filosof\w*|philosoph\w*|pensador(?:es)?)\b", normalized):
+        return _filter_philosopher_images(images, videos, query)
+
+    terms = [word for word in re.findall(r"[\w-]+", normalized)
+             if len(word) >= 4 and word not in _VISUAL_STOP_WORDS and not word.isdigit()]
+    anchors = list(dict.fromkeys(terms))[:4]
+    if not anchors:
+        return images, videos
+
+    def topical(item: dict) -> bool:
+        title = fold(item.get("title", ""))
+        return any(anchor in title for anchor in anchors)
+    return [item for item in images if topical(item)], [item for item in videos if topical(item)]
 
 
 def _filter_philosopher_images(images: list[dict], videos: list[dict], query: str):
@@ -142,9 +191,9 @@ def _filter_philosopher_images(images: list[dict], videos: list[dict], query: st
 
 
 async def _wikipedia_portraits(client: httpx.AsyncClient, query: str, limit: int) -> list[dict]:
-    """Fetch article lead portraits for named philosophers as reliable visual anchors."""
+    """Fetch article lead images for named historical subjects as reliable visual anchors."""
     normalized = "".join(char for char in unicodedata.normalize("NFD", query.casefold()) if not unicodedata.combining(char))
-    people = [(canonical, aliases) for canonical, aliases in _PHILOSOPHER_ALIASES.items()
+    people = [(canonical, aliases) for canonical, aliases in _VISUAL_SUBJECT_ALIASES.items()
               if any(alias in normalized for alias in aliases)]
     if not people:
         return []
@@ -881,59 +930,51 @@ def install_studies(app, authenticate):
                             attempt: int = Query(default=0, ge=0, le=20)):
         """Collect an attributed media wall from multiple open media indexes.
 
-        This runs independently from chat/voice. Wikimedia is primary for both
-        stills and freely licensed clips; Openverse and optional DDGS fill the
-        wall when Commons has too few matches.
+        Sources are queried concurrently so slow image sites do not delay one
+        another or interrupt the spoken explanation. Search hits are checked
+        against the requested subject before they reach the interface.
         """
         search_query = _media_search_terms(query)
         headers = {"User-Agent": "CronosStudy/2.0 (educational visual references; local user request)"}
-        images, videos, tried, failures = [], [], [], []
+        tried = ["Wikimedia Commons", "Openverse", "Wikipédia", "DuckDuckGo Images"]
+        failures = []
+
+        async def run_source(name, awaitable):
+            try:
+                return await awaitable
+            except Exception:
+                failures.append(name)
+                return ([], []) if name == "Wikimedia Commons" else []
+
+        async def search_ddgs():
+            from ddgs import DDGS
+            proxy = os.getenv("DDGS_PROXY") or os.getenv("HTTPS_PROXY") or os.getenv("https_proxy")
+            def run():
+                with DDGS(timeout=6, proxy=proxy) as search:
+                    return list(search.images(search_query, max_results=min(24, limit)))
+            raw = await asyncio.wait_for(asyncio.to_thread(run), timeout=7)
+            records = []
+            for item in raw:
+                record = _image_record(item.get("thumbnail") or item.get("image"), item.get("title", ""),
+                                       item.get("url") or item.get("source"), "Search result", "", "DuckDuckGo")
+                if record:
+                    records.append(record)
+            return records
+
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(9, connect=5), headers=headers, follow_redirects=True) as client:
-                tried.append("Wikimedia Commons")
-                try:
-                    images, videos = await _commons_media(client, search_query, limit, offset=attempt * limit)
-                except (httpx.HTTPError, ValueError, KeyError, TypeError):
-                    failures.append("Wikimedia Commons")
-                images, videos = _filter_philosopher_images(images, videos, search_query)
-                images = _dedupe_study_images(images)
-                try:
-                    portraits = await _wikipedia_portraits(client, search_query, min(limit, 6))
-                    portraits, _ = _filter_philosopher_images(portraits, [], search_query)
-                    images = _dedupe_study_images(portraits + images)
-                except (httpx.HTTPError, ValueError, KeyError, TypeError):
-                    failures.append("Wikipédia")
-                if len(images) < min(24, limit):
-                    tried.append("Openverse")
-                    try:
-                        extra = await _openverse_images(client, search_query, limit - len(images), page=attempt + 1)
-                        extra, _ = _filter_philosopher_images(extra, [], search_query)
-                        images = _dedupe_study_images(images + extra)
-                    except (httpx.HTTPError, ValueError, KeyError, TypeError):
-                        failures.append("Openverse")
-                if len(images) < min(24, limit):
-                    tried.append("DuckDuckGo Images")
-                    try:
-                        from ddgs import DDGS
-                        proxy = os.getenv("DDGS_PROXY") or os.getenv("HTTPS_PROXY") or os.getenv("https_proxy")
-                        def search_ddgs():
-                            with DDGS(timeout=8, proxy=proxy) as search:
-                                return list(search.images(search_query, max_results=min(24, limit)))
-                        raw = await asyncio.wait_for(asyncio.to_thread(search_ddgs), timeout=10)
-                        seen = {item["url"] for item in images}
-                        extra = []
-                        for item in raw:
-                            record = _image_record(item.get("thumbnail") or item.get("image"), item.get("title", ""),
-                                                   item.get("url") or item.get("source"), "Search result", "", "DuckDuckGo")
-                            if record:
-                                extra.append(record)
-                        extra, _ = _filter_philosopher_images(extra, [], search_query)
-                        images = _dedupe_study_images(images + [record for record in extra if record["url"] not in seen])
-                    except Exception:
-                        failures.append("DuckDuckGo Images")
+            async with httpx.AsyncClient(timeout=httpx.Timeout(7, connect=3), headers=headers, follow_redirects=True) as client:
+                commons_task = run_source("Wikimedia Commons", _commons_media(client, search_query, limit, offset=attempt * limit))
+                openverse_task = run_source("Openverse", _openverse_images(client, search_query, limit, page=attempt + 1))
+                wikipedia_task = run_source("Wikipédia", _wikipedia_portraits(client, search_query, min(limit, 6)))
+                ddg_task = run_source("DuckDuckGo Images", search_ddgs())
+                commons, openverse, portraits, duckduckgo = await asyncio.gather(
+                    commons_task, openverse_task, wikipedia_task, ddg_task)
         except (httpx.HTTPError, ValueError):
-            failures.extend(source for source in ("Wikimedia Commons", "Openverse") if source not in failures)
-        images, videos = _filter_philosopher_images(images, videos, search_query)
+            failures.extend(source for source in tried if source not in failures)
+            commons, openverse, portraits, duckduckgo = ([], []), [], [], []
+        common_images, videos = commons
+        images = _dedupe_study_images(portraits + common_images + openverse + duckduckgo)
+        images, videos = _filter_visual_subject(images, videos, query)
         images = _dedupe_study_images(images)[:limit]
         images = [proxy_media_url(image) for image in images]
         safe_videos = []
