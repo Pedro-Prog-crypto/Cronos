@@ -243,7 +243,13 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 "fish_configured": bool(settings.fish_key) and settings.privacy_mode == 'online',
                 "transcription_provider": settings.transcription_provider,
                 "local_voice_interrupt":True,
-                "direct_audio_chat":current.privacy_mode=="online" and current.provider=="gemini" and current.gemini_transport=="live",
+                # Prefer the explicitly configured speech recognizer when it is
+                # available. Native Live audio bypasses Fish/Vosk and cannot
+                # use the normal text-provider failover after recognition.
+                "direct_audio_chat":current.privacy_mode=="online" and current.provider=="gemini" and current.gemini_transport=="live" and not (
+                    current.transcription_provider == "vosk" or
+                    current.transcription_provider == "fish" and bool(current.fish_key) and current.privacy_mode == "online"
+                ),
                 "fish_model_in_use": active_fish_model,
                 "fish_pcm_streaming": active_fish_model=="s2.1-pro-free" and settings.privacy_mode=="online",
                 "fish_speech_configured": bool(settings.fish_key and settings.fish_model) and settings.privacy_mode == "online",

@@ -132,6 +132,16 @@ def test_napoleon_image_filter_rejects_random_food_and_chinese_multiplication_re
     assert [item['title'] for item in kept]==['Napoleon Bonaparte in his coronation robes','Napoleon at the Battle of Austerlitz']
 
 
+def test_visual_filter_uses_exact_terms_and_requires_context_for_multiword_topics():
+    images=[
+        {'title':'Jim Beam telephone advertisement'},
+        {'title':'Cultura norte americana Jim history'},
+        {'title':'Cultural northern lights'},
+    ]
+    kept,_=_filter_visual_subject(images,[],'cultura norte americana Jim')
+    assert [item['title'] for item in kept]==['Cultura norte americana Jim history']
+
+
 def test_study_image_deduplication_removes_url_aliases_repeated_titles_and_stock_cutouts():
     images=[
         {'url':'https://upload.wikimedia.org/a/960px-Socrates.jpg?width=960','title':'Socrates statue'},

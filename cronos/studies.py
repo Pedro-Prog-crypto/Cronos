@@ -143,6 +143,12 @@ def _filter_visual_subject(images: list[dict], videos: list[dict], query: str):
     def fold(value: str) -> str:
         return "".join(char for char in unicodedata.normalize("NFD", str(value).casefold()) if not unicodedata.combining(char))
 
+    def contains_phrase(text: str, phrase: str) -> bool:
+        words = re.findall(r"[\w]+", phrase, flags=re.UNICODE)
+        if not words:
+            return False
+        return re.search(r"(?<!\w)" + r"\s+".join(re.escape(word) for word in words) + r"(?!\w)", text) is not None
+
     if requested:
         def named_relevant(item: dict) -> bool:
             title = fold(item.get("title", ""))
@@ -152,7 +158,7 @@ def _filter_visual_subject(images: list[dict], videos: list[dict], query: str):
                 term in title for term in ("napoleon cake", "gateau napoleon")
             ):
                 return False
-            return any(alias in title for aliases in requested for alias in aliases)
+            return any(contains_phrase(title, alias) for aliases in requested for alias in aliases)
         return [item for item in images if named_relevant(item)], [item for item in videos if named_relevant(item)]
 
     if re.search(r"\b(?:filosof\w*|philosoph\w*|pensador(?:es)?)\b", normalized):
@@ -166,7 +172,13 @@ def _filter_visual_subject(images: list[dict], videos: list[dict], query: str):
 
     def topical(item: dict) -> bool:
         title = fold(item.get("title", ""))
-        return any(anchor in title for anchor in anchors)
+        title_words = set(re.findall(r"[\w]+", title, flags=re.UNICODE))
+        matched = sum(1 for anchor in anchors if anchor in title_words)
+        # A multi-word request must match at least two exact terms; this avoids
+        # accepting unrelated results because a short fragment occurs inside a
+        # longer word (for example, a product result for a person's name).
+        required = min(2, len(anchors))
+        return matched >= required
     return [item for item in images if topical(item)], [item for item in videos if topical(item)]
 
 

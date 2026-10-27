@@ -49,6 +49,29 @@ def test_audio_permission_format_and_validation(settings):
         assert client.post('/chat/audio/stream',headers=headers,content=wav()).status_code==503
 
 
+@pytest.mark.parametrize(('transcription_provider','fish_key','expected_direct'),[
+    ('fish','configured',False),('vosk','',False),('fish','',True),
+])
+def test_status_routes_through_configured_asr_before_gemini_live(settings,transcription_provider,fish_key,expected_direct):
+    configured=replace(settings,provider='gemini',gemini_transport='live',
+                       transcription_provider=transcription_provider,fish_key=fish_key)
+    with TestClient(create_app(configured,object())) as client:
+        status=client.get('/status',headers=AUTH).json()
+    assert status['direct_audio_chat'] is expected_direct
+    assert status['transcription_provider']==transcription_provider
+
+
+def test_engine_is_explicitly_cautious_with_ambiguous_names(settings):
+    class Provider:
+        async def reply(self,system,messages):
+            assert 'não transforme nomes próprios curtos' in system
+            assert 'pergunte qual nome/contexto' in system
+            return {'reply':'Qual Jim o senhor quer dizer?','topics':[],'tool_calls':[]}
+    with TestClient(create_app(settings,Provider())) as client:
+        response=client.post('/chat',headers=AUTH,json={'message':'Quem foi o Jim na cultura norte?'})
+    assert response.status_code==200
+
+
 def test_missing_transcript_does_not_save_placeholder_or_execute_tools(settings):
     class Provider:
         async def reply(self,*args):
