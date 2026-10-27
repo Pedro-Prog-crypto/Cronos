@@ -19,16 +19,39 @@ def result(text,confidence=.9):
 
 
 def test_voice_trigger_exact_phrase_confidence_and_cooldown():
-    trigger=wake.Trigger()
+    trigger=wake.Trigger({'activation_phrase':'abrir cronos','pause_phrase':'pausar cronos','resume_phrase':'retomar cronos'})
     for text in ('abrir chrome','abrir cronos e apagar arquivos','executar powershell','[unk]',''):
         assert not trigger.accept(result(text),now=100)
     assert not trigger.accept(result('abrir cronos',.5),now=100)
     assert not trigger.accept({'text':'abrir cronos'},now=100)
     assert trigger.accept(result('Abrir Cronos'),now=100)
     assert not trigger.accept(result('cronos abrir'),now=110)
-    assert trigger.accept(result('Cronos abrir'),now=121)
+    assert trigger.accept(result('Abrir Cronos'),now=121)
     assert not trigger.accept(result('abrir kronos'),now=130)
-    assert trigger.accept(result('kronos abrir'),now=142)
+    assert trigger.accept(result('Abrir Cronos'),now=142)
+
+
+def test_wake_phrases_are_user_configurable_and_persisted(tmp_path,monkeypatch):
+    monkeypatch.setattr(wake,'root',lambda:tmp_path)
+    saved=wake.save_settings({'activation_phrase':'Pastel azul','pause_phrase':'silêncio agora','resume_phrase':'voltar ao trabalho','start_with_windows':False})
+    assert saved['activation_phrase']=='Pastel azul'
+    assert wake.settings()['resume_phrase']=='voltar ao trabalho'
+    trigger=wake.Trigger(saved)
+    assert trigger.action(result('Pastel azul'),now=100)=='activate'
+    assert trigger.action(result('silêncio agora'),now=101)=='paused'
+    assert wake.paused()
+    assert trigger.action(result('Pastel azul'),now=110) is None
+    assert trigger.action(result('voltar ao trabalho'),now=103)=='resumed'
+    assert not wake.paused()
+
+
+@pytest.mark.parametrize('values',[
+    {'activation_phrase':'pastel','pause_phrase':'pastel','resume_phrase':'retomar'},
+    {'activation_phrase':'','pause_phrase':'pausar','resume_phrase':'retomar'},
+    {'activation_phrase':'x '*11,'pause_phrase':'pausar','resume_phrase':'retomar'},
+])
+def test_wake_phrase_validation_rejects_empty_duplicate_or_excessive_phrases(values):
+    with pytest.raises(ValueError):wake.validate_settings(values)
 
 
 def package(extra=None):

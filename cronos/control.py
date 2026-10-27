@@ -57,6 +57,13 @@ class Selection(Input):
     model: str | None = Field(default=None, min_length=1, max_length=200)
 
 
+class WakeSettingsInput(Input):
+    activation_phrase: str = Field(min_length=1, max_length=80)
+    pause_phrase: str = Field(min_length=1, max_length=80)
+    resume_phrase: str = Field(min_length=1, max_length=80)
+    start_with_windows: bool = False
+
+
 def install_routes(app, authenticate):
     from fastapi import Depends
     auth = [Depends(authenticate)]
@@ -252,3 +259,32 @@ def install_routes(app, authenticate):
     async def wake_status(request: Request):
         from cronos.wake import status
         return {"windows_available": request.app.state.windows.platform == "win32", **status()}
+
+    @app.post("/wake/settings", dependencies=auth)
+    async def wake_settings(body: WakeSettingsInput):
+        from cronos.wake import save_settings
+        try:
+            return {"settings": save_settings(body.model_dump())}
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from None
+
+    @app.post("/wake/start", dependencies=auth)
+    async def wake_start():
+        from cronos.wake import start
+        try:
+            return start()
+        except ValueError as exc:
+            raise HTTPException(503, str(exc)) from None
+
+    @app.post("/wake/stop", dependencies=auth)
+    async def wake_stop():
+        from cronos.wake import stop
+        return stop()
+
+    @app.post("/wake/startup", dependencies=auth)
+    async def wake_startup(body: dict):
+        from cronos.wake import startup
+        try:
+            return startup(bool(body.get("enabled")))
+        except ValueError as exc:
+            raise HTTPException(503, str(exc)) from None

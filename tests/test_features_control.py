@@ -76,10 +76,22 @@ def test_new_endpoints_are_authenticated_and_unknown_modules_rejected(configured
     with TestClient(create_app(configured)) as client:
         for path in ('/modules','/missions','/windows/audit','/windows/jobs','/devices','/wake/status'):
             assert client.get(path).status_code==401
-        for path in ('/modules/processing/check','/tools/execute','/vision/analyze','/vision/screen','/missions','/providers/select'):
+        for path in ('/modules/processing/check','/tools/execute','/vision/analyze','/vision/screen','/missions','/providers/select','/wake/settings','/wake/start','/wake/stop','/wake/startup'):
             assert client.post(path,json={}).status_code==401
         assert client.post('/modules/not-real/check',headers=AUTH).status_code==404
         assert client.get('/windows/audit',headers=AUTH).status_code==503
+
+
+def test_wake_configuration_api_saves_user_phrases(configured,tmp_path,monkeypatch):
+    from cronos import wake
+    monkeypatch.setattr(wake,'root',lambda:tmp_path/'wake')
+    body={'activation_phrase':'Pastel azul','pause_phrase':'silêncio agora','resume_phrase':'voltar ao trabalho'}
+    with TestClient(create_app(configured)) as client:
+        result=client.post('/wake/settings',headers=AUTH,json=body)
+        assert result.status_code==200
+        assert result.json()['settings']['activation_phrase']=='Pastel azul'
+        assert client.get('/wake/status',headers=AUTH).json()['settings']['resume_phrase']=='voltar ao trabalho'
+        assert client.post('/wake/settings',headers=AUTH,json={**body,'pause_phrase':'Pastel azul'}).status_code==422
 
 
 def test_manual_and_ai_missions_persist_and_cannot_self_complete(configured):

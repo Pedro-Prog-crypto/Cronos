@@ -1,4 +1,4 @@
-"""Iniciador por voz local e opcional; só reconhece duas frases de abertura."""
+"""Escuta local opcional para ativar, pausar e retomar o Cronos por voz."""
 import argparse
 import hashlib
 import importlib.util
@@ -21,9 +21,78 @@ from cronos.windows_agent import safe_extract
 
 MODEL_NAME = "vosk-model-small-pt-0.3"
 MODEL_URL = "https://alphacephei.com/vosk/models/" + MODEL_NAME + ".zip"
-PHRASES = {"abrir cronos", "abrir kronos", "cronos abrir", "kronos abrir"}
+DEFAULT_SETTINGS = {
+    "activation_phrase": "cronos",
+    "pause_phrase": "pausar cronos",
+    "resume_phrase": "retomar cronos",
+    "start_with_windows": False,
+}
+PHRASES = {"abrir cronos", "abrir kronos", "cronos abrir", "kronos abrir"}  # compatibilidade antiga
 MODEL_LAYOUTS = (("am/final.mdl", "conf/model.conf"),
                  ("final.mdl", "mfcc.conf", "HCLr.fst", "Gr.fst"))
+
+
+def normalize_phrase(value):
+    if not isinstance(value, str):
+        return ""
+    value = "".join(character for character in unicodedata.normalize("NFKD", value.casefold())
+                    if not unicodedata.combining(character))
+    return " ".join("".join(ch if ch.isalnum() else " " for ch in value).split())
+
+
+def validate_settings(data):
+    if not isinstance(data, dict):
+        raise ValueError("As configurações do ouvinte precisam ser um objeto.")
+    result = {}
+    for key in ("activation_phrase", "pause_phrase", "resume_phrase"):
+        value = data.get(key)
+        normalized = normalize_phrase(value)
+        if not normalized or len(normalized) > 80 or len(normalized.split()) > 10:
+            raise ValueError("Cada frase precisa ter entre 1 e 10 palavras e até 80 caracteres.")
+        result[key] = " ".join(str(value).strip().split())
+    if len({normalize_phrase(result[key]) for key in result}) != 3:
+        raise ValueError("Ativação, pausa e retomada precisam usar frases diferentes.")
+    result["start_with_windows"] = bool(data.get("start_with_windows", False))
+    return result
+
+
+def settings():
+    path = root() / "settings.json"
+    try:
+        stored = json.loads(path.read_text(encoding="utf-8"))
+        return validate_settings({**DEFAULT_SETTINGS, **stored})
+    except FileNotFoundError:
+        return dict(DEFAULT_SETTINGS)
+    except (OSError, ValueError, TypeError):
+        # Um arquivo inválido nunca deve impedir a inicialização; status expõe o padrão.
+        return dict(DEFAULT_SETTINGS)
+
+
+def save_settings(data):
+    current = settings()
+    current.update(data if isinstance(data, dict) else {})
+    clean = validate_settings(current)
+    folder = root()
+    folder.mkdir(parents=True, exist_ok=True)
+    temporary = folder / "settings.tmp"
+    temporary.write_text(json.dumps(clean, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary.replace(folder / "settings.json")
+    return clean
+
+
+def paused():
+    try:
+        return bool(json.loads((root() / "mode.json").read_text(encoding="utf-8")).get("paused"))
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+def set_paused(value):
+    folder = root()
+    folder.mkdir(parents=True, exist_ok=True)
+    temporary = folder / "mode.tmp"
+    temporary.write_text(json.dumps({"paused": bool(value)}, ensure_ascii=False), encoding="utf-8")
+    temporary.replace(folder / "mode.json")
 
 
 def model_present(folder):
@@ -38,9 +107,12 @@ def root():
 def status():
     folder = root()
     installed = model_present(folder / MODEL_NAME) and (folder / "model-hashes.json").is_file()
+    config = settings()
     result = {"model_installed": installed,
               "dependencies_installed": all(importlib.util.find_spec(name) is not None for name in ("vosk", "sounddevice")),
-              "state": "stopped", "local_only": True, "phrases": sorted(PHRASES)}
+              "state": "stopped", "local_only": True,
+              "phrases": [config["activation_phrase"]], "settings": config,
+              "paused": paused()}
     try:
         data = json.loads((folder / "status.json").read_text())
         age = time.time() - float(data["heartbeat"])
@@ -127,19 +199,39 @@ def verify_model():
 
 
 class Trigger:
-    def __init__(self):
-        self.last = float("-inf")
+    def __init__(self, config=None):
+        self.last_activation = float("-inf")
+        self.last_transition = float("-inf")
+        self.config = validate_settings(config or settings())
 
-    def accept(self, result, now=None):
+    def action(self, result, now=None):
         now = time.monotonic() if now is None else now
-        text = "".join(character for character in unicodedata.normalize("NFKD", result.get("text", "").casefold())
-                       if not unicodedata.combining(character)).strip()
+        text = normalize_phrase(result.get("text", ""))
         words = result.get("result", [])
         confidence = sum(word.get("conf", 0) for word in words) / len(words) if words else 0
-        if text not in PHRASES or confidence < .75 or now - self.last < 20:
-            return False
-        self.last = now
-        return True
+        action = ("paused" if text == normalize_phrase(self.config["pause_phrase"]) else
+                  "resumed" if text == normalize_phrase(self.config["resume_phrase"]) else
+                  "activate" if text == normalize_phrase(self.config["activation_phrase"]) else None)
+        cooldown = 20 if action == "activate" else 2
+        last_action = self.last_activation if action == "activate" else self.last_transition
+        if confidence < .75 or action is None or now - last_action < cooldown:
+            return None
+        if action == "paused":
+            self.last_transition = now
+            set_paused(True)
+            return "paused"
+        if action == "resumed":
+            self.last_transition = now
+            set_paused(False)
+            return "resumed"
+        if paused():
+            return None
+        self.last_activation = now
+        return "activate"
+
+    def accept(self, result, now=None):
+        """Compatibilidade com integrações antigas que só verificam ativação."""
+        return self.action(result, now) == "activate"
 
 
 @contextmanager
@@ -197,6 +289,7 @@ def startup(enabled):
     destination = Path(appdata) / "Microsoft/Windows/Start Menu/Programs/Startup/Cronos Voice.lnk"
     if not enabled:
         destination.unlink(missing_ok=True)
+        save_settings({"start_with_windows": False})
         return {"start_with_windows": False, "note": "Não encerra o ouvinte atual; use Parar microfone."}
     verify_model()
     if not status()["dependencies_installed"]:
@@ -218,6 +311,7 @@ def startup(enabled):
                              shell=False, capture_output=True, timeout=10, creationflags=subprocess.CREATE_NO_WINDOW)
     if process.returncode or not destination.exists():
         raise ValueError("O Windows não confirmou a criação do atalho.")
+    save_settings({"start_with_windows": True})
     return {"start_with_windows": True}
 
 
@@ -231,7 +325,11 @@ def listen():
         import sounddevice
         from vosk import KaldiRecognizer, Model, SetLogLevel
         SetLogLevel(-1)
-        recognizer = KaldiRecognizer(Model(str(model)), 16000, json.dumps([*sorted(PHRASES), "[unk]"], ensure_ascii=False))
+        config = settings()
+        phrases = [config["activation_phrase"], config["pause_phrase"], config["resume_phrase"]]
+        acoustic_model = Model(str(model))
+        grammar = json.dumps([*phrases, "[unk]"], ensure_ascii=False)
+        recognizer = KaldiRecognizer(acoustic_model, 16000, grammar)
         recognizer.SetWords(True)
         frames = queue.Queue(maxsize=16)
         def audio(data, count, timing, status):
@@ -240,23 +338,40 @@ def listen():
             except queue.Full:
                 pass
         folder = root(); (folder / "stop.request").unlink(missing_ok=True)
-        trigger, opened, heartbeat = Trigger(), None, 0
+        trigger, opened, heartbeat = Trigger(config), None, 0
+        settings_stamp = (root() / "settings.json").stat().st_mtime if (root() / "settings.json").exists() else None
         try:
             with sounddevice.RawInputStream(samplerate=16000, blocksize=8000, dtype="int16", channels=1, callback=audio):
                 while not (folder / "stop.request").exists():
+                    settings_path = root() / "settings.json"
+                    try:
+                        next_stamp = settings_path.stat().st_mtime
+                    except OSError:
+                        next_stamp = None
+                    if next_stamp != settings_stamp:
+                        config = settings()
+                        phrases = [config["activation_phrase"], config["pause_phrase"], config["resume_phrase"]]
+                        recognizer = KaldiRecognizer(acoustic_model, 16000,
+                                                     json.dumps([*phrases, "[unk]"], ensure_ascii=False))
+                        recognizer.SetWords(True)
+                        trigger = Trigger(config)
+                        settings_stamp = next_stamp
                     if time.monotonic() - heartbeat > 5:
-                        _write_status("listening", opened); heartbeat = time.monotonic()
+                        _write_status("paused" if paused() else "listening", opened); heartbeat = time.monotonic()
                     try:
                         frame = frames.get(timeout=.5)
                     except queue.Empty:
                         continue
-                    if recognizer.AcceptWaveform(frame) and trigger.accept(json.loads(recognizer.Result())):
-                        subprocess.Popen([str(python_windowless()), "-m", "cronos.browser"],
-                                         cwd=Path(__file__).resolve().parent.parent, shell=False,
-                                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-                        opened = datetime.now(timezone.utc).isoformat()
-                        _write_status("listening", opened)
+                    if recognizer.AcceptWaveform(frame):
+                        action = trigger.action(json.loads(recognizer.Result()))
+                        if action == "activate":
+                            subprocess.Popen([str(python_windowless()), "-m", "cronos.browser"],
+                                             cwd=Path(__file__).resolve().parent.parent, shell=False,
+                                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                            opened = datetime.now(timezone.utc).isoformat()
+                        if action in {"activate", "paused", "resumed"}:
+                            _write_status("paused" if paused() else "listening", opened)
         finally:
             _write_status("stopped", opened)
 
