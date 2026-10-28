@@ -167,6 +167,8 @@ class ResilientProvider:
             remaining = deadline - loop.time()
             if remaining <= 0:
                 break
+            reply_token = reply_sink.set(observe_reply) if original_reply else None
+            intro_token = intro_sink.set(observe_intro) if original_intro else None
             try:
                 attempt_timeout = min(FALLBACK_ATTEMPT_TIMEOUT_SECONDS, remaining)
                 if provider_id == 'ollama':
@@ -176,8 +178,14 @@ class ResilientProvider:
                     timeout=attempt_timeout,
                 )
                 return {**result, 'provider_used': provider_id, 'fallback_used': True}
-            except (ProviderError, asyncio.TimeoutError):
+            except (ProviderError, asyncio.TimeoutError) as exc:
+                if delivered:
+                    if isinstance(exc, ProviderError): raise
+                    raise ProviderError('A resposta da integração de reserva começou, mas foi interrompida. Não troquei de IA no meio da fala.', 504) from None
                 continue
+            finally:
+                if reply_token is not None: reply_sink.reset(reply_token)
+                if intro_token is not None: intro_sink.reset(intro_token)
         if primary_timed_out:
             raise ProviderError('A integração principal demorou demais e nenhuma reserva respondeu dentro do prazo.', 504)
         raise original

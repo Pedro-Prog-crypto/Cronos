@@ -168,3 +168,45 @@ def test_live_natural_language_only_after_server_turn_complete(settings,finished
         assert result=={'reply':text,'topics':[],'tool_calls':[]}
     else:
         with pytest.raises(ProviderError):asyncio.run(gemini_live.turn(client,settings.gemini_live_model,'persona',[{'role':'user','content':'Explique'}]))
+
+
+def test_live_waits_for_active_generation_but_not_a_silent_connection(settings,monkeypatch):
+    monkeypatch.setattr(gemini_live,'LIVE_FIRST_EVENT_TIMEOUT_SECONDS',.05)
+    monkeypatch.setattr(gemini_live,'LIVE_IDLE_TIMEOUT_SECONDS',.08)
+    raw=json.dumps({'reply':'Uma explicação longa continua chegando em vários trechos.', 'topics':[], 'tool_calls':[]})
+    class Session:
+        def __init__(self,slow): self.slow=slow
+        async def send_client_content(self,**kwargs): pass
+        async def receive(self):
+            if self.slow: await asyncio.sleep(1)
+            for index in range(0,len(raw),15):
+                await asyncio.sleep(.02)
+                yield NS(server_content=NS(output_transcription=NS(text=raw[index:index+15]), turn_complete=False))
+    class Connection:
+        def __init__(self,slow): self.slow=slow
+        async def __aenter__(self): return Session(self.slow)
+        async def __aexit__(self,*args): pass
+    async def run():
+        for slow in (True,False):
+            client=NS(aio=NS(live=NS(connect=lambda **kwargs:Connection(slow))))
+            call=gemini_live.turn(client,settings.gemini_live_model,'persona',[{'role':'user','content':'Explique'}])
+            if slow:
+                with pytest.raises(asyncio.TimeoutError): await call
+            else:
+                result=await call
+                assert result['reply'].startswith('Uma explicação longa')
+    asyncio.run(run())
+
+
+def test_live_connection_setup_has_its_own_deadline(settings,monkeypatch):
+    monkeypatch.setattr(gemini_live,'LIVE_CONNECT_TIMEOUT_SECONDS',.01)
+    cancelled=[]
+    class Connection:
+        async def __aenter__(self):
+            try: await asyncio.sleep(1)
+            finally: cancelled.append(True)
+        async def __aexit__(self,*args): pass
+    client=NS(aio=NS(live=NS(connect=lambda **kwargs:Connection())))
+    with pytest.raises(asyncio.TimeoutError):
+        asyncio.run(gemini_live.turn(client,settings.gemini_live_model,'persona',[]))
+    assert cancelled==[True]

@@ -272,9 +272,17 @@ def install_routes(app, authenticate):
     async def wake_start():
         from cronos.wake import start
         try:
-            return start()
+            return await asyncio.to_thread(start)
         except ValueError as exc:
             raise HTTPException(503, str(exc)) from None
+
+    @app.post("/wake/test-voice", dependencies=auth)
+    async def wake_test_voice():
+        from cronos.wake import speak_activation_greeting
+        result = await asyncio.to_thread(speak_activation_greeting)
+        if result == "unavailable":
+            raise HTTPException(503, "A voz não pôde ser reproduzida. Confira a saída de som do Windows e a configuração da voz.")
+        return {"voice": result, "note": "Frase enviada à saída de áudio. Confirme se ouviu no notebook."}
 
     @app.post("/wake/stop", dependencies=auth)
     async def wake_stop():
@@ -285,6 +293,6 @@ def install_routes(app, authenticate):
     async def wake_startup(body: dict):
         from cronos.wake import startup
         try:
-            return startup(bool(body.get("enabled")))
+            return await asyncio.to_thread(startup, bool(body.get("enabled")))
         except ValueError as exc:
             raise HTTPException(503, str(exc)) from None

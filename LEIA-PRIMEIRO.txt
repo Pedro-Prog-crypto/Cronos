@@ -30,3 +30,8 @@ pastas do seu computador pelo migrador.
 
 Se a migracao disser que nao encontrou o vault ou o .env, cancele e escolha a pasta
 que realmente contem esses dados. Nao apague a instalacao antiga ate conferir a nova.
+
+REVISAO DE 28/10/2026
+Consulte docs\REVISAO-2026-10-28.md para as correcoes e o passo a passo de voz.
+No painel Entendimento de linguagem, use TESTAR VOZ e reinicie o ouvinte antigo
+(PARAR OUVINTE, depois INICIAR OUVINTE) para carregar o codigo desta versao.

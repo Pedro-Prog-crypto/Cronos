@@ -8,6 +8,7 @@ Keep the original connect/send/transcription workflow, not its persona suppressi
 proactive messages, OS commands, or microphone/speaker ownership.
 """
 import asyncio
+from contextlib import AsyncExitStack
 import hashlib
 import re
 import time
@@ -18,8 +19,13 @@ from cronos.providers import OUTPUT_RULES,ProviderError,record_gemini_error
 from cronos.live_output import parse_live_output
 
 ORIGINAL_MODELS=('models/gemini-3.1-flash-live-preview','models/gemini-2.5-flash-native-audio-preview-12-2025')
-LIVE_ATTEMPT_TIMEOUT_SECONDS=25
-LIVE_TOTAL_TIMEOUT_SECONDS=45
+# A detailed answer may take longer than a short response. Silence has its own
+# deadline, so an inactive connection does not consume the full answer budget.
+LIVE_ATTEMPT_TIMEOUT_SECONDS=180
+LIVE_TOTAL_TIMEOUT_SECONDS=180
+LIVE_CONNECT_TIMEOUT_SECONDS=8
+LIVE_FIRST_EVENT_TIMEOUT_SECONDS=10
+LIVE_IDLE_TIMEOUT_SECONDS=15
 
 def make_client(key):
     from google import genai
@@ -31,7 +37,8 @@ async def turn(client,model,system,messages,thinking_budget=0):
     delivered=False;intro_delivered=False;turn_finished=False;input_finished=False
     audio=messages[-1].get('audio_pcm') if messages else None
     config=types.LiveConnectConfig(response_modalities=['AUDIO'],output_audio_transcription={},thinking_config=types.ThinkingConfig(thinking_budget=thinking_budget),system_instruction=system+'\n'+OUTPUT_RULES,**({'input_audio_transcription':{},'realtime_input_config':{'automatic_activity_detection':{'disabled':True}}} if audio is not None else {}))
-    async with client.aio.live.connect(model=model,config=config) as session:
+    async with AsyncExitStack() as stack:
+        session = await asyncio.wait_for(stack.enter_async_context(client.aio.live.connect(model=model,config=config)), LIVE_CONNECT_TIMEOUT_SECONDS)
         metrics['connection_ms']=round((time.perf_counter()-started)*1000)
         turns=[]
         for message in (messages[:-1] if audio is not None else messages):
@@ -52,7 +59,12 @@ async def turn(client,model,system,messages,thinking_budget=0):
         sent=time.perf_counter();chunks=[];input_chunks=[];transcript_delivered=False
         async def drain():
             nonlocal delivered,intro_delivered,transcript_delivered,turn_finished,input_finished
-            async for response in session.receive():
+            iterator = session.receive().__aiter__()
+            while True:
+                try:
+                    response = await asyncio.wait_for(anext(iterator), LIVE_IDLE_TIMEOUT_SECONDS if chunks or input_chunks else LIVE_FIRST_EVENT_TIMEOUT_SECONDS)
+                except StopAsyncIteration:
+                    break
                 content=getattr(response,'server_content',None)
                 recognized=getattr(content,'input_transcription',None)
                 if getattr(recognized,'text',None):input_chunks.append(recognized.text)
@@ -149,7 +161,7 @@ async def reply(settings,system,messages):
             if code in {401,403} or 'api_key_invalid' in reason:break
         finally:
             if client is not None:
-                try:await client.aio.aclose()
+                try:await asyncio.wait_for(client.aio.aclose(),2)
                 except Exception:pass
     if last and last.status==504:
         raise ProviderError('Gemini Live demorou demais; nenhuma rota Live concluiu a resposta dentro do prazo.',504) from None

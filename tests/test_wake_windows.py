@@ -177,7 +177,7 @@ def test_status_expires_and_does_not_store_audio(tmp_path,monkeypatch):
     assert wake.status()['state']=='listening'
     monkeypatch.setattr(wake.time,'time',lambda:121)
     assert wake.status()['state']=='stopped'
-    assert set(json.loads((tmp_path/'status.json').read_text()))=={'state','heartbeat','last_opened','worker_version'}
+    assert set(json.loads((tmp_path/'status.json').read_text()))=={'state','heartbeat','last_opened','worker_version','installation'}
 
 
 def test_status_heartbeat_keeps_last_recognition_without_recording_audio(tmp_path,monkeypatch):
@@ -190,3 +190,105 @@ def test_status_heartbeat_keeps_last_recognition_without_recording_audio(tmp_pat
     assert result['last_action']=='paused'
     assert result['last_confidence']==.92
     assert result['greeting_status']=='windows_voice'
+
+
+def test_child_launch_drops_server_ownership_but_keeps_personal_data(monkeypatch):
+    for key in ('CRONOS_SUPERVISED','CRONOS_SUPERVISOR_PID','CRONOS_MANAGED_PORT','CRONOS_API_TOKEN','CRONOS_OPEN_BROWSER'):
+        monkeypatch.setenv(key, 'parent-session')
+    monkeypatch.setenv('CRONOS_DATA_HOME', '/personal/data')
+    inherited = wake.independent_environment()
+    assert inherited['CRONOS_DATA_HOME'] == '/personal/data'
+    assert 'CRONOS_MANAGED_PORT' not in inherited and 'CRONOS_API_TOKEN' not in inherited
+    assert 'CRONOS_SUPERVISED' not in inherited and 'CRONOS_SUPERVISOR_PID' not in inherited
+    assert 'CRONOS_OPEN_BROWSER' not in inherited
+    assert wake.os.environ['CRONOS_API_TOKEN'] == 'parent-session'
+
+
+def test_current_worker_in_an_old_installation_is_replaced(tmp_path, monkeypatch):
+    monkeypatch.setattr(wake, 'sys', SimpleNamespace(platform='win32', executable=str(tmp_path/'python.exe')))
+    monkeypatch.setattr(wake, 'root', lambda: tmp_path)
+    monkeypatch.setattr(wake, 'verify_model', lambda: tmp_path)
+    statuses = iter([{'state':'listening', 'worker_version':wake.WAKE_VERSION, 'installation':'old', 'dependencies_installed':True}, {'state':'stopped'}])
+    monkeypatch.setattr(wake, 'status', lambda: next(statuses))
+    calls=[]
+    monkeypatch.setattr(wake.subprocess, 'Popen', lambda *args, **kwargs: calls.append(kwargs))
+    assert wake.start()['requested']
+    assert (tmp_path/'stop.request').exists() and len(calls)==1
+
+
+def test_listener_keeps_recognizing_while_the_voice_service_is_slow(tmp_path, monkeypatch):
+    from contextlib import nullcontext
+    started, release = threading.Event(), threading.Event()
+    history=[]; original=wake._write_status
+    def write(state, *args, **kwargs):
+        history.append(kwargs)
+        original(state, *args, **kwargs)
+        if kwargs.get('last_action')=='paused':
+            assert not release.is_set(), 'Voice network wait blocked the microphone loop'
+            (tmp_path/'stop.request').write_text('stop')
+    monkeypatch.setattr(wake, '_write_status', write)
+    monkeypatch.setattr(wake, 'root', lambda: tmp_path)
+    monkeypatch.setattr(wake, 'sys', SimpleNamespace(platform='win32',executable='python.exe'))
+    monkeypatch.setattr(wake, 'verify_model', lambda: tmp_path)
+    monkeypatch.setattr(wake, 'single_instance', lambda name: nullcontext(True))
+    monkeypatch.setattr(wake, 'app_launch_module', lambda: 'cronos.desktop')
+    monkeypatch.setattr(wake.subprocess,'Popen',lambda *args,**kwargs:SimpleNamespace(poll=lambda:None))
+    def greeting(speaking):
+        started.set(); release.wait(3); return 'cronos_voice'
+    monkeypatch.setattr(wake, 'speak_activation_greeting', greeting)
+    class Recognizer:
+        def __init__(self,*args): self.step=0
+        def SetWords(self,value): pass
+        def AcceptWaveform(self,frame):
+            self.step+=1
+            if self.step==2: assert started.wait(1)
+            return True
+        def Result(self): return json.dumps(result('abrir cromos' if self.step==1 else 'pausar cromos'))
+    class Stream:
+        def __init__(self,**kwargs): self.callback=kwargs['callback']; assert kwargs['blocksize']==1600
+        def __enter__(self):
+            self.callback(b'audio',1600,None,None); self.callback(b'audio',1600,None,None); return self
+        def __exit__(self,*args): pass
+    monkeypatch.setitem(sys.modules,'vosk',SimpleNamespace(KaldiRecognizer=Recognizer,Model=lambda path:None,SetLogLevel=lambda n:None))
+    monkeypatch.setitem(sys.modules,'sounddevice',SimpleNamespace(RawInputStream=Stream))
+    try: wake.listen()
+    finally: release.set()
+    assert any(item.get('last_action')=='activate' for item in history)
+    assert any(item.get('last_action')=='paused' for item in history)
+
+
+def test_wake_uses_saved_fish_voice_and_repairs_streaming_wav(tmp_path,monkeypatch):
+    import wave
+    from cronos.config import Settings
+    import cronos.fish_legacy as legacy
+    stream=io.BytesIO()
+    with wave.open(stream,'wb') as wav:
+        wav.setnchannels(1); wav.setsampwidth(2); wav.setframerate(24000); wav.writeframes(b'\x00\x00'*80)
+    raw=bytearray(stream.getvalue());raw[4:8]=b'\xff'*4;raw[40:44]=b'\xff'*4
+    monkeypatch.setenv('CRONOS_DATA_HOME', str(tmp_path))
+    monkeypatch.setattr(wake,'root',lambda:tmp_path)
+    monkeypatch.setattr(wake,'sys',SimpleNamespace(platform='win32'))
+    monkeypatch.setattr(Settings,'from_env',lambda:SimpleNamespace(privacy_mode='online',fish_key='fixture',fish_model='s2.1-pro-free',fish_reference='saved-voice',fish_speed=1,fish_latency='balanced'))
+    speaking=threading.Event();played=[]
+    async def synthesize(key,**kwargs):
+        assert kwargs['reference_id']=='saved-voice' and kwargs['text']==wake.WAKE_GREETING
+        assert not speaking.is_set() # Network wait must not mute recognition.
+        return bytes(raw)
+    monkeypatch.setattr(legacy,'synthesize_json',synthesize)
+    def play(audio,flags):
+        assert speaking.is_set()
+        assert int.from_bytes(audio[4:8],'little')==len(audio)-8
+        played.append(audio)
+    monkeypatch.setitem(sys.modules,'winsound',SimpleNamespace(PlaySound=play,SND_MEMORY=1,SND_NODEFAULT=2))
+    assert wake.speak_activation_greeting(speaking)=='cronos_voice'
+    assert len(played)==1 and not speaking.is_set()
+    async def forbidden(*args,**kwargs): raise AssertionError('Cached greeting should not call a provider')
+    monkeypatch.setattr(legacy,'synthesize_json',forbidden)
+    assert wake.speak_activation_greeting(speaking)=='cronos_voice'
+    assert len(played)==2 and not speaking.is_set()
+
+
+def test_windows_desktop_extra_is_installable():
+    import tomllib
+    package=tomllib.loads((Path(__file__).parents[1]/'pyproject.toml').read_text())
+    assert any(dependency.startswith('pywebview==') for dependency in package['project']['optional-dependencies']['desktop'])

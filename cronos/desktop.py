@@ -111,6 +111,7 @@ def main():
                 if sys.platform == "win32" and (getattr(sys, "stderr", False) is None or getattr(sys, "stdout", False) is None):
                     import ctypes
                     ctypes.windll.user32.MessageBoxW(None, "Não foi possível iniciar o Cronos. Confira a instalação, .env e WebView2.\n" + str(exc)[:350], "Cronos", 0x10)
+                    raise SystemExit(1) from exc
                 else:
                     raise
         elif sys.platform == "win32":

@@ -310,7 +310,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                                 if heard_context:options['heard_context']=heard_context
                                 result=await request.app.state.engine.chat(session,message,**options)
                             except ProviderError as exc:
-                                if audio is None or audio_fallback is None or exc.kind!='audio_transcription_missing' or spoken is not None or intro_text is not None:
+                                if audio is None or audio_fallback is None or (exc.kind!='audio_transcription_missing' and not exc.retryable) or spoken is not None or intro_text is not None:
                                     raise
                                 recognized=await transcribe_fallback(audio_fallback)
                                 if not recognized:raise ProviderError('A gravação foi mantida, mas não consegui reconhecer a pergunta. Tente novamente ou use o botão de envio de texto.',502) from None

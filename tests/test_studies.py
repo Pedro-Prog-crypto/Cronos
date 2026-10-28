@@ -105,10 +105,11 @@ def test_visual_explanation_intent_covers_people_processes_and_events_without_gr
     assert not is_study_request('Coloca minha música preferida.')
 
 
-def test_visual_media_search_expands_famous_subjects_into_searchable_image_terms():
+def test_visual_media_search_uses_short_unambiguous_subjects():
     terms = _media_search_terms('Sócrates e o julgamento')
-    assert 'Socrates ancient Greek philosopher' in terms
-    assert 'portrait bust sculpture' in terms
+    assert terms == 'Socrates'
+    assert _media_search_terms('Napoleão Bonaparte foi imperador') == 'Napoleon Bonaparte'
+    assert _media_search_terms('segunda guerra mundial') == 'Second World War'
     assert _media_search_terms('Restaurante Casa Azul') == 'Restaurante Casa Azul'
 
 
@@ -216,7 +217,7 @@ def test_media_endpoint_returns_a_dense_openly_attributed_image_wall_and_license
     assert result['videos'][0]['kind']=='video'
     assert result['videos'][0]['poster_proxy_url'].startswith('/studies/media/')
     assert poster_response.status_code==200 and poster_response.content==b'\xff\xd8\xff'
-    assert 'ancient Greek philosopher' in result['search_query']
+    assert result['search_query'] == 'Socrates'
 
 
 def test_media_endpoint_falls_back_to_openverse_when_commons_has_no_matches(settings, monkeypatch):
@@ -288,3 +289,42 @@ def test_link_import_route_stores_a_public_page_in_the_selected_subject(settings
         duplicate = client.post(f"/studies/subjects/{subject['id']}/links", headers=AUTH,
                                 json={'url': 'https://example.org/aula'})
         assert duplicate.status_code == 409
+
+
+def test_image_identity_preserves_meaningful_query_parameters_and_same_titles():
+    records=[{'url':'https://tse1.mm.bing.net/th?id=one&w=300','title':'Socrates'},
+             {'url':'https://tse1.mm.bing.net/th?id=two&w=300','title':'Socrates'},
+             {'url':'https://tse1.mm.bing.net/th?id=one&w=600','title':'Same picture, different size'},
+             {'url':'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Socrates.jpg/300px-Socrates.jpg','title':'Museum'},
+             {'url':'https://upload.wikimedia.org/wikipedia/commons/a/ab/Socrates.jpg','title':'Same original'}]
+    assert len(_dedupe_study_images(records))==3
+
+
+def test_ready_media_does_not_wait_for_a_stalled_provider(settings,monkeypatch):
+    import cronos.studies as studies
+    cancelled=[]
+    async def ready(*args,**kwargs):
+        return [{'url':f'https://example.org/{i}.jpg','title':f'Socrates {i}','source_url':'https://example.org/source'} for i in range(18)],[]
+    async def stalled(*args,**kwargs):
+        try: await asyncio.sleep(60)
+        finally: cancelled.append(True)
+    monkeypatch.setattr(studies,'_commons_media',ready)
+    monkeypatch.setattr(studies,'_openverse_images',stalled)
+    monkeypatch.setattr(studies,'_wikipedia_portraits',stalled)
+    import time
+    with TestClient(create_app(settings)) as client:
+        start=time.monotonic()
+        response=client.get('/studies/images?query=Socrates&limit=18',headers=AUTH)
+        elapsed=time.monotonic()-start
+    assert response.status_code==200 and len(response.json()['images'])==18
+    assert elapsed<2 and len(cancelled)==2
+
+
+def test_voice_test_endpoint_is_authenticated_and_reports_actual_result(settings,monkeypatch):
+    from cronos import wake
+    monkeypatch.setattr(wake,'speak_activation_greeting',lambda:'windows_voice')
+    with TestClient(create_app(settings)) as client:
+        assert client.post('/wake/test-voice').status_code==401
+        assert client.post('/wake/test-voice',headers=AUTH).json()['voice']=='windows_voice'
+        monkeypatch.setattr(wake,'speak_activation_greeting',lambda:'unavailable')
+        assert client.post('/wake/test-voice',headers=AUTH).status_code==503

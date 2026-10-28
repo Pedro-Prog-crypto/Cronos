@@ -172,7 +172,8 @@ def test_missing_live_transcript_emits_no_partial_reply_and_is_recoverable(setti
     assert delivered==[]
 
 
-def test_live_transcription_failure_falls_back_to_configured_asr_and_preserves_question(settings):
+@pytest.mark.parametrize('status,kind',[(502,'audio_transcription_missing'),(504,None),(503,None),(429,None)])
+def test_live_transcription_failure_falls_back_to_configured_asr_and_preserves_question(settings,status,kind):
     question='Cronos, explique quem foi Zeus em detalhes.'
     heard='Pergunta anterior: quem foi Zeus. Trecho já ouvido: Zeus era filho de Cronos.'
     class ASR:
@@ -186,7 +187,7 @@ def test_live_transcription_failure_falls_back_to_configured_asr_and_preserves_q
     class Provider:
         async def reply(self,system,messages):
             if messages[-1].get('audio_pcm'):
-                raise ProviderError('Sem transcrição do Live',502,kind='audio_transcription_missing')
+                raise ProviderError('Falha recuperável do Live',status,kind=kind)
             assert 'Trecho já ouvido' in system and 'não repita toda a explicação' in system
             return {'reply':'Zeus era o principal deus do Olimpo.','topics':[],'tool_calls':[]}
     with TestClient(create_app(replace(settings,gemini_transport='live',fish_key='configured'),Provider(),fish_factory=Fish)) as client:

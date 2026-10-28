@@ -28,12 +28,15 @@ const namedPhilosophers: Array<[string, string]> = [
 
 const normalized = (value: string) => value.toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 function imageQuery(topic: string, text: string, title: string) {
-  const context = normalized(`${topic} ${title} ${text}`);
-  const people = [...new Set(namedPhilosophers.filter(([name]) => context.includes(normalized(name))).map(([, canonical]) => canonical))];
-  if (people.length) return `${people.join(' ; ')} historical philosopher portrait photograph museum sculpture painting natural background`.slice(0, 180);
-  if (/\bfilosof\w*\b/.test(context)) return 'historical philosopher portrait photograph museum sculpture painting natural background'.slice(0, 180);
-  const specific = title === topic ? text.split(/[.!?]/, 1)[0].slice(0, 64) : title;
-  return `${topic} ${specific}`.replace(/\s+/g, ' ').trim().slice(0, 150);
+  // Prefer the person in the spoken sentence before the overall topic.
+  for (const part of [text, title, topic]) {
+    const context=normalized(part);
+    const match=namedPhilosophers.map(([name,canonical])=>({canonical,index:context.search(new RegExp(`\\b${normalized(name)}\\b`))}))
+      .filter(item=>item.index>=0).sort((a,b)=>a.index-b.index)[0];
+    if(match)return match.canonical;
+  }
+  return topic.replace(/\s+/g,' ').trim().slice(0,150);
+
 }
 
 export function visualSlides(reply: string, topic: string): VisualSlide[] {

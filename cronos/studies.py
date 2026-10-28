@@ -17,7 +17,7 @@ import uuid
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 from pathlib import Path
-from urllib.parse import quote, urljoin, urlsplit, urlunsplit
+from urllib.parse import quote, urljoin, urlsplit, urlunsplit, parse_qsl, urlencode
 
 import httpx
 from fastapi import Depends, HTTPException, Query, Request
@@ -94,44 +94,43 @@ def _image_record(url: str, title: str, source_url: str, license_name: str = "",
 
 
 def _dedupe_study_images(images: list[dict]) -> list[dict]:
-    """Remove repeated URLs/titles and obvious stock/transparent cutouts from a study wall."""
-    urls, titles, result = set(), set(), []
+    """Remove URL aliases and obvious stock/cutouts; pixel dedupe happens after decoding."""
+    urls, result = set(), []
     for image in images:
         parsed = urlsplit(str(image.get("url", "")))
-        path = re.sub(r"/\d+px-([^/]+)$", r"/\1", parsed.path, flags=re.I).casefold()
-        url_key = f"{(parsed.hostname or '').casefold()}{path}"
+        path = parsed.path
+        if (parsed.hostname or '').endswith('wikimedia.org') and '/thumb/' in path:
+            path = re.sub(r'/\d+px-[^/]+$', '', path.replace('/thumb/', '/'))
+        else:
+            path = re.sub(r'/\d+px-([^/]+)$', r'/\1', path)
+        identity_query = urlencode(sorted((key, value) for key, value in parse_qsl(parsed.query)
+            if not re.fullmatch(r'utm_.*|width|height|w|h|quality|q|fit|crop', key, re.I)))
+        url_key = f"{(parsed.hostname or '').casefold()}{path}?{identity_query}"
         title = "".join(char for char in unicodedata.normalize("NFD", str(image.get("title", "")).casefold())
                         if not unicodedata.combining(char))
-        title_key = re.sub(r"[^\w]+", " ", re.sub(r"\.(?:jpe?g|png|webp|gif|avif)$", "", title)).strip()
-        if not url_key or url_key in urls or (len(title_key) > 5 and title_key in titles):
+        if not parsed.hostname or url_key in urls:
             continue
         if re.search(r"\b(?:shutterstock|alamy|dreamstime|stock photo|clipart|sticker|transparent background|png cutout)\b",
                      f"{title} {image.get('provider', '')}", re.I):
             continue
         urls.add(url_key)
-        if len(title_key) > 5:
-            titles.add(title_key)
         result.append(image)
     return result
 
 
 def _media_search_terms(query: str) -> str:
     normalized = "".join(char for char in unicodedata.normalize("NFD", query.casefold()) if not unicodedata.combining(char))
-    hints = (
-        (("socrates",), "Socrates ancient Greek philosopher Athens historical photograph museum portrait bust sculpture natural background"),
-        (("platao", "plato"), "Plato ancient Greek philosopher Academy Athens historical photograph museum portrait sculpture natural background"),
-        (("aristoteles", "aristotle"), "Aristotle ancient Greek philosopher historical photograph museum portrait sculpture natural background"),
-        (("primeira guerra", "world war i", "wwi"), "First World War archival photographs trenches soldiers map"),
-        (("segunda guerra", "world war ii", "wwii"), "Second World War archival photographs map soldiers"),
-        (("einstein",), "Albert Einstein portrait physics black and white photograph"),
-        (("napoleao", "napoleon", "bonaparte"), "Napoleon Bonaparte historical portrait painting France campaign uniform"),
-    )
-    for keys, hint in hints:
-        if any(key in normalized for key in keys):
-            return f"{query.strip()} {hint}"[:200]
+    matches = []
+    for canonical, aliases in _VISUAL_SUBJECT_ALIASES.items():
+        for alias in aliases:
+            match = re.search(r"(?<!\w)" + re.escape(alias) + r"(?!\w)", normalized)
+            if match: matches.append((match.start(), -len(alias), canonical))
+    if matches:
+        return sorted(matches)[0][2].title()
     if re.search(r"\b(?:filosof\w*|philosoph\w*|pensador(?:es)?)\b", normalized):
-        return f"{query.strip()} historical philosopher portrait bust sculpture photograph museum painting natural background"[:200]
-    return query.strip()[:200]
+        return "philosophers portraits"
+    # Sentence-sized queries behave like dozens of AND terms on media indexes.
+    return " ".join(query.strip().split()[:10])[:120]
 
 
 def _filter_visual_subject(images: list[dict], videos: list[dict], query: str):
@@ -761,7 +760,7 @@ def install_studies(app, authenticate):
                    "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
                    "Referer": referer}
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(5, connect=2), headers=headers, follow_redirects=False) as client:
+            async with asyncio.timeout(6), httpx.AsyncClient(timeout=httpx.Timeout(5, connect=2), headers=headers, follow_redirects=False) as client:
                 for _ in range(3):
                     current = await asyncio.to_thread(_public_http_url, current)
                     if urlsplit(current).scheme != "https":
@@ -797,7 +796,7 @@ def install_studies(app, authenticate):
                         return Response(payload, media_type=media_type,
                                         headers={"Cache-Control": "private, max-age=900", "X-Content-Type-Options": "nosniff"})
             raise ValueError("A imagem redirecionou vezes demais.")
-        except (httpx.HTTPError, OSError, ValueError):
+        except (httpx.HTTPError, OSError, ValueError, TimeoutError):
             raise HTTPException(502, "Não consegui carregar esta imagem agora; vou tentar outra da busca.") from None
 
     @app.post("/studies/subjects", dependencies=auth)
@@ -938,7 +937,7 @@ def install_studies(app, authenticate):
         return lesson
 
     @app.get("/studies/images", dependencies=auth)
-    async def search_images(query: str = Query(min_length=2, max_length=200), limit: int = Query(default=24, ge=6, le=36),
+    async def search_images(request: Request, query: str = Query(min_length=2, max_length=200), limit: int = Query(default=24, ge=6, le=36),
                             attempt: int = Query(default=0, ge=0, le=20)):
         """Collect an attributed media wall from multiple open media indexes.
 
@@ -946,6 +945,8 @@ def install_studies(app, authenticate):
         another or interrupt the spoken explanation. Search hits are checked
         against the requested subject before they reach the interface.
         """
+        if request.app.state.engine.settings.privacy_mode != 'online':
+            raise HTTPException(403, "A busca de imagens requer o modo online.")
         search_query = _media_search_terms(query)
         headers = {"User-Agent": "CronosStudy/2.0 (educational visual references; local user request)"}
         tried = ["Wikimedia Commons", "Openverse", "Wikipédia", "DuckDuckGo Images"]
@@ -953,7 +954,7 @@ def install_studies(app, authenticate):
 
         async def run_source(name, awaitable):
             try:
-                return await awaitable
+                return await asyncio.wait_for(awaitable, timeout=6)
             except Exception:
                 failures.append(name)
                 return ([], []) if name == "Wikimedia Commons" else []
@@ -975,12 +976,28 @@ def install_studies(app, authenticate):
 
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(7, connect=3), headers=headers, follow_redirects=True) as client:
-                commons_task = run_source("Wikimedia Commons", _commons_media(client, search_query, limit, offset=attempt * limit))
-                openverse_task = run_source("Openverse", _openverse_images(client, search_query, limit, page=attempt + 1))
-                wikipedia_task = run_source("Wikipédia", _wikipedia_portraits(client, search_query, min(limit, 6)))
-                ddg_task = run_source("DuckDuckGo Images", search_ddgs())
-                commons, openverse, portraits, duckduckgo = await asyncio.gather(
-                    commons_task, openverse_task, wikipedia_task, ddg_task)
+                jobs = {
+                    asyncio.create_task(run_source("Wikimedia Commons", _commons_media(client, search_query, limit, offset=attempt * limit))): "commons",
+                    asyncio.create_task(run_source("Openverse", _openverse_images(client, search_query, limit, page=attempt + 1))): "openverse",
+                    asyncio.create_task(run_source("Wikipédia", _wikipedia_portraits(client, search_query, min(limit, 6)))): "portraits",
+                    asyncio.create_task(run_source("DuckDuckGo Images", search_ddgs())): "duckduckgo",
+                }
+                results = {"commons": ([], []), "openverse": [], "portraits": [], "duckduckgo": []}
+                pending = set(jobs)
+                try:
+                    while pending:
+                        completed, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+                        for task in completed:
+                            results[jobs[task]] = task.result()
+                        available = results["portraits"] + results["commons"][0] + results["openverse"] + results["duckduckgo"]
+                        relevant, _ = _filter_visual_subject(_dedupe_study_images(available), [], query)
+                        # Do not wait for a broken provider after another has delivered enough photos.
+                        if len(relevant) >= limit:
+                            break
+                finally:
+                    for task in pending: task.cancel()
+                    await asyncio.gather(*jobs, return_exceptions=True)
+                commons, openverse, portraits, duckduckgo = (results[key] for key in ("commons", "openverse", "portraits", "duckduckgo"))
         except (httpx.HTTPError, ValueError):
             failures.extend(source for source in tried if source not in failures)
             commons, openverse, portraits, duckduckgo = ([], []), [], [], []

@@ -3,14 +3,14 @@ import {api,jsonApi} from '../api';
 import {Mic,Pause,Play,Save,Volume2} from 'lucide-react';
 
 type WakeConfig={activation_phrase:string;pause_phrase:string;resume_phrase:string;start_with_windows:boolean};
-type WakeStatus={windows_available:boolean;model_installed:boolean;dependencies_installed:boolean;state:string;paused:boolean;settings:WakeConfig;reason?:string;last_heard?:string;last_action?:string;last_confidence?:number;greeting_status?:string};
+type WakeStatus={windows_available:boolean;model_installed:boolean;dependencies_installed:boolean;state:string;paused:boolean;settings:WakeConfig;reason?:string;last_heard?:string;last_action?:string;last_confidence?:number;greeting_status?:string;launch_status?:string};
 const defaults:WakeConfig={activation_phrase:'cronos',pause_phrase:'pausar cronos',resume_phrase:'retomar cronos',start_with_windows:false};
 
 export function WakeSettings({onPrepare}:{onPrepare:()=>void}){
  const [data,setData]=useState<WakeStatus|null>(null),[draft,setDraft]=useState(defaults),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),dirty=useRef(false);
  const refresh=useCallback(async()=>{try{const response=await api('/wake/status');const value=await response.json() as WakeStatus;setData(value);if(!dirty.current)setDraft(value.settings||defaults);}catch{/* O painel permanece utilizável quando o backend desconecta. */}},[]);
  useEffect(()=>{void refresh();const timer=window.setInterval(()=>void refresh(),5000);return()=>window.clearInterval(timer);},[refresh]);
- const run=async(fn:()=>Promise<unknown>,success:string)=>{setBusy(true);setMessage('');try{await fn();setMessage(success);await refresh();}catch(error){setMessage(error instanceof Error?error.message:'Não foi possível concluir a ação.');}finally{setBusy(false);}};
+ const run=async(fn:()=>Promise<unknown>,success:string)=>{setBusy(true);setMessage('');try{const result=await fn() as {note?:string}|undefined;setMessage(result?.note||success);await refresh();}catch(error){setMessage(error instanceof Error?error.message:'Não foi possível concluir a ação.');}finally{setBusy(false);}};
  const save=()=>run(async()=>{const result=await jsonApi('/wake/settings',draft);setDraft(result.settings||draft);dirty.current=false;},'Frases salvas. O ouvinte aplica a alteração sem reiniciar.');
  const toggleStartup=()=>run(async()=>{await jsonApi('/wake/settings',draft);await jsonApi('/wake/startup',{enabled:!draft.start_with_windows});dirty.current=false;},draft.start_with_windows?'Inicialização automática desativada.':'Inicialização automática ativada.');
  const listening=data?.state==='listening'||data?.state==='paused';
@@ -21,6 +21,7 @@ export function WakeSettings({onPrepare}:{onPrepare:()=>void}){
    {([['activation_phrase','Frase para chamar o Cronos'],['pause_phrase','Frase para pausar a escuta'],['resume_phrase','Frase para retomar a escuta']] as const).map(([key,label])=><label key={key}>{label}<input value={draft[key]} maxLength={80} onChange={event=>{dirty.current=true;setDraft(value=>({...value,[key]:event.target.value}));}}/></label>)}
   </div>
   <div className="wake-actions">
+   <button disabled={busy||!data?.windows_available} onClick={()=>void run(()=>jsonApi('/wake/test-voice',{}),'Teste de voz concluído.')}><Volume2/>TESTAR VOZ</button>
    <button disabled={busy} onClick={()=>void save()}><Save/>SALVAR FRASES</button>
    {data?.windows_available&&!data?.model_installed&&<button disabled={busy} onClick={onPrepare}><Volume2/>PREPARAR MODELO LOCAL</button>}
    <button disabled={busy||!data?.windows_available||!data?.model_installed||!data?.dependencies_installed} onClick={()=>void run(()=>jsonApi(listening?'/wake/stop':'/wake/start',{}),listening?'Escuta local encerrada.':'Escuta local iniciada.')}>
@@ -29,8 +30,9 @@ export function WakeSettings({onPrepare}:{onPrepare:()=>void}){
    <button disabled={busy||!data?.windows_available||!data?.model_installed||!data?.dependencies_installed} onClick={()=>void toggleStartup()} aria-pressed={Boolean(draft.start_with_windows)}><Volume2/>{draft.start_with_windows?'DESATIVAR INÍCIO COM WINDOWS':'INICIAR COM WINDOWS'}</button>
   </div>
   {(!data?.model_installed||!data?.dependencies_installed)&&<small>Antes de iniciar a escuta global, prepare o modelo local. As dependências de áudio vêm com a instalação completa do Cronos.</small>}
+  {data?.launch_status==='failed'&&<small>O comando foi reconhecido, mas o aplicativo não conseguiu iniciar. Abra ABRIR-CRONOS.bat para reparar as dependências.</small>}
   {data?.reason&&<small>O ouvinte parou por uma falha local ({data.reason}).</small>}
-  <div className="wake-recognition" role="status"><b>ÚLTIMO RECONHECIMENTO</b><span>{data?.last_heard||'Diga uma das frases configuradas para testar o microfone.'}</span>{data?.last_heard&&<small>{({activate:'Chamou o Cronos',paused:'Pausa reconhecida',resumed:'Retomada reconhecida',ignored_while_paused:'Comando ignorado: o ouvinte está pausado',low_confidence:'Frase ouvida, mas a confiança ficou baixa',unrecognized:'O microfone ouviu fala, mas não reconheceu uma frase configurada'} as Record<string,string>)[data.last_action||'unrecognized']||'Frase ouvida'}{typeof data?.last_confidence==='number'?` · confiança ${Math.round(data.last_confidence*100)}%`:''}{data?.greeting_status?` · retorno de voz: ${data.greeting_status==='cronos_voice'?'voz configurada do Cronos':data.greeting_status==='windows_voice'?'voz do Windows': 'indisponível'}`:''}</small>}</div>
+  <div className="wake-recognition" role="status"><b>ÚLTIMO RECONHECIMENTO</b><span>{data?.last_heard||'Diga uma das frases configuradas para testar o microfone.'}</span>{data?.last_heard&&<small>{({activate:'Chamou o Cronos',paused:'Pausa reconhecida',resumed:'Retomada reconhecida',ignored_while_paused:'Comando ignorado: o ouvinte está pausado',low_confidence:'Frase ouvida, mas a confiança ficou baixa',launch_failed:'Não foi possível abrir o aplicativo; tente ABRIR-CRONOS.bat',unrecognized:'O microfone ouviu fala, mas não reconheceu uma frase configurada'} as Record<string,string>)[data.last_action||'unrecognized']||'Frase ouvida'}{typeof data?.last_confidence==='number'?` · confiança ${Math.round(data.last_confidence*100)}%`:''}{data?.greeting_status?` · retorno de voz: ${data.greeting_status==='cronos_voice'?'voz configurada do Cronos':data.greeting_status==='windows_voice'?'voz do Windows':data.greeting_status==='pending'?'preparando a voz': 'indisponível'}`:''}</small>}</div>
   {message&&<p role="status" className="wake-message">{message}</p>}
  </section>;
 }

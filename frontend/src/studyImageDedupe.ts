@@ -8,10 +8,16 @@ function normalizedTitle(value:string){
 export function normalizedImageUrl(value:string){
  let url=value.trim();
  try{
-  const parsed=new URL(url);parsed.hash='';parsed.search='';
+  const parsed=new URL(url);parsed.hash='';
+  // Query parameters such as Bing's id and DuckDuckGo's u identify the image.
+  for(const key of [...parsed.searchParams.keys()])if(/^(?:utm_.*|width|height|w|h|quality|q|fit|crop)$/i.test(key))parsed.searchParams.delete(key);
+  parsed.searchParams.sort();
+  if(parsed.hostname.endsWith('wikimedia.org')&&parsed.pathname.includes('/thumb/')){
+   parsed.pathname=parsed.pathname.replace('/thumb/','/').replace(/\/\d+px-[^/]+$/i,'');
+  }
   // Wikimedia and Wikipedia resize the same file by inserting a width prefix.
   parsed.pathname=parsed.pathname.replace(/\/\d+px-([^/]+)$/i,'/$1');
-  url=`${parsed.hostname.toLocaleLowerCase()}${parsed.pathname.toLocaleLowerCase()}`;
+  url=`${parsed.hostname.toLocaleLowerCase()}${parsed.pathname}${parsed.search}`;
  }catch{url=url.toLocaleLowerCase().split(/[?#]/,1)[0];}
  return url;
 }

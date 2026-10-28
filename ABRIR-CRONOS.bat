@@ -20,6 +20,15 @@ if not exist ".venv\Scripts\pythonw.exe" (
   popd
   exit /b 1
 )
+".venv\Scripts\python.exe" -c "import webview, sounddevice, vosk"
+if errorlevel 1 (
+  echo Completando os componentes da instalacao...
+  call "%~dp0Instalar-Cronos.bat"
+  if errorlevel 1 (
+    popd
+    exit /b 1
+  )
+)
 start "" ".venv\Scripts\pythonw.exe" -m cronos.desktop
 popd
 exit /b 0

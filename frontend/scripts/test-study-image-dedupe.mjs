@@ -8,6 +8,10 @@ const output=mkdtempSync(join(tmpdir(),'cronos-image-dedupe-'));
 execFileSync(join(process.cwd(),'node_modules','.bin','tsc'),['src/studyImageDedupe.ts','--target','ES2022','--module','ES2022','--outDir',output,'--skipLibCheck','--ignoreConfig'],{stdio:'inherit'});
 const {normalizedImageUrl,normalizedImageTitle,isNearDuplicateHash,partitionWallImages}=await import(pathToFileURL(join(output,'studyImageDedupe.js')));
 const checks=[
+  normalizedImageUrl('https://tse1.mm.bing.net/th?id=one&w=300')!==normalizedImageUrl('https://tse1.mm.bing.net/th?id=two&w=300'),
+  normalizedImageUrl('https://tse1.mm.bing.net/th?id=one&w=300')===normalizedImageUrl('https://tse1.mm.bing.net/th?w=600&id=one'),
+  normalizedImageUrl('https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fa.com%2F1.jpg')!==normalizedImageUrl('https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fa.com%2F2.jpg'),
+  normalizedImageUrl('https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Socrates.jpg/300px-Socrates.jpg')===normalizedImageUrl('https://upload.wikimedia.org/wikipedia/commons/a/ab/Socrates.jpg'),
   normalizedImageUrl('https://upload.wikimedia.org/a/960px-Socrates.jpg?width=960')===normalizedImageUrl('https://upload.wikimedia.org/a/Socrates.jpg'),
   normalizedImageTitle('Sócrates — Retrato.JPG')===normalizedImageTitle('Socrates retrato.png'),
   isNearDuplicateHash('00000000',['00000001']),

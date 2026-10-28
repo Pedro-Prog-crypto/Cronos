@@ -161,3 +161,30 @@ def test_internal_configuration_tracks_runtime_changes(tmp_path,monkeypatch):
     registry.current_settings=lambda:replace(settings,context_messages=12)
     result=asyncio.run(registry.execute('cronos_internal_data',{'section':'configuration'},'session'))
     assert result['result']['context_messages']==12
+
+
+def test_partial_reserve_reply_cannot_be_replaced_by_another_provider(tmp_path,monkeypatch):
+    from cronos.reply_stream import intro_sink
+    settings=setup(tmp_path,monkeypatch)
+    monkeypatch.setenv('THIRD_KEY','dummy')
+    payload=json.loads(settings.providers_file.read_text())
+    payload['providers'].append({'id':'third','kind':'openai','model':'test','base_url':'https://example.net/v1','key_env':'THIRD_KEY'})
+    settings.providers_file.write_text(json.dumps(payload))
+    evolution.routing(settings,{'enabled':True,'fallbacks':['second','third']})
+    calls=[];spoken=[]
+    class Primary:
+        async def reply(self,*args):raise ProviderError('offline',503)
+    class Partial:
+        async def reply(self,*args):
+            await intro_sink.get()('A explicação já começou.')
+            raise ProviderError('connection closed',502)
+    def factory(config):calls.append(config.provider);return Partial()
+    monkeypatch.setattr('cronos.providers.make_provider',factory)
+    async def run():
+        async def hear(text):spoken.append(text)
+        token=intro_sink.set(hear)
+        try:
+            with pytest.raises(ProviderError):await evolution.ResilientProvider(settings,Primary()).reply('',[])
+        finally:intro_sink.reset(token)
+    asyncio.run(run())
+    assert calls==['second'] and spoken==['A explicação já começou.']

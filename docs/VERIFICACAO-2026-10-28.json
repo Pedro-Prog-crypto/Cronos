@@ -1,0 +1,38 @@
+{
+  "revision": "desktop-review-2026-10-28-r5",
+  "backend": {
+    "passed": 638,
+    "failed": 0,
+    "seconds": 86.35,
+    "command": ".venv/bin/python -m pytest -q"
+  },
+  "browser": {
+    "passed": 12,
+    "scenarios": [
+      "12 decoded unique images despite failures and duplicate pixels",
+      "fullscreen wall moves left, three rows, no transcript",
+      "streaming text does not restart identical media searches",
+      "spoken Plato changes the subject instead of retaining Socrates",
+      "late cancelled search cannot overwrite a newer topic",
+      "empty search is not permanently cached; retry recovers",
+      "all proxy failures report failure and allow working retry",
+      "new page of images is requested while narration continues",
+      "portrait photographs adapt to two rows without forced cropping",
+      "small viewport preserves all photographs and a reachable close button",
+      "closing releases every object URL with no browser errors",
+      "main App sends a study question, plays real WAV and renews images during speech"
+    ],
+    "external_media": "mocked",
+    "browser": "Chromium"
+  },
+  "limitations": [
+    "Windows microphone, WebView2 and hardware audio not exercised on the user notebook",
+    "External image provider delivery not verified here; browser media and cloud responses are controlled fixtures"
+  ],
+  "synthetic_checks": {
+    "image_partition_scenarios": 1900,
+    "image_checks_total": 1915,
+    "narrative_scenarios": 1200,
+    "narrative_assertions": 12012
+  }
+}
