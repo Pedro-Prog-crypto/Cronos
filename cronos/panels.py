@@ -166,7 +166,7 @@ class PanelState:
                 'database_bytes':state.memory.database.stat().st_size, 'disk_used_bytes':disk.used,
                 'disk_total_bytes':disk.total, 'folders':[p.name for p in state.memory.vault.iterdir() if p.is_dir() and not p.name.startswith('.') and not p.is_symlink()]},
                 'backup':self.backup_info or self.last_backup(), 'archived_backups':len(list((self.backup_root/'archive').glob('memory-*.zip'))) if (self.backup_root/'archive').exists() else 0, 'cpu_percent':self.cpu(), 'ram_percent':memory_pressure(),
-                'timings_ms':conversation_metrics.read(), 'live_timings_ms':conversation_metrics.read_live(), 'client_latency':conversation_metrics.read_client(), 'processing_phase':getattr(state.engine,'phase','idle'), 'active_requests':self.active, 'completed_requests':self.requests,
+                'timings_ms':conversation_metrics.read(), 'live_timings_ms':conversation_metrics.read_live(), 'client_latency':conversation_metrics.read_client(), 'latency_history':conversation_metrics.read_client_history()[-20:], 'processing_phase':getattr(state.engine,'phase','idle'), 'active_requests':self.active, 'completed_requests':self.requests,
                 'network':self.last_network, 'searches':searches, 'monitor':state.monitor.snapshot(),
                 'modules':state.features.catalog(), 'windows_audit':state.windows.last_audit,
                 'windows_available':state.windows.platform == 'win32', 'encrypted_storage':False,
@@ -269,6 +269,11 @@ class ClientLatency(BaseModel):
     speech_request_ms: float | None = Field(default=None,ge=0,le=1_800_000)
     playback_ms: float | None = Field(default=None,ge=0,le=1_800_000)
     first_audio_ms: float | None = Field(default=None,ge=0,le=1_800_000)
+    first_text_ms: float | None = Field(default=None,ge=0,le=1_800_000)
+    response_ms: float | None = Field(default=None,ge=0,le=1_800_000)
+    elapsed_ms: float | None = Field(default=None,ge=0,le=1_800_000)
+    sequence: int | None = Field(default=None,ge=0,le=100000)
+    status: Literal['waiting','responding','completed','cancelled','failed'] | None = None
 
 
 class VaultSelection(BaseModel):

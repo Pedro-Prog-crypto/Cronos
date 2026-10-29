@@ -30,7 +30,9 @@ def test_audio_is_recognized_and_answered_once_and_actual_question_is_saved(sett
         assert client.get('/panels',headers=AUTH).json()['preferences']['called_only'] is False
         r=client.post('/chat/audio/stream',headers={**AUTH,'Content-Type':'audio/wav'},content=wav())
         assert r.status_code==200
-        result=json.loads(r.text)['result']
+        events=[json.loads(line) for line in r.text.splitlines()]
+        assert [event['type'] for event in events]==['reply','result']
+        result=events[-1]['result']
         assert result['recognized_text']=='Quem foi Sócrates?' and provider.calls==1
         history=client.get('/conversations/'+result['session_id'],headers=AUTH).json()['messages']
         assert history[0]['content']=='Quem foi Sócrates?' and 'Pergunta falada' not in str(history)

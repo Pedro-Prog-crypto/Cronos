@@ -1,0 +1,48 @@
+{
+  "revision": "conversation-speed-2026-10-29-r6",
+  "browser": {
+    "checks_passed": 8,
+    "checks": [
+      "compiled App plays first audio before complete provider response",
+      "measured start under five seconds with controlled 150 ms AI / 100 ms TTS fixtures",
+      "timing history is reachable from the stopwatch and records a single turn",
+      "Escape cancels pending server generation and logs cancellation",
+      "failed request stays in history instead of disappearing from measurements",
+      "next question responds after cancellation and failure, without a stale lock",
+      "AudioWorklet manual send includes actual ASR and endpoint delay in the same question timer",
+      "ASR failure is recorded even when no chat request can be sent"
+    ],
+    "first_audio_ms": 280.0,
+    "response_ms": 280.0,
+    "environment": "Chromium + compiled UI + real local FastAPI/HTTP + real SSE parser and WAV playback; external AI and TTS controlled, synthetic microphone, controlled ASR/AI/TTS, no physical Windows microphone/speaker validation"
+  },
+  "image_wall": {
+    "passed": 12,
+    "scenarios": [
+      "12 decoded unique images despite failures and duplicate pixels",
+      "fullscreen wall moves left, three rows, no transcript",
+      "streaming text does not restart identical media searches",
+      "spoken Plato changes the subject instead of retaining Socrates",
+      "late cancelled search cannot overwrite a newer topic",
+      "empty search is not permanently cached; retry recovers",
+      "all proxy failures report failure and allow working retry",
+      "new page of images is requested while narration continues",
+      "portrait photographs adapt to two rows without forced cropping",
+      "small viewport preserves all photographs and a reachable close button",
+      "closing releases every object URL with no browser errors",
+      "main App sends a study question, plays real WAV and renews images during speech"
+    ],
+    "external_media": "mocked",
+    "browser": "Chromium"
+  },
+  "cloud_api_latency_measured": false,
+  "physical_windows_devices_tested": false,
+  "python_suite": {
+    "passed": 655,
+    "failed": 0,
+    "duration_seconds": 85.07,
+    "warnings": 1
+  },
+  "typescript": "passed",
+  "frontend_build": "passed"
+}

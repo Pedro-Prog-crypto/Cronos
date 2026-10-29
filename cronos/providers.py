@@ -166,23 +166,29 @@ class Gemini:
         try:
             # Long code may legitimately take minutes while bytes keep arriving.
             # A silent connection must still fail promptly and preserve its prefix.
-            timeout=httpx.Timeout(90,connect=15,write=45,pool=15) if structured else self.settings.provider_timeout
+            timeout=httpx.Timeout(90,connect=15,write=45,pool=15) if structured else httpx.Timeout(min(15,self.settings.provider_timeout),connect=min(3,self.settings.provider_timeout),write=min(8,self.settings.provider_timeout),pool=2)
             async with httpx.AsyncClient(timeout=timeout) as client:
                 for attempt in range(2):
                     from cronos.structured_stream import receive
-                    send=receive if structured else lambda client,url,headers,payload:client.post(url,headers=headers,json=payload)
-                    response = await send(client,
-                        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-                        headers={"x-goog-api-key": key},
-                        payload={
-                            "systemInstruction": {"parts": [{"text": system + "\n" + (STRUCTURED_RULES if structured else OUTPUT_RULES)}]},
-                            "contents": [{"role": "model" if m["role"] == "assistant" else "user",
-                                          "parts": [{"text": m["content"]}] + ([{"inlineData": {"mimeType": m["image"]["mime_type"], "data": m["image"]["data"]}}] if m.get("image") else [])} for m in messages],
-                            "generationConfig": {"responseMimeType": "application/json",
-                                                 **({"maxOutputTokens": self.settings.output_tokens} if self.settings.output_tokens else {}),
-                                                 **({"thinkingConfig":{"thinkingBudget":0}} if structured and model.startswith("gemini-2.5-flash") else {})},
-                        },
-                    )
+                    from cronos.conversation_transport import receive_conversation
+                    send=receive if structured else receive_conversation
+                    try:
+                        response = await send(client,
+                            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                            headers={"x-goog-api-key": key},
+                            payload={
+                                "systemInstruction": {"parts": [{"text": system + "\n" + (STRUCTURED_RULES if structured else OUTPUT_RULES)}]},
+                                "contents": [{"role": "model" if m["role"] == "assistant" else "user",
+                                              "parts": [{"text": m["content"]}] + ([{"inlineData": {"mimeType": m["image"]["mime_type"], "data": m["image"]["data"]}}] if m.get("image") else [])} for m in messages],
+                                "generationConfig": {"responseMimeType": "application/json",
+                                                     **({"maxOutputTokens": self.settings.output_tokens} if self.settings.output_tokens else {}),
+                                                     **({"thinkingConfig":{"thinkingBudget":0}} if model.startswith("gemini-2.5-flash") else {})},
+                            },
+                        )
+                    except httpx.HTTPStatusError as error:
+                        # SSE rejects HTTP errors before a body can be parsed;
+                        # retain the normal audit and bounded 503 retry below.
+                        response = error.response
                     try:metadata=response.json().get('usageMetadata',{})
                     except (ValueError,AttributeError):metadata={}
                     usage.audit(model,response.status_code,characters,metadata if isinstance(metadata,dict) else {})
@@ -246,10 +252,10 @@ class Gemini:
             raise ProviderError(message,status) from exc
         except httpx.TimeoutException as exc:
             usage.audit(model,0,characters)
-            raise ProviderError("Gemini: tempo de resposta esgotado. Confira a conexão e tente novamente.") from exc
+            raise ProviderError("Gemini: tempo de resposta esgotado. Confira a conexão e tente novamente.",504) from exc
         except httpx.RequestError as exc:
             usage.audit(model,0,characters)
-            raise ProviderError("Gemini: não foi possível conectar à API Google. Confira internet, DNS, proxy e certificados do Windows.") from exc
+            raise ProviderError("Gemini: não foi possível conectar à API Google. Confira internet, DNS, proxy e certificados do Windows.",503) from exc
         except (KeyError, IndexError, ValueError, TypeError, AttributeError) as exc:
             raise ProviderError("Gemini respondeu, mas o conteúdo veio incompleto ou em formato inesperado. Tente uma mensagem curta ou outra conversa.") from exc
 

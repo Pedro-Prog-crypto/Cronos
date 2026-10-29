@@ -8,7 +8,17 @@ def normalized(text):
     text=re.sub(r'\s+',' ',text).strip()
     return re.sub(r'^(?:cronos|kronos|jarvis)(?:\s+|$)','',text).strip()
 
+def greeting_only(text):
+    """Entire utterance must be social: a greeting followed by a question is not."""
+    text=normalized(text)
+    text=re.sub(r'\b(?:cronos|kronos|chronos|jarvis|mano|amigo|senhor)\b',' ',text)
+    text=' '.join(text.split())
+    phrase=r'(?:e ai|oi|ola|ei|bom dia|boa tarde|boa noite|de boa|beleza|tudo bem|tudo certo|como (?:e que )?(?:voce |ce )?(?:ta|esta|vai))'
+    return bool(text and re.fullmatch(phrase+r'(?: '+phrase+r')*',text))
+
+
 def social_or_control(text):
+    if greeting_only(text):return True
     text=normalized(text)
     if not text:return True
     phrase=r'(?:oi|ola|ei|bom dia|boa tarde|boa noite|obrigad[oa]|valeu|ok|beleza|tchau|ate mais|tudo bem|sim|nao|na escuta|esta na escuta|voce esta na escuta|esta ai|ta ai|voce esta ai|voce ta ai|esta me ouvindo|ta me ouvindo|voce esta me ouvindo|voce ta me ouvindo|consegue me ouvir|me ouve|teste|testando|teste de (?:voz|audio|microfone))'

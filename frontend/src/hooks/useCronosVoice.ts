@@ -153,10 +153,10 @@ async function localWave(blob:Blob){
   return new Blob([bytes],{type:'audio/wav'});
 }
 
-export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms:number;endpoint_ms:number})=>void,onError:(message:string)=>void,local=false,blocked=false,preferences?:any,onAudio?:(audio:Blob,metrics:{recognition_ms:number;endpoint_ms:number})=>Promise<void>,interrupt?:{active:boolean;onKeyword:()=>void;wakeOnly?:boolean}) {
+export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms:number;endpoint_ms:number})=>void,onError:(message:string)=>void,local=false,blocked=false,preferences?:any,onAudio?:(audio:Blob,metrics:{recognition_ms:number;endpoint_ms:number})=>Promise<void>,interrupt?:{active:boolean;onKeyword:()=>void;wakeOnly?:boolean},onRecognitionStart?:(endpoint_ms:number)=>void) {
   const [recording,setRecording]=useState(false),[capturing,setCapturing]=useState(false),[starting,setStarting]=useState(false),[transcribing,setTranscribing]=useState(false);
   const audioLevelSource=useRef(0),enabled=useRef(false),opening=useRef(false),processing=useRef(false),mounted=useRef(true);
-  const latest=useRef({onTranscript,onError,local,blocked,preferences,onAudio,interrupt});latest.current={onTranscript,onError,local,blocked,preferences,onAudio,interrupt};
+  const latest=useRef({onTranscript,onError,local,blocked,preferences,onAudio,interrupt,onRecognitionStart});latest.current={onTranscript,onError,local,blocked,preferences,onAudio,interrupt,onRecognitionStart};
   const keywordSocket=useRef<WebSocket|null>(null),keywordReady=useRef(false),keywordError=useRef(false);
   const [wakeOpen,setWakeOpen]=useState(false),wakeUntil=useRef(0);
   const captureVersion=useRef(0),resumeAfter=useRef(0);
@@ -197,17 +197,17 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
           if(typeof event.data.active==='boolean'){if(mounted.current)setCapturing(event.data.active&&(!latest.current.interrupt?.wakeOnly||wakeUntil.current>performance.now()));return;}
           if(!enabled.current||latest.current.blocked||processing.current)return;
           if(latest.current.interrupt?.wakeOnly&&wakeUntil.current<performance.now())return;
-          const samples=event.data.samples as Int16Array,rate=event.data.rate as number;
+          const samples=event.data.samples as Int16Array,rate=event.data.rate as number,endpoint_ms=Math.max(0,Math.min(60000,Number(event.data.endpoint_ms)||0));
           if(rate!==16000||samples.length>61*rate)return;
           processing.current=true;setTranscribing(true);node.port.postMessage({blocked:true});
           wakeUntil.current=0;setWakeOpen(false);
           const version=captureVersion.current;
-          const abort=new AbortController();resources.current.abort=abort;const recognitionStarted=performance.now();
+          const abort=new AbortController();resources.current.abort=abort;const recognitionStarted=performance.now();latest.current.onRecognitionStart?.(endpoint_ms);
           try{
             const audio=pcmWav(samples,rate);
-            if(latest.current.onAudio){await latest.current.onAudio(audio,{recognition_ms:0,endpoint_ms:750});return;}
+            if(latest.current.onAudio){await latest.current.onAudio(audio,{recognition_ms:0,endpoint_ms});return;}
             const response=await api('/voice/transcribe',{method:'POST',headers:{'Content-Type':'audio/wav'},body:audio,signal:abort.signal});
-            const result=await response.json();if(version===captureVersion.current&&!abort.signal.aborted&&enabled.current&&mounted.current){if(result.text?.trim())latest.current.onTranscript(result.text,{recognition_ms:Math.round(performance.now()-recognitionStarted),endpoint_ms:750});else latest.current.onError('Não consegui transcrever sua fala. O microfone continua ligado; repita a frase ou confira o dispositivo de entrada.');}
+            const result=await response.json();if(version===captureVersion.current&&!abort.signal.aborted&&enabled.current&&mounted.current){if(result.text?.trim())latest.current.onTranscript(result.text,{recognition_ms:Math.round(performance.now()-recognitionStarted),endpoint_ms});else latest.current.onError('Não consegui transcrever sua fala. O microfone continua ligado; repita a frase ou confira o dispositivo de entrada.');}
           }catch(error){if(enabled.current&&!abort.signal.aborted)latest.current.onError(error instanceof Error?error.message:'Transcrição indisponível.');}
           finally{if(version===captureVersion.current){processing.current=false;resumeAfter.current=performance.now()+250;if(mounted.current)setTranscribing(false);}}
         };
@@ -237,13 +237,13 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
           if(resources.current.recorder===recorder)resources.current.recorder=undefined;if(mounted.current)setCapturing(false);
           if(version!==captureVersion.current||!enabled.current||!mounted.current||discard||!heard||!bytes)return;
           wakeUntil.current=0;setWakeOpen(false);
-          processing.current=true;setTranscribing(true);const abort=new AbortController();resources.current.abort=abort;const recognitionStarted=performance.now();
+          processing.current=true;setTranscribing(true);const abort=new AbortController();resources.current.abort=abort;const recognitionStarted=performance.now(),endpoint_ms=Math.max(0,Math.round(recognitionStarted-lastSpeech));latest.current.onRecognitionStart?.(endpoint_ms);
           try{
             const blob=new Blob(parts,{type:recorder.mimeType}),audio=latest.current.local?await localWave(blob):blob;
             if(!enabled.current||abort.signal.aborted)return;
-            if(latest.current.onAudio){await latest.current.onAudio(audio,{recognition_ms:0,endpoint_ms:750});return;}
+            if(latest.current.onAudio){await latest.current.onAudio(audio,{recognition_ms:0,endpoint_ms});return;}
             const response=await api('/voice/transcribe',{method:'POST',headers:{'Content-Type':audio.type},body:audio,signal:abort.signal});
-            const result=await response.json();if(version===captureVersion.current&&!abort.signal.aborted&&enabled.current&&mounted.current){if(result.text?.trim())latest.current.onTranscript(result.text,{recognition_ms:Math.round(performance.now()-recognitionStarted),endpoint_ms:750});else latest.current.onError('Não consegui transcrever sua fala. O microfone continua ligado; repita a frase ou confira o dispositivo de entrada.');}
+            const result=await response.json();if(version===captureVersion.current&&!abort.signal.aborted&&enabled.current&&mounted.current){if(result.text?.trim())latest.current.onTranscript(result.text,{recognition_ms:Math.round(performance.now()-recognitionStarted),endpoint_ms});else latest.current.onError('Não consegui transcrever sua fala. O microfone continua ligado; repita a frase ou confira o dispositivo de entrada.');}
           }catch(error){if(enabled.current&&!abort.signal.aborted)latest.current.onError(error instanceof Error?error.message:'Transcrição indisponível.');}
           finally{if(version===captureVersion.current){processing.current=false;if(mounted.current)setTranscribing(false);}}
         };

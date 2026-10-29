@@ -4,6 +4,7 @@ import json
 import os
 import re
 import sqlite3
+import threading
 import unicodedata
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -36,6 +37,8 @@ class Memory:
     def __init__(self, vault: Path):
         self.vault = vault.resolve()
         self.warnings = []
+        self._index_lock = threading.RLock()
+        self._export_lock = threading.RLock()
         for folder in ("Conversas", "Temas", "Memorias", ".cronos"):
             self.path(folder, "").mkdir(parents=True, exist_ok=True)
         self.database = self.path(".cronos", "memory.sqlite3")
@@ -121,6 +124,12 @@ class Memory:
                     yield path
 
     def sync_notes(self):
+        # Indexing is independent of the conversation queue. Commit each note
+        # separately so a large vault does not hold a database write lock.
+        with self._index_lock:
+            self._sync_notes()
+
+    def _sync_notes(self):
         found = set()
         with self.connect() as db:
             for path in self._markdown_files():
@@ -153,6 +162,7 @@ class Memory:
                     db.execute("INSERT OR IGNORE INTO topics(title,path) VALUES(?,?)", (title, relative))
                     topic = db.execute("SELECT id FROM topics WHERE path=?", (relative,)).fetchone()[0]
                     db.execute("INSERT OR IGNORE INTO aliases(name,topic) VALUES(?,?)", (fold(title.strip()), topic))
+                db.commit()
             for row in db.execute("SELECT path FROM notes").fetchall():
                 if row[0] not in found:
                     db.execute("DELETE FROM notes WHERE path=?", (row[0],))
@@ -178,8 +188,9 @@ class Memory:
                     "edges": [{"source": a, "target": b} for a,b in sorted(edges) if a in visible or b in visible],
                     "total": len(all_notes), "next_offset": offset + len(rows) if offset + len(rows) < len(all_notes) else None}
 
-    def search(self, query, limit=8):
-        self.sync_notes()
+    def search(self, query, limit=8, *, refresh=True):
+        if refresh:
+            self.sync_notes()
         terms = list(dict.fromkeys(w for w in re.findall(r"\w+", fold(query)) if len(w) > 1 and w not in STOP_WORDS))
         if not terms:
             return []
@@ -204,9 +215,9 @@ class Memory:
                            'excerpt': '\n\n'.join(row['excerpt'] for row in recent)})
         return output
 
-    def recall(self, message, limit=8, budget=16000):
+    def recall(self, message, limit=8, budget=16000, *, refresh=True):
         parts, remaining = [], max(0, budget)
-        for note in self.search(message, limit):
+        for note in self.search(message, limit, refresh=refresh):
             excerpt = f"[{note['path']}] {note['title']}\n{note['excerpt']}"
             if remaining <= 0:
                 break
@@ -277,12 +288,17 @@ class Memory:
                 if not topics:files.append(knowledge)
         self.flush_exports()
         try:
-            self.sync_notes()
+            if topics or substantive_question(message):
+                self.sync_notes()
         except (OSError, ValueError):
             self.warnings.append("Conversa salva; indexação pendente. Verifique arquivos, permissões e links no vault.")
         return files
 
     def flush_exports(self):
+        with self._export_lock:
+            self._flush_exports()
+
+    def _flush_exports(self):
         self.warnings = []
         with self.connect() as db:
             rows = db.execute("SELECT * FROM exports WHERE done=0 ORDER BY id").fetchall()

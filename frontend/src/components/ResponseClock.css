@@ -1,0 +1,4 @@
+.response-clock{position:fixed;bottom:82px;left:50%;transform:translateX(-50%);z-index:45;display:flex;align-items:center;gap:9px;padding:6px 12px;border:1px solid #28bedc55;border-radius:20px;background:#03141dec;color:#b5dde6;font:12px 'Plus Jakarta Sans',sans-serif;cursor:pointer;white-space:nowrap;max-width:calc(100vw - 24px)}
+.response-clock b{color:#7de9ff;font-variant-numeric:tabular-nums;font-weight:600}
+.response-clock:hover,.response-clock:focus-visible{border-color:#6ceaff;outline:1px solid #6ceaff}
+.response-history{overflow-x:auto}.response-history p,.response-history small{font-size:12px;line-height:1.6}.response-history table{border-collapse:collapse;width:100%;font-size:12px;text-align:left;font-variant-numeric:tabular-nums}.response-history th,.response-history td{padding:9px 12px;border-bottom:1px solid #44c6df26;white-space:nowrap}.response-history th{color:#80dbef}

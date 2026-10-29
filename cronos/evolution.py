@@ -10,8 +10,10 @@ from cronos.providers import ProviderError
 
 _LOCK = threading.RLock()
 
-# Chat uses the provider's full configured timeout. The previous 30-second
-# wrapper cut off long prompts before the API's own 180-second timeout.
+# Bound silence before the first useful sentence, then allow the configured
+# generation budget to finish a detailed answer. Five seconds is a UI target,
+# not a deadline that truncates an active explanation.
+FIRST_REPLY_TIMEOUT_SECONDS = 8
 FALLBACK_ATTEMPT_TIMEOUT_SECONDS = 45
 FALLBACK_TOTAL_TIMEOUT_SECONDS = 300
 
@@ -124,21 +126,32 @@ class ResilientProvider:
         # Never replay raw mic audio to an incompatible API or silently change an explicit council request.
         from cronos.reply_stream import reply_sink, intro_sink
         delivered = False
+        first_reply_deadline = None
+        async def attempt(provider, timeout):
+            nonlocal first_reply_deadline
+            async def receive():
+                nonlocal first_reply_deadline
+                async with asyncio.timeout(min(timeout, FIRST_REPLY_TIMEOUT_SECONDS)) as deadline:
+                    first_reply_deadline = deadline
+                    return await provider.reply(system, messages)
+            return await asyncio.wait_for(receive(), timeout=timeout)
         original_reply, original_intro = reply_sink.get(), intro_sink.get()
         async def observe_reply(value):
             nonlocal delivered
             delivered = True
-            await original_reply(value)
+            if first_reply_deadline is not None: first_reply_deadline.reschedule(None)
+            if original_reply is not None: await original_reply(value)
         async def observe_intro(value):
             nonlocal delivered
             delivered = True
-            await original_intro(value)
-        reply_token = reply_sink.set(observe_reply) if original_reply else None
-        intro_token = intro_sink.set(observe_intro) if original_intro else None
+            if first_reply_deadline is not None: first_reply_deadline.reschedule(None)
+            if original_intro is not None: await original_intro(value)
+        reply_token = reply_sink.set(observe_reply)
+        intro_token = intro_sink.set(observe_intro)
         primary_timed_out = False
         try:
             timeout = float(self.settings.provider_timeout)
-            return await asyncio.wait_for(self.primary.reply(system, messages), timeout=timeout)
+            return await attempt(self.primary, timeout)
         except asyncio.TimeoutError:
             primary_timed_out = True
             original = ProviderError('A integração principal demorou demais; tentando as reservas configuradas.', 504)
@@ -157,7 +170,6 @@ class ResilientProvider:
                 raise ProviderError('A integração principal demorou demais e não há reserva automática ativa.', 504)
             raise original
         from dataclasses import replace
-        from cronos.providers import make_provider
         usable = {p['id'] for p in provider_catalog(self.settings) if p['configured']}
         loop = asyncio.get_running_loop()
         deadline = loop.time() + FALLBACK_TOTAL_TIMEOUT_SECONDS
@@ -167,16 +179,14 @@ class ResilientProvider:
             remaining = deadline - loop.time()
             if remaining <= 0:
                 break
-            reply_token = reply_sink.set(observe_reply) if original_reply else None
-            intro_token = intro_sink.set(observe_intro) if original_intro else None
+            reply_token = reply_sink.set(observe_reply)
+            intro_token = intro_sink.set(observe_intro)
             try:
                 attempt_timeout = min(FALLBACK_ATTEMPT_TIMEOUT_SECONDS, remaining)
                 if provider_id == 'ollama':
                     attempt_timeout = min(attempt_timeout, 8)
-                result = await asyncio.wait_for(
-                    make_provider(replace(self.settings, provider=provider_id)).reply(system, messages),
-                    timeout=attempt_timeout,
-                )
+                from cronos.conversation_transport import conversation_provider
+                result = await attempt(conversation_provider(replace(self.settings, provider=provider_id)), attempt_timeout)
                 return {**result, 'provider_used': provider_id, 'fallback_used': True}
             except (ProviderError, asyncio.TimeoutError) as exc:
                 if delivered:

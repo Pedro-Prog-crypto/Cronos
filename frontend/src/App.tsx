@@ -1,3 +1,4 @@
+import {ResponseClock} from './components/ResponseClock';
 import {UpdateNotice} from './components/UpdateNotice';
 /** @license SPDX-License-Identifier: Apache-2.0 */
 import React,{Suspense,lazy,useCallback,useEffect,useRef,useState} from 'react';
@@ -137,10 +138,18 @@ export default function App(){
   const session=useRef<string|null>(null),iframe=useRef<HTMLIFrameElement|null>(null),cursor=useRef(0),inFlight=useRef(false);
   const activity=useRef<'IDLE'|'LISTENING'|'SPEAKING'>('IDLE');const [moduleActivity,setModuleActivity]=useState(activity.current);
   const recognition=useRef<any>(null),latency=useRef<any>(null);
-  const saveLatency=useCallback((value:any)=>{const {started,armed,...metrics}=value;void jsonApi('/panels/latency',metrics).catch(()=>{});},[]);
+  const [latencyDisplay,setLatencyDisplay]=useState<any>(null);
+  const saveLatency=useCallback((value:any)=>{
+    value.sequence=(value.sequence||0)+1;
+    value.elapsed_ms=Math.round(performance.now()-value.started);
+    const {started,armed,voiceExpected,recognitionBeforeSend,stage,...metrics}=value;
+    if(latency.current?.turn_id===value.turn_id)setLatencyDisplay({...value});
+    void jsonApi('/panels/latency',metrics).catch(()=>{});
+  },[]);
+  const cancelLatency=()=>{const current=latency.current;if(current&&!['cancelled','failed','completed'].includes(current.status)){current.status='cancelled';current.armed=false;saveLatency(current);}latency.current=null;};
   const tell=useCallback((message:string,isError=false)=>{setNotice(message);setError(isError);},[]);
-  const voice=useCronosVoice({preferences:panelPrefs,streaming:Boolean(config?.fish_pcm_streaming),onSpeechStart:metrics=>{const current=latency.current;if(current?.armed&&metrics?.turn_id===current.turn_id){current.armed=false;saveLatency({...current,...metrics,first_audio_ms:Math.round(performance.now()-current.started)});}},onSpeechChunk:(spoken,index,turnId)=>{if(!turnId)return;const progress=speechProgress.current;if(progress&&progress.turnId===turnId){if(index>progress.chunkIndex&&progress.current)progress.completed+=`${progress.completed?' ':''}${progress.current}`;progress.current=spoken;progress.chunkIndex=index;}if(turnId!==expectedStudyTurn.current)return;const panelId=activeStudyPanel.current;if(panelId)changeStudyPanels(items=>items.map(panel=>panel.id===panelId?{...panel,spokenChunk:spoken,spokenChunkIndex:index}:panel));},onError:message=>{if(latency.current)latency.current.armed=false;tell(message,true);}});
-      const microphone=useMicrophone(useCallback((text,metrics)=>{recognition.current=metrics;if(!text.trim()){tell('Não consegui entender a fala. Tente novamente.',true);return;}if(commandRef.current(text))return;if(prefsRef.current?.called_only&&!/\b(?:cronos|kronos|chronos)\b/i.test(text))return;setChatOpen(false);void sendRef.current(text);},[tell]),useCallback(message=>tell(message,true),[tell]),Boolean(config?.direct_audio_chat)||config?.transcription_provider==='vosk',busy||analysisBusy||updateBusy||mediaPlaying||voice.isSpeaking||voice.isGenerating||(pageHidden&&panelPrefs?.background_processing===false),panelPrefs,config?.direct_audio_chat?async(audio,metrics)=>{recognition.current=metrics;await sendRef.current('Pergunta por voz',audio);}:undefined,config?.local_voice_interrupt?{active:mediaPlaying||busy,onKeyword:()=>bargeIn.current(),wakeOnly:Boolean(panelPrefs?.called_only)}:undefined);
+  const voice=useCronosVoice({preferences:panelPrefs,streaming:Boolean(config?.fish_pcm_streaming),onSpeechStart:metrics=>{const current=latency.current;if(current?.armed&&metrics?.turn_id===current.turn_id){current.armed=false;Object.assign(current,metrics,{first_audio_ms:Math.round(performance.now()-current.started),status:'responding'});current.response_ms=current.first_audio_ms+(current.endpoint_ms||0)+(current.recognitionBeforeSend||0);saveLatency(current);}},onSpeechChunk:(spoken,index,turnId)=>{if(!turnId)return;const progress=speechProgress.current;if(progress&&progress.turnId===turnId){if(index>progress.chunkIndex&&progress.current)progress.completed+=`${progress.completed?' ':''}${progress.current}`;progress.current=spoken;progress.chunkIndex=index;}if(turnId!==expectedStudyTurn.current)return;const panelId=activeStudyPanel.current;if(panelId)changeStudyPanels(items=>items.map(panel=>panel.id===panelId?{...panel,spokenChunk:spoken,spokenChunkIndex:index}:panel));},onError:message=>{if(latency.current){latency.current.armed=false;latency.current.status='failed';saveLatency(latency.current);}tell(message,true);}});
+      const microphone=useMicrophone(useCallback((text,metrics)=>{recognition.current=metrics;if(!text.trim()){tell('Não consegui entender a fala. Tente novamente.',true);return;}if(commandRef.current(text)){cancelLatency();return;}if(prefsRef.current?.called_only&&!/\b(?:cronos|kronos|chronos)\b/i.test(text)){cancelLatency();return;}setChatOpen(false);void sendRef.current(text);},[tell]),useCallback(message=>{if(latency.current?.stage==='recognition'){latency.current.status='failed';saveLatency(latency.current);}tell(message,true);},[tell,saveLatency]),Boolean(config?.direct_audio_chat)||config?.transcription_provider==='vosk',busy||analysisBusy||updateBusy||mediaPlaying||voice.isSpeaking||voice.isGenerating||(pageHidden&&panelPrefs?.background_processing===false),panelPrefs,config?.direct_audio_chat?async(audio,metrics)=>{recognition.current=metrics;await sendRef.current('Pergunta por voz',audio);}:undefined,config?.local_voice_interrupt?{active:mediaPlaying||busy,onKeyword:()=>bargeIn.current(),wakeOnly:Boolean(panelPrefs?.called_only)}:undefined,endpoint_ms=>{latency.current={turn_id:crypto.randomUUID(),source:'voice',started:performance.now(),stage:'recognition',armed:false,status:'waiting',voiceExpected:true,chat_ms:0,endpoint_ms};saveLatency(latency.current);});
   const state=voice.isSpeaking?'SPEAKING':microphone.capturing?'LISTENING':moduleActivity;
   const audioLevelSource=voice.isSpeaking?voice.audioLevelSource:microphone.audioLevelSource;
   const live=useRef({busy:false,recording:false,transcribing:false,speaking:false,generating:false,module:null as string|null,announce:false,fish:false});
@@ -198,7 +207,6 @@ export default function App(){
   useEffect(()=>{
     if(!connected)return;const controller=new AbortController();let alive=true;
     void(async()=>{try{
-      await api('/memory/sync',{method:'POST',signal:controller.signal});
       const nodes:MemoryGraph['nodes']=[],edges:MemoryGraph['edges']=[];let offset:number|null=0;let total=0;
       while(offset!==null){const data=await(await api(`/memory/graph?offset=${offset}&limit=1000`,{signal:controller.signal})).json();nodes.push(...data.nodes);edges.push(...data.edges);total=data.total;offset=data.next_offset;}
       const unique=new Map(edges.map(edge=>[edge.source+'|'+edge.target,edge]));
@@ -206,7 +214,7 @@ export default function App(){
     }catch(error){if(alive)tell('Não consegui carregar as notas da memória.',true);}})();
     return()=>{alive=false;controller.abort();};
   },[connected,graphRevision,tell]);
-  useEffect(()=>{if(!connected)return;const timer=setInterval(()=>{if(prefsRef.current?.auto_index!==false&&!document.hidden&&!live.current.busy&&!live.current.recording&&!live.current.transcribing)setGraphRevision(value=>value+1);},60000);return()=>clearInterval(timer);},[connected]);
+  useEffect(()=>{if(!connected)return;const timer=setInterval(()=>{if(prefsRef.current?.auto_index!==false&&!document.hidden&&!live.current.busy&&!live.current.recording&&!live.current.transcribing)void jsonApi('/memory/sync',{}).then(()=>setGraphRevision(value=>value+1)).catch(()=>{});},60000);return()=>clearInterval(timer);},[connected]);
   const openAnalysis=(kind:AnalysisKind)=>{restoreWindow('analysis:'+kind);if(autoVoice&&config?.fish_speech_configured)voice.prepare();setAnalyses(previous=>previous.includes(kind)?previous:[...previous,kind]);setEyeOpen(false);setModule(null);setChatOpen(false);};
   const runCommand=(text:string)=>{
     const normalizedCommand=text.trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/^(?:kronos|cronos)[,\s:]+/i,'').replace(/[.!?]+$/,'').toLowerCase().replace(/\s+/g,' ');
@@ -233,7 +241,7 @@ export default function App(){
     if(music.current?.handle(text)){if(studioActive)minimizeWindow('studio');setChatOpen(false);voice.stop();return true;}
     const position=cardPositionCommand(text);if(position&&(showSpokenCards||/cards?|cart[õo]es|textos?/i.test(text))){setCardLayout(position);setShowSpokenCards(true);setChatOpen(false);return true;}
     const cards=cardDisplayCommand(text);if(cards!==null){spokenCards.current=cards;setShowSpokenCards(cards);setChatOpen(false);if(cards){if(lastAnswer.current)setDisplayTurn(lastAnswer.current);else if(!displayTurn?.reply)tell('Ainda não há uma resposta para mostrar. Faça uma pergunta e peça a explicação em cards.',true);setModule(null);setEyeOpen(false);setNote(null);}return true;}
-    const command=localCommand(text,eyeOpen);if(!command)return false;latency.current=null;
+    const command=localCommand(text,eyeOpen);if(!command)return false;cancelLatency();
     if(command.type==='presence'){
       if(connected&&config?.fish_speech_configured){voice.prepare();void voice.speak('Estou na escuta.');}
       else tell('A conversa ainda não está conectada ou a voz não está configurada.',true);
@@ -248,8 +256,8 @@ export default function App(){
   };commandRef.current=runCommand;
   const selectNote=useCallback(async(path:string)=>{if(eyeOpen){setEyeOpen(false);return;}restoreWindow('note');try{setNote(await jsonApi(`/memory/note?path=${encodeURIComponent(path)}`));}catch(error){tell('Não foi possível abrir essa nota.',true);}},[eyeOpen,tell]);
   const worldReady=()=>{if(eyeAnnouncement.current){eyeAnnouncement.current=false;if(config?.fish_speech_configured)void voice.speak('Ampliando sua perspectiva. Olho de Deus aberto.');}};
-  interrupt.current=()=>{preserveInterruptedSpeech();if(studioActive)studioHandle.current?.handle('fechar estúdio de sites');analysisSpeechQueue.current=[];setAnalyses([]);spokenCards.current=false;setStremio(null);setProspect(null);music.current?.stop();latency.current=null;turnVersion.current++;chatAbort.current?.abort();voice.stop();microphone.cancelCapture();eyeAnnouncement.current=false;pendingAlerts.current.clear();setBusy(false);inFlight.current=false;setModule(null);setEyeOpen(false);setStudyOpen(false);setNote(null);setChatOpen(false);setShowSpokenCards(false);setNotice('');};
-  bargeIn.current=()=>{preserveInterruptedSpeech();music.current?.pause();window.dispatchEvent(new Event('cronos:listen'));analysisSpeechQueue.current=[];latency.current=null;turnVersion.current++;chatAbort.current?.abort();voice.stop();microphone.cancelCapture();pendingAlerts.current.clear();setBusy(false);inFlight.current=false;setNotice('');};
+  interrupt.current=()=>{preserveInterruptedSpeech();if(studioActive)studioHandle.current?.handle('fechar estúdio de sites');analysisSpeechQueue.current=[];setAnalyses([]);spokenCards.current=false;setStremio(null);setProspect(null);music.current?.stop();cancelLatency();turnVersion.current++;chatAbort.current?.abort();voice.stop();microphone.cancelCapture();eyeAnnouncement.current=false;pendingAlerts.current.clear();setBusy(false);inFlight.current=false;setModule(null);setEyeOpen(false);setStudyOpen(false);setNote(null);setChatOpen(false);setShowSpokenCards(false);setNotice('');};
+  bargeIn.current=()=>{preserveInterruptedSpeech();music.current?.pause();window.dispatchEvent(new Event('cronos:listen'));analysisSpeechQueue.current=[];cancelLatency();turnVersion.current++;chatAbort.current?.abort();voice.stop();microphone.cancelCapture();pendingAlerts.current.clear();setBusy(false);inFlight.current=false;setNotice('');};
   useEffect(()=>{const key=(event:KeyboardEvent)=>{if(event.key==='F4'&&!event.altKey&&!event.ctrlKey&&!event.metaKey){event.preventDefault();if(!event.repeat)handlers.current.f4();return;}if(event.key==='Escape'){if(!live.current.speaking&&!live.current.generating&&!live.current.busy&&music.current?.exitView()){event.preventDefault();return;}event.preventDefault();interrupt.current();}};window.addEventListener('keydown',key);return()=>{window.removeEventListener('keydown',key);chatAbort.current?.abort();};},[]);
   useEffect(()=>{if(!notice)return;const timer=setTimeout(()=>setNotice(''),8000);return()=>clearTimeout(timer);},[notice]);
 
@@ -269,8 +277,13 @@ export default function App(){
     let showStudyText=isStudyQuestion(text)&&!isExplicitTextDisplay(text);if(!showStudyText)focusStudyPanel(null);let studyPanelId:string|null=showStudyText?addStudyPanel(text):null;
     applyCardRequest(text,source==='text');if(!audio)setDisplayTurn({question:text,source,reply:''});setChatOpen(false);
     analysisSpeechQueue.current=[];inFlight.current=true;setBusy(true);voice.stop();if(autoVoice)voice.prepare();setDraft('');tell('Cronos está processando sua mensagem…');
-    latency.current={turn_id:crypto.randomUUID(),source:source==='transcription'?'voice':'text',started:performance.now(),armed:false,chat_ms:0,...(source==='transcription'?recognition.current:{})};
+    const captured=source==='transcription'&&latency.current?.stage==='recognition'?latency.current:null;
+    latency.current={turn_id:captured?.turn_id||crypto.randomUUID(),sequence:captured?.sequence||0,source:source==='transcription'?'voice':'text',started:performance.now(),armed:false,chat_ms:0,...(source==='transcription'?recognition.current:{})};
     const turnLatency=latency.current;
+    turnLatency.status='waiting';turnLatency.voiceExpected=Boolean(autoVoice&&config?.fish_speech_configured);
+    turnLatency.recognitionBeforeSend=audio?0:(turnLatency.recognition_ms||0);
+    saveLatency(turnLatency);
+    const textArrived=()=>{if(turnLatency.first_text_ms===undefined){turnLatency.first_text_ms=Math.round(performance.now()-turnLatency.started);if(!turnLatency.voiceExpected)turnLatency.status='responding';saveLatency(turnLatency);}};
     expectedStudyTurn.current=turnLatency.turn_id;
     const version=++turnVersion.current,controller=new AbortController();chatAbort.current=controller;
     try{
@@ -283,16 +296,16 @@ export default function App(){
       const speakTracked=(reply:string,continuation?:Promise<string>)=>{
         updateSpeechProgress(reply);
         const playback=voice.speak(reply,turnLatency.turn_id,continuation);
-        void playback.then(()=>{if(speechProgress.current?.turnId===turnLatency.turn_id)speechProgress.current=null;},()=>{if(speechProgress.current?.turnId===turnLatency.turn_id)speechProgress.current=null;});
+        void playback.then(()=>{if(!['cancelled','failed'].includes(turnLatency.status)){turnLatency.status='completed';saveLatency(turnLatency);}if(speechProgress.current?.turnId===turnLatency.turn_id)speechProgress.current=null;},()=>{if(speechProgress.current?.turnId===turnLatency.turn_id)speechProgress.current=null;});
       };
       const intro=(reply:string)=>{
-        if(version!==turnVersion.current||controller.signal.aborted||!voiceAllowed)return;previewIntro=reply;if(!audio||question!==text)setDisplayTurn({question,source,reply});if(showStudyText){if(!studyPanelId)studyPanelId=addStudyPanel(question,reply);if(studyPanelId)updateStudyPanel(studyPanelId,question,reply);}
+        if(version!==turnVersion.current||controller.signal.aborted||!voiceAllowed)return;textArrived();previewIntro=reply;if(!audio||question!==text)setDisplayTurn({question,source,reply});if(showStudyText){if(!studyPanelId)studyPanelId=addStudyPanel(question,reply);if(studyPanelId)updateStudyPanel(studyPanelId,question,reply);}
         if(version!==turnVersion.current||controller.signal.aborted||!voiceAllowed||voiced||!autoVoice||!config?.fish_speech_configured)return;
         introText=reply;voiced=true;turnLatency.chat_ms=Math.round(performance.now()-turnLatency.started);latency.current=turnLatency;turnLatency.armed=true;saveLatency(turnLatency);const continuation=new Promise<string>(resolve=>{finishSpeech=resolve;});speakTracked(reply,continuation);
       };
       const ready=(reply:string)=>{
         if(version!==turnVersion.current||controller.signal.aborted)return;
-        if(!voiceAllowed||replyDelivered)return;replyDelivered=true;if(showStudyText){if(!studyPanelId)studyPanelId=addStudyPanel(question,reply);if(studyPanelId)updateStudyPanel(studyPanelId,question,reply);}
+        if(!voiceAllowed||replyDelivered)return;textArrived();replyDelivered=true;if(showStudyText){if(!studyPanelId)studyPanelId=addStudyPanel(question,reply);if(studyPanelId)updateStudyPanel(studyPanelId,question,reply);}
         if(autoVoice&&config?.fish_speech_configured)updateSpeechProgress(reply);
         if(!audio||question!==text)lastAnswer.current={question,source,reply};setDisplayTurn({question,source,reply});setNotice('');
         if(introText){
@@ -315,7 +328,7 @@ export default function App(){
         voiceAllowed=true;if(audio)turnLatency.recognition_ms=Math.round(performance.now()-turnLatency.started);
         if(runCommand(recognized)){controller.abort();return;}
         applyCardRequest(recognized);question=recognized;showStudyText=showStudyText||isStudyQuestion(recognized)&&!isExplicitTextDisplay(recognized);if(!showStudyText)focusStudyPanel(null);if(showStudyText){if(!studyPanelId)studyPanelId=addStudyPanel(question,previewIntro);if(studyPanelId)updateStudyPanel(studyPanelId,question,previewIntro);}else if(studyPanelId&&!studyPanelsRef.current.find(panel=>panel.id===studyPanelId)?.reply){closeStudyPanel(studyPanelId);studyPanelId=null;}setDisplayTurn({question,source,reply:previewIntro});
-      },audio);if(version!==turnVersion.current||controller.signal.aborted)return;if(result.ignored){const heard=result.recognized_text||text;if(studyPanelId&&!studyPanelsRef.current.find(panel=>panel.id===studyPanelId)?.reply)closeStudyPanel(studyPanelId);setDisplayTurn({question:heard,source,reply:''});tell(prefsRef.current?.called_only?'Ouvi sua fala, mas “Responder só após ser chamado” está ligado. Comece a frase com “Cronos” ou desligue essa opção no painel de Entendimento de Linguagem.':'Ouvi a fala, mas não consegui concluir a resposta. Tente novamente.',true);return;}if(audio&&!voiceAllowed&&result.recognized_text){if(runCommand(result.recognized_text))return;voiceAllowed=true;}if(!voiced)turnLatency.chat_ms=Math.round(performance.now()-turnLatency.started);saveLatency(turnLatency);session.current=result.session_id;const finalQuestion=result.recognized_text||text;showStudyText=showStudyText||isStudyQuestion(finalQuestion)&&!isExplicitTextDisplay(finalQuestion);if(!showStudyText)focusStudyPanel(null);if(showStudyText){if(!studyPanelId)studyPanelId=addStudyPanel(finalQuestion,result.reply);if(studyPanelId)updateStudyPanel(studyPanelId,finalQuestion,result.reply);}else if(studyPanelId&&!studyPanelsRef.current.find(panel=>panel.id===studyPanelId)?.reply){closeStudyPanel(studyPanelId);studyPanelId=null;}lastAnswer.current={question:finalQuestion,source,reply:result.reply};if(pendingHeardContext===interruptedContext.current)interruptedContext.current=null;if(result.recognized_text)applyCardRequest(result.recognized_text);setDisplayTurn({question:finalQuestion,source,reply:result.reply});setGraphRevision(value=>value+1);
+      },audio);if(version!==turnVersion.current||controller.signal.aborted)return;if(result.ignored){turnLatency.status='cancelled';saveLatency(turnLatency);const heard=result.recognized_text||text;if(studyPanelId&&!studyPanelsRef.current.find(panel=>panel.id===studyPanelId)?.reply)closeStudyPanel(studyPanelId);setDisplayTurn({question:heard,source,reply:''});tell(prefsRef.current?.called_only?'Ouvi sua fala, mas “Responder só após ser chamado” está ligado. Comece a frase com “Cronos” ou desligue essa opção no painel de Entendimento de Linguagem.':'Ouvi a fala, mas não consegui concluir a resposta. Tente novamente.',true);return;}if(audio&&!voiceAllowed&&result.recognized_text){if(runCommand(result.recognized_text))return;voiceAllowed=true;}textArrived();if(!voiced)turnLatency.chat_ms=Math.round(performance.now()-turnLatency.started);if(!turnLatency.voiceExpected)turnLatency.status='completed';saveLatency(turnLatency);session.current=result.session_id;const finalQuestion=result.recognized_text||text;showStudyText=showStudyText||isStudyQuestion(finalQuestion)&&!isExplicitTextDisplay(finalQuestion);if(!showStudyText)focusStudyPanel(null);if(showStudyText){if(!studyPanelId)studyPanelId=addStudyPanel(finalQuestion,result.reply);if(studyPanelId)updateStudyPanel(studyPanelId,finalQuestion,result.reply);}else if(studyPanelId&&!studyPanelsRef.current.find(panel=>panel.id===studyPanelId)?.reply){closeStudyPanel(studyPanelId);studyPanelId=null;}lastAnswer.current={question:finalQuestion,source,reply:result.reply};if(pendingHeardContext===interruptedContext.current)interruptedContext.current=null;if(result.recognized_text)applyCardRequest(result.recognized_text);setDisplayTurn({question:finalQuestion,source,reply:result.reply});setGraphRevision(value=>value+1);
       const turnTools:ToolResult[]=result.tool_results||[];setTools(old=>[...old,...turnTools]);
       if(showStudyText&&studyPanelId){const references=studyReferences(turnTools);if(references.length)changeStudyPanels(items=>items.map(panel=>panel.id===studyPanelId?{...panel,references}:panel));}
       const filmResult=result.tool_results?.find((r:any)=>r.name==='stremio_search'&&r.status==='completed');if(filmResult?.result){setStremio(filmResult.result);setModule(null);setChatOpen(false);}
@@ -328,7 +341,7 @@ export default function App(){
       else if(autoVoice)tell('A resposta está escrita, mas a voz não está configurada. Confira a configuração da voz no arquivo .env.',true);
     }catch(error){
       if(version!==turnVersion.current||controller.signal.aborted)return;
-      controller.abort();voice.stop();
+      turnLatency.status='failed';turnLatency.armed=false;saveLatency(turnLatency);controller.abort();voice.stop();
       if(studyPanelId&&!studyPanelsRef.current.find(panel=>panel.id===studyPanelId)?.reply)closeStudyPanel(studyPanelId);
       if(error instanceof ApiError&&error.detail?.tool_results){session.current=error.detail.session_id;setTools(old=>[...old,...error.detail.tool_results]);}
       tell(`${error instanceof Error?error.message:'Não foi possível conversar.'}\nSua mensagem ficou guardada no campo para o senhor tentar novamente sem repetir.`,true);
@@ -374,6 +387,7 @@ export default function App(){
       <button className="eye-close" aria-label="Fechar Olho de Deus" title="Fechar Olho de Deus · F4 controla o microfone" onClick={()=>{eyeAnnouncement.current=false;setEyeOpen(false);}}><X size={20}/></button>
       <Suspense fallback={<div className="panel-loading">Abrindo Olho de Deus…</div>}><WorldMap query={placeQuery} onError={message=>tell(message,true)} onReady={worldReady}/></Suspense>
     </div></WindowSurface>}
+    <ResponseClock turn={latencyDisplay} onDetails={()=>openModule(0)}/>
     <div className="cronos-quick-actions" aria-label="Ações rápidas">
       {!eyeActive&&!moduleActive&&!studyActive&&<><button className="reference-attachment" aria-label="Abrir área de estudos" title="Abrir área de estudos" onClick={()=>{restoreWindow('study');setStudyOpen(true);setEyeOpen(false);setModule(null);setChatOpen(false);}}><BookOpen size={16}/></button><button className="reference-attachment" aria-label="Analisar imagem" title="Analisar imagem" onClick={()=>openAnalysis('image')}><ImagePlus size={16}/></button><button className="reference-attachment" aria-label="Analisar ZIP ou código" title="Analisar ZIP ou código" onClick={()=>openAnalysis('document')}><FileArchive size={16}/></button></>}
       <HandControl/>
@@ -400,7 +414,7 @@ export default function App(){
       </form>
     </HolographicCard></section></WindowSurface>}
     {tools.some(result=>result.status==='pending_confirmation')&&<section className="holo-tool-deck" aria-label="Ações pendentes">{tools.filter(result=>result.status==='pending_confirmation').map((result,index)=><HolographicCard key={index} title={result.name} variant="layered"><pre>{JSON.stringify(result.arguments,null,2)}</pre><div className="footer-actions"><button disabled={busy} onClick={()=>approve(result,true)}>Confirmar ação</button><button disabled={busy} onClick={()=>approve(result,false)}>Cancelar</button></div></HolographicCard>)}</section>}
-    {module&&<WindowSurface minimized={!moduleActive}><Suspense fallback={<div className="panel-loading">Abrindo painel…</div>}><ModulePanel id={module} onMinimize={()=>minimizeWindow('module')} onSelect={openModule} onClose={closeModule} graph={graph} onSync={()=>setGraphRevision(v=>v+1)} onNote={path=>{closeModule();void selectNote(path);}} preferences={panelPrefs} onPreferences={updatePreferences} voice={voice} microphone={microphone} lastTurn={displayTurn} busy={busy} onComposer={()=>{closeModule();restoreWindow('chat');setChatOpen(true);}} onEye={()=>{closeModule();restoreWindow('eye');voice.prepare();eyeAnnouncement.current=true;setEyeOpen(true);}} onAsk={text=>void sendText(text)}/></Suspense></WindowSurface>}
+    {module&&<WindowSurface minimized={!moduleActive}><Suspense fallback={<div className="panel-loading">Abrindo painel…</div>}><ModulePanel id={module} onMinimize={()=>minimizeWindow('module')} onSelect={openModule} onClose={closeModule} graph={graph} onSync={()=>{void jsonApi('/memory/sync',{}).then(()=>setGraphRevision(v=>v+1)).catch(()=>tell('Não consegui sincronizar as notas.',true));}} onNote={path=>{closeModule();void selectNote(path);}} preferences={panelPrefs} onPreferences={updatePreferences} voice={voice} microphone={microphone} lastTurn={displayTurn} busy={busy} onComposer={()=>{closeModule();restoreWindow('chat');setChatOpen(true);}} onEye={()=>{closeModule();restoreWindow('eye');voice.prepare();eyeAnnouncement.current=true;setEyeOpen(true);}} onAsk={text=>void sendText(text)}/></Suspense></WindowSurface>}
 
 
   </div>;

@@ -122,6 +122,8 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         try:
             yield
         finally:
+            if app.state.engine.memory_refresh is not None:
+                await asyncio.gather(app.state.engine.memory_refresh, return_exceptions=True)
             await app.state.live_screen.close()
             if app.state.studio is not None: await app.state.studio.close()
             update_task.cancel()
@@ -432,13 +434,12 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
 
     @app.post("/memory/sync", dependencies=[Depends(authenticate)])
     async def memory_sync(request: Request):
-        async with request.app.state.lock:
-            memory = request.app.state.memory
-            def sync():
-                memory.flush_exports()
-                memory.sync_notes()
-                return {**memory.stats(), "warnings": memory.warnings}
-            return await asyncio.to_thread(sync)
+        memory = request.app.state.memory
+        def sync():
+            memory.flush_exports()
+            memory.sync_notes()
+            return {**memory.stats(), "warnings": memory.warnings}
+        return await asyncio.to_thread(sync)
 
     @app.get("/memory/status", dependencies=[Depends(authenticate)])
     async def memory_status(request: Request):

@@ -123,6 +123,7 @@ def test_network_delivers_intro_before_provider_finishes(settings):
                 lines=response.iter_lines();first=json.loads(next(lines))
                 assert first['type']=='intro' and not finished.is_set()
                 release.set()
+                assert json.loads(next(lines))['type']=='reply'
                 assert json.loads(next(lines))['type']=='result'
     finally:
         release.set();server.should_exit=True;thread.join(5);sock.close()
