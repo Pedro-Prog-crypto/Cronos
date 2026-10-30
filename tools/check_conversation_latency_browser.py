@@ -26,6 +26,7 @@ from cronos.config import Settings
 from cronos.conversation_transport import receive_conversation
 from cronos.providers import parse_completed_reply, ProviderError
 from cronos import usage
+from cronos.reply_stream import transcript_sink
 
 ROOT=Path(__file__).resolve().parents[1]
 AUTH={'Authorization':'Bearer latency-fixture'}
@@ -41,21 +42,29 @@ def audio_fixture():
 
 class ControlledFish:
     fail_asr=False
+    recordings=[]
+    spoken=[]
     def __init__(self):self.tts=self;self.asr=self
     async def transcribe(self,**kwargs):
+        self.recordings.append(kwargs['audio'])
         await asyncio.sleep(.25)
         if self.fail_asr:raise RuntimeError("Controlled ASR failure")
         return SimpleNamespace(text="E aí, Kronos, de boa? Como é que você tá, mano?")
     async def __aenter__(self):return self
     async def __aexit__(self,*args):pass
     async def convert(self,**kwargs):
+        self.spoken.append(kwargs['text'])
         await asyncio.sleep(.10)
         return audio_fixture()
 
 
 class ControlledProvider:
-    def __init__(self):self.mode='normal';self.finished=threading.Event();self.cancelled=threading.Event()
+    def __init__(self):self.mode='normal';self.finished=threading.Event();self.cancelled=threading.Event();self.questions=[]
     async def reply(self,system,messages):
+        native=messages[-1].get('audio_pcm') is not None
+        question='E aí, Kronos, de boa? Como é que você tá, mano?' if native else messages[-1]['content']
+        self.questions.append(question)
+        if native and transcript_sink.get():await transcript_sink.get()(question)
         if self.mode=='fail':raise ProviderError('Falha externa simulada.',503)
         if self.mode=='wait':
             try:await asyncio.sleep(30)
@@ -75,7 +84,9 @@ class ControlledProvider:
         async def handle(request):return httpx.Response(200,headers={'Content-Type':'text/event-stream'},stream=Stream())
         async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
             response=await receive_conversation(client,'https://fixture.invalid/model:generateContent',{}, {})
-        return parse_completed_reply(response.json()['candidates'][0]['content']['parts'][0]['text'])
+        result=parse_completed_reply(response.json()['candidates'][0]['content']['parts'][0]['text'])
+        if native:result['recognized_text']=question
+        return result
 
 
 async def exercise(base,provider,mic_file):
@@ -150,6 +161,15 @@ async def exercise(base,provider,mic_file):
         failure=(await history())[-1]
         assert failure['source']=='voice' and failure['status']=='failed' and failure['first_audio_ms'] is None
         checks.append('ASR failure is recorded even when no chat request can be sent')
+        ControlledFish.fail_asr=False
+        await page.get_by_role('button',name='Reenviar gravação',exact=True).click()
+        await page.locator('.response-clock').filter(has_text='Voz começou em').wait_for()
+        assert ControlledFish.recordings[-1]==ControlledFish.recordings[-2]
+        assert provider.questions[-1]=='E aí, Kronos, de boa? Como é que você tá, mano?'
+        assert 'Tudo certo, senhor.' in ''.join(ControlledFish.spoken)
+        assert await page.get_by_role('button',name='Reenviar gravação',exact=True).count()==0
+        checks.append('same recording is resent after ASR failure, its actual transcript reaches AI and the answer reaches TTS')
+        await page.locator('.reference-mic.thinking, .reference-mic.speaking, .reference-mic.generating').wait_for(state='detached')
         await page.get_by_role('button',name='Desligar microfone',exact=True).click()
         importlib.import_module('cronos.app').VOICE_REQUEST_TIMEOUT_SECONDS=.04
         await compose('Oi Cronos, teste de voz indisponível')
@@ -159,8 +179,39 @@ async def exercise(base,provider,mic_file):
         assert rows[-1]['status']=='failed' and rows[-1]['first_audio_ms'] is None
         await page.locator('.answer-card-deck').filter(has_text='Como foi seu dia?').wait_for()
         checks.append('stalled TTS finishes with a visible error while the complete written answer stays available')
+        # Exercise the native-audio branch that previously stayed in
+        # 'Transcrevendo' throughout the full conversation.
+        importlib.import_module('cronos.app').VOICE_REQUEST_TIMEOUT_SECONDS=8
+        native=await browser.new_page(viewport={'width':1366,'height':768})
+        native.on('pageerror',lambda error:errors.append(str(error)))
+        async def direct_status(route):
+            response=await route.fetch();data=await response.json();data['direct_audio_chat']=True
+            await route.fulfill(response=response,json=data)
+        await native.route('**/status',direct_status)
+        await native.goto(base+'/#cronos-session=latency-fixture')
+        await native.get_by_role('button',name='Ligar microfone',exact=True).click()
+        await native.locator('.reference-mic.recording').wait_for()
+        await native.wait_for_timeout(1100)
+        before=len(ControlledFish.recordings)
+        await native.get_by_role('button',name='Enviar fala agora',exact=True).click()
+        await native.locator('.response-clock').filter(has_text='Voz começou em').wait_for()
+        assert not provider.finished.is_set()
+        assert await native.locator('.reference-mic.transcribing').count()==0
+        assert len(ControlledFish.recordings)==before
+        assert await native.get_by_role('button',name='Reenviar gravação',exact=True).count()==0
+        checks.append('native audio leaves transcription state on handoff, receives its recognized question and speaks before final metadata')
+        await native.locator('.reference-mic.thinking, .reference-mic.speaking, .reference-mic.generating').wait_for(state='detached')
+        provider.mode='fail'
+        await native.wait_for_timeout(1100)
+        await native.get_by_role('button',name='Enviar fala agora',exact=True).click()
+        await native.locator('.response-clock').filter(has_text='Resposta interrompida').wait_for()
+        await native.get_by_role('button',name='ENTENDIMENTO DE LINGUAGEM',exact=True).click()
+        await native.locator('.phrase-card').click()
+        assert await native.locator('#chat-input').input_value()=='E aí, Kronos, de boa? Como é que você tá, mano?'
+        assert len(ControlledFish.recordings)==before
+        checks.append('native answer failure preserves the actual recognized question for retry, without redundant ASR or the voice placeholder')
         assert not errors,errors
-        await page.close();await browser.close()
+        await native.close();await page.close();await browser.close()
     return {'checks_passed':len(checks),'checks':checks,'first_audio_ms':measured['first_audio_ms'],'response_ms':measured['response_ms'],
             'environment':'Chromium + compiled UI + real local FastAPI/HTTP + real SSE parser and WAV playback; external AI and TTS controlled, synthetic microphone, controlled ASR/AI/TTS, no physical Windows microphone/speaker validation'}
 

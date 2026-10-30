@@ -162,6 +162,45 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
   const [wakeOpen,setWakeOpen]=useState(false),wakeUntil=useRef(0);
   const captureVersion=useRef(0),resumeAfter=useRef(0);
   const resources=useRef<{stream?:MediaStream;recorded?:MediaStream;context?:AudioContext;recorder?:MediaRecorder;node?:AudioWorkletNode;timer?:ReturnType<typeof setInterval>;abort?:AbortController;vad?:Awaited<ReturnType<typeof createSpeechDetector>>;submit?:()=>void}>({});
+  const lastRecording=useRef<{audio:Blob;endpoint_ms:number}|null>(null);
+  const [retryAvailable,setRetryAvailable]=useState(false);
+  const acknowledge=useCallback(()=>{lastRecording.current=null;setRetryAvailable(false);},[]);
+  const deliverRecording=useCallback(async(audio:Blob,endpoint_ms:number)=>{
+    const version=captureVersion.current;
+    lastRecording.current={audio,endpoint_ms};setRetryAvailable(false);
+    processing.current=true;setTranscribing(true);wakeUntil.current=0;setWakeOpen(false);
+    resources.current.node?.port.postMessage({blocked:true});
+    const abort=new AbortController();resources.current.abort=abort;
+    const recognitionStarted=performance.now();latest.current.onRecognitionStart?.(endpoint_ms);
+    try{
+      if(latest.current.onAudio){
+        // Native audio is now owned by the conversation, not a pending Fish
+        // transcription. Keep the recording until a real transcript arrives.
+        setRetryAvailable(true);
+        const submission=latest.current.onAudio(audio,{recognition_ms:0,endpoint_ms});
+        setTranscribing(false);
+        await submission;return;
+      }
+      const result=await withRequestDeadline(abort.signal,12000,async signal=>{
+        const response=await api('/voice/transcribe',{method:'POST',headers:{'Content-Type':audio.type},body:audio,signal});return response.json();
+      },'Não consegui reconhecer a gravação a tempo. Use Reenviar gravação para tentar sem repetir sua fala.');
+      if(version!==captureVersion.current||abort.signal.aborted||!mounted.current)return;
+      if(typeof result.text!=='string'||!result.text.trim())throw new Error('Não consegui entender a gravação. Use Reenviar gravação para tentar sem repetir sua fala.');
+      acknowledge();
+      latest.current.onTranscript(result.text,{recognition_ms:Math.round(performance.now()-recognitionStarted),endpoint_ms});
+    }catch(error){
+      if(version===captureVersion.current&&!abort.signal.aborted&&mounted.current){
+        setRetryAvailable(Boolean(lastRecording.current));
+        latest.current.onError(error instanceof Error?error.message:'Não consegui reconhecer a gravação.');
+      }
+    }finally{
+      if(version===captureVersion.current){processing.current=false;resumeAfter.current=performance.now()+250;if(mounted.current)setTranscribing(false);}
+    }
+  },[acknowledge]);
+  const retry=useCallback(async()=>{
+    const saved=lastRecording.current;if(!saved||processing.current||latest.current.blocked)return;
+    await deliverRecording(saved.audio,saved.endpoint_ms);
+  },[deliverRecording]);
   const cancelCapture=useCallback(()=>{captureVersion.current++;processing.current=false;wakeUntil.current=0;resumeAfter.current=performance.now()+250;resources.current.abort?.abort();resources.current.node?.port.postMessage({blocked:true});if(resources.current.recorder?.state==='recording')resources.current.recorder.stop();audioLevelSource.current=0;if(mounted.current){setWakeOpen(false);setCapturing(false);setTranscribing(false);}},[]);
   const stop=useCallback(()=>{
     enabled.current=false;captureVersion.current++;processing.current=false;resources.current.abort?.abort();
@@ -200,16 +239,7 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
           if(latest.current.interrupt?.wakeOnly&&wakeUntil.current<performance.now())return;
           const samples=event.data.samples as Int16Array,rate=event.data.rate as number,endpoint_ms=Math.max(0,Math.min(60000,Number(event.data.endpoint_ms)||0));
           if(rate!==16000||samples.length>61*rate)return;
-          processing.current=true;setTranscribing(true);node.port.postMessage({blocked:true});
-          wakeUntil.current=0;setWakeOpen(false);
-          const version=captureVersion.current;
-          const abort=new AbortController();resources.current.abort=abort;const recognitionStarted=performance.now();latest.current.onRecognitionStart?.(endpoint_ms);
-          try{
-            const audio=pcmWav(samples,rate);
-            if(latest.current.onAudio){await latest.current.onAudio(audio,{recognition_ms:0,endpoint_ms});return;}
-            const result=await withRequestDeadline(abort.signal,12000,async signal=>{const response=await api('/voice/transcribe',{method:'POST',headers:{'Content-Type':'audio/wav'},body:audio,signal});return response.json();});if(version===captureVersion.current&&!abort.signal.aborted&&enabled.current&&mounted.current){if(result.text?.trim())latest.current.onTranscript(result.text,{recognition_ms:Math.round(performance.now()-recognitionStarted),endpoint_ms});else latest.current.onError('Não consegui transcrever sua fala. O microfone continua ligado; repita a frase ou confira o dispositivo de entrada.');}
-          }catch(error){if(enabled.current&&!abort.signal.aborted)latest.current.onError(error instanceof Error?error.message:'Transcrição indisponível.');}
-          finally{if(version===captureVersion.current){processing.current=false;resumeAfter.current=performance.now()+250;if(mounted.current)setTranscribing(false);}}
+          await deliverRecording(pcmWav(samples,rate),endpoint_ms);
         };
         const binary=(await loadVad()).slice(0);
         await new Promise<void>((resolve,reject)=>{const timeout=setTimeout(()=>reject(new Error('O detector de voz não iniciou. Atualize o WebView2 e reabra o Kronos.')),4000);initialize=error=>{clearTimeout(timeout);error?reject(error):resolve();};node.port.postMessage({vadBinary:binary},[binary]);});
@@ -237,13 +267,13 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
           if(resources.current.recorder===recorder)resources.current.recorder=undefined;if(mounted.current)setCapturing(false);
           if(version!==captureVersion.current||!enabled.current||!mounted.current||discard||!heard||!bytes)return;
           wakeUntil.current=0;setWakeOpen(false);
-          processing.current=true;setTranscribing(true);const abort=new AbortController();resources.current.abort=abort;const recognitionStarted=performance.now(),endpoint_ms=Math.max(0,Math.round(recognitionStarted-lastSpeech));latest.current.onRecognitionStart?.(endpoint_ms);
+          processing.current=true;setTranscribing(true);
+          const endpoint_ms=Math.max(0,Math.round(performance.now()-lastSpeech));
           try{
             const blob=new Blob(parts,{type:recorder.mimeType}),audio=latest.current.local?await localWave(blob):blob;
-            if(!enabled.current||abort.signal.aborted)return;
-            if(latest.current.onAudio){await latest.current.onAudio(audio,{recognition_ms:0,endpoint_ms});return;}
-            const result=await withRequestDeadline(abort.signal,12000,async signal=>{const response=await api('/voice/transcribe',{method:'POST',headers:{'Content-Type':audio.type},body:audio,signal});return response.json();});if(version===captureVersion.current&&!abort.signal.aborted&&enabled.current&&mounted.current){if(result.text?.trim())latest.current.onTranscript(result.text,{recognition_ms:Math.round(performance.now()-recognitionStarted),endpoint_ms});else latest.current.onError('Não consegui transcrever sua fala. O microfone continua ligado; repita a frase ou confira o dispositivo de entrada.');}
-          }catch(error){if(enabled.current&&!abort.signal.aborted)latest.current.onError(error instanceof Error?error.message:'Transcrição indisponível.');}
+            if(version!==captureVersion.current||!mounted.current)return;
+            await deliverRecording(audio,endpoint_ms);
+          }catch(error){if(mounted.current)latest.current.onError(error instanceof Error?error.message:'Não consegui preparar a gravação.');}
           finally{if(version===captureVersion.current){processing.current=false;if(mounted.current)setTranscribing(false);}}
         };
         resources.current.submit=()=>{if(recorder.state==='recording'){heard=true;discard=false;recorder.stop();}};
@@ -270,7 +300,7 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
       },80);
     }catch(error){const cancelled=!enabled.current;stop();if(!cancelled){const name=error instanceof DOMException?error.name:'';latest.current.onError(name==='NotAllowedError'||name==='SecurityError'?'Permita o microfone para o Cronos no navegador e tente novamente.':name==='NotReadableError'?'O Windows não liberou o microfone. Feche o aplicativo que está usando o dispositivo e tente novamente.':name==='NotFoundError'?'Nenhum microfone foi encontrado. Conecte um dispositivo e tente novamente.':error instanceof Error?error.message.slice(0,220):'Não foi possível abrir o microfone.');}}
     finally{opening.current=false;if(mounted.current)setStarting(false);}
-  },[stop]);
+  },[stop,deliverRecording]);
   const toggle=useCallback(()=>{if(enabled.current&&resources.current.context?.state==='suspended'){return resources.current.context.resume().catch(()=>{stop();latest.current.onError('Clique novamente para reconectar o microfone.');});}if(enabled.current){stop();return Promise.resolve();}return start();},[start,stop]);
   const submit=useCallback(()=>{
     if(!enabled.current||processing.current)return;
@@ -292,6 +322,6 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
     };open();
     return()=>{alive=false;clearTimeout(retry);keywordReady.current=false;if(keywordSocket.current===socket)keywordSocket.current=null;resources.current.node?.port.postMessage({keyword:false});socket?.close();};
   },[recording,keywordActive,wakeOpen,interrupt?.active]);
-  useEffect(()=>()=>{mounted.current=false;stop();},[stop]);
-  return {recording,capturing,starting,transcribing,audioLevelSource,toggle,start,stop,cancelCapture,submit};
+  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;stop();};},[stop]);
+  return {recording,capturing,starting,transcribing,audioLevelSource,toggle,start,stop,cancelCapture,submit,retry,retryAvailable,acknowledge};
 }

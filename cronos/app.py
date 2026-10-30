@@ -333,9 +333,9 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                                 except ProviderError as exc:
                                     if audio is None or audio_fallback is None or (exc.kind!='audio_transcription_missing' and not exc.retryable) or spoken is not None or intro_text is not None:
                                         raise
-                                    recognized=await transcribe_fallback(audio_fallback)
+                                    recognized=recognized_question or await transcribe_fallback(audio_fallback)
                                     if not recognized:raise ProviderError('A gravação foi mantida, mas não consegui reconhecer a pergunta. Tente novamente ou use o botão de envio de texto.',502) from None
-                                    await transcript(recognized)
+                                    if not recognized_question:await transcript(recognized)
                                     if panels.preferences.called_only and not re.search(r'\b(?:cronos|kronos|chronos)\b',recognized,re.I):
                                         result={'session_id':str(session),'reply':'','recognized_text':recognized,'ignored':True,'topics':[],'notes':[],'tool_results':[],'warnings':[],'timings_ms':{}}
                                     else:
@@ -478,20 +478,9 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
 
     async def transcribe_fallback(audio_wav: bytes) -> str:
         """Recover an utterance when Gemini Live fails to emit input transcription."""
-        if settings.transcription_provider == 'vosk':
-            try:return (await asyncio.to_thread(local_recognizer.transcribe,audio_wav)).strip()
-            except ValueError as exc:raise ProviderError(str(exc),503) from None
-        try:
-            client=await fish_client()
-            async with client:
-                result=await voice_deadline(client.asr.transcribe(audio=audio_wav,language='pt'),TRANSCRIPTION_TIMEOUT_SECONDS)
-            text=str(getattr(result,'text','') or '').strip()
-            if not text:raise ProviderError('O reconhecimento alternativo não encontrou fala inteligível.',502)
-            return text
-        except ProviderError:
-            raise
-        except Exception:
-            raise ProviderError('O reconhecimento alternativo de voz falhou. A gravação ficou preservada; tente novamente ou envie a pergunta por texto.',502) from None
+        try:return await recognize_recording(audio_wav,'audio/wav')
+        except HTTPException as exc:
+            raise ProviderError(str(exc.detail),504 if exc.status_code==504 else 502) from None
 
     active_fish_model = settings.fish_model
 
@@ -581,6 +570,28 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 await client.__aexit__(None, None, None)
         return StreamingResponse(chunks(), media_type="audio/wav" if settings.fish_format == "wav" else "audio/mpeg", headers={"Cache-Control": "no-store"})
 
+    async def recognize_recording(audio, mime_type):
+        current=app.state.engine.settings
+        if current.transcription_provider=='vosk':
+            try:return await asyncio.to_thread(local_recognizer.transcribe,audio)
+            except ValueError as exc:raise HTTPException(503,str(exc)) from None
+        if current.privacy_mode!='online':raise HTTPException(503,'Reconhecimento online desativado no modo local.')
+        alternative=bool(current.gemini_key.strip())
+        try:
+            client=await fish_client()
+            async with client:
+                result=await voice_deadline(client.asr.transcribe(audio=audio,language='pt'),min(5,TRANSCRIPTION_TIMEOUT_SECONDS) if alternative else TRANSCRIPTION_TIMEOUT_SECONDS)
+            text=getattr(result,'text','')
+            if not isinstance(text,str) or not text.strip():raise ValueError('empty transcription')
+            return text.strip()
+        except Exception as exc:
+            if not alternative:
+                if isinstance(exc,HTTPException):raise
+                raise HTTPException(502,fish_error(exc,'transcrição do microfone')) from None
+        from cronos.transcription import gemini_transcribe
+        try:return await gemini_transcribe(current,audio,mime_type)
+        except ProviderError as exc:raise HTTPException(exc.status,str(exc)) from None
+
     @app.post("/voice/transcribe", dependencies=[Depends(authenticate)])
     async def transcribe(request: Request):
         # Corpo binário: não precisa de multipart ou base64.
@@ -596,19 +607,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
             from cronos.recognition import read_pcm,check_signal
             try:check_signal(read_pcm(b''.join(chunks)))
             except ValueError as exc:raise HTTPException(422,str(exc)) from None
-        if settings.transcription_provider == 'vosk':
-            try:
-                return {'text':await asyncio.to_thread(local_recognizer.transcribe,b''.join(chunks))}
-            except ValueError as exc:
-                raise HTTPException(503,str(exc)) from None
-        client = await fish_client()
-        try:
-            async with client:
-                result = await voice_deadline(client.asr.transcribe(audio=b"".join(chunks), language="pt"), TRANSCRIPTION_TIMEOUT_SECONDS)
-            return {"text": result.text}
-        except HTTPException:raise
-        except Exception as exc:
-            raise HTTPException(502, fish_error(exc, "transcrição do microfone")) from exc
+        return {'text':await recognize_recording(b''.join(chunks),request.headers.get('content-type','audio/webm'))}
 
     from cronos.studio.routes import install_studio
     install_studio(app, authenticate)

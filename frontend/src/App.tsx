@@ -2,7 +2,7 @@ import {ResponseClock} from './components/ResponseClock';
 import {UpdateNotice} from './components/UpdateNotice';
 /** @license SPDX-License-Identifier: Apache-2.0 */
 import React,{Suspense,lazy,useCallback,useEffect,useRef,useState} from 'react';
-import {Mic,X,Send,ImagePlus,FileArchive,MonitorUp,BookOpen} from 'lucide-react';
+import {Mic,X,Send,RotateCw,ImagePlus,FileArchive,MonitorUp,BookOpen} from 'lucide-react';
 import {IntegratedNeuralStage} from './components/IntegratedNeuralStage';
 import {useCronosVoice,useMicrophone} from './hooks/useCronosVoice';
 import {api,jsonApi,getToken,onConnection,ApiError,streamChat} from './api';
@@ -271,7 +271,7 @@ export default function App(){
     void microphone.toggle();
   };
   const sendText=async(value:string,source:'text'|'transcription'='text',audio?:Blob)=>{
-    const text=value.trim();if(!text||inFlight.current)return;if(!audio&&runCommand(text)){setDraft('');return;}
+    const text=value.trim();if(!text)return;if(inFlight.current){setDraft(text);tell('Sua pergunta foi reconhecida e está guardada no campo. Aguarde a resposta atual ou pressione Esc antes de enviar.',true);return;}if(!audio&&runCommand(text)){setDraft('');return;}
     if(!connected){tell('A conexão automática ainda não está disponível. Feche e abra o Kronos novamente.',true);return;}
     const pendingHeardContext=interruptedContext.current;
     let showStudyText=isStudyQuestion(text)&&!isExplicitTextDisplay(text);if(!showStudyText)focusStudyPanel(null);let studyPanelId:string|null=showStudyText?addStudyPanel(text):null;
@@ -286,8 +286,9 @@ export default function App(){
     const textArrived=()=>{if(turnLatency.first_text_ms===undefined){turnLatency.first_text_ms=Math.round(performance.now()-turnLatency.started);if(!turnLatency.voiceExpected)turnLatency.status='responding';saveLatency(turnLatency);}};
     expectedStudyTurn.current=turnLatency.turn_id;
     const version=++turnVersion.current,controller=new AbortController();chatAbort.current=controller;
+    let question=text;
     try{
-      let question=text;let previewIntro='';let voiced=false,introText='',replyDelivered=false,voiceAllowed=!audio;let finishSpeech:((text:string)=>void)|null=null;
+      let previewIntro='';let voiced=false,introText='',replyDelivered=false,voiceAllowed=!audio;let finishSpeech:((text:string)=>void)|null=null;
       const updateSpeechProgress=(reply:string)=>{
         const current=speechProgress.current;
         if(current&&current.turnId===turnLatency.turn_id){current.question=question;current.fullReply=reply;return;}
@@ -321,6 +322,7 @@ export default function App(){
       };
       const result=await streamChat({message:text,session_id:session.current,...(pendingHeardContext?{heard_context:pendingHeardContext}:{})},controller.signal,ready,intro,recognized=>{
         if(version!==turnVersion.current||controller.signal.aborted)return;
+        if(audio)microphone.acknowledge();
         // Do not abort here: the backend returns an explicit ignored result so
         // the UI can explain the wake-word preference instead of leaving silence.
         if(prefsRef.current?.called_only&&!/\b(?:cronos|kronos|chronos)\b/i.test(recognized))return;
@@ -328,7 +330,7 @@ export default function App(){
         voiceAllowed=true;if(audio)turnLatency.recognition_ms=Math.round(performance.now()-turnLatency.started);
         if(runCommand(recognized)){controller.abort();return;}
         applyCardRequest(recognized);question=recognized;showStudyText=showStudyText||isStudyQuestion(recognized)&&!isExplicitTextDisplay(recognized);if(!showStudyText)focusStudyPanel(null);if(showStudyText){if(!studyPanelId)studyPanelId=addStudyPanel(question,previewIntro);if(studyPanelId)updateStudyPanel(studyPanelId,question,previewIntro);}else if(studyPanelId&&!studyPanelsRef.current.find(panel=>panel.id===studyPanelId)?.reply){closeStudyPanel(studyPanelId);studyPanelId=null;}setDisplayTurn({question,source,reply:previewIntro});
-      },audio);if(version!==turnVersion.current||controller.signal.aborted)return;if(result.ignored){turnLatency.status='cancelled';saveLatency(turnLatency);const heard=result.recognized_text||text;if(studyPanelId&&!studyPanelsRef.current.find(panel=>panel.id===studyPanelId)?.reply)closeStudyPanel(studyPanelId);setDisplayTurn({question:heard,source,reply:''});tell(prefsRef.current?.called_only?'Ouvi sua fala, mas “Responder só após ser chamado” está ligado. Comece a frase com “Cronos” ou desligue essa opção no painel de Entendimento de Linguagem.':'Ouvi a fala, mas não consegui concluir a resposta. Tente novamente.',true);return;}if(audio&&!voiceAllowed&&result.recognized_text){if(runCommand(result.recognized_text))return;voiceAllowed=true;}textArrived();if(!voiced)turnLatency.chat_ms=Math.round(performance.now()-turnLatency.started);if(!turnLatency.voiceExpected)turnLatency.status='completed';saveLatency(turnLatency);session.current=result.session_id;const finalQuestion=result.recognized_text||text;showStudyText=showStudyText||isStudyQuestion(finalQuestion)&&!isExplicitTextDisplay(finalQuestion);if(!showStudyText)focusStudyPanel(null);if(showStudyText){if(!studyPanelId)studyPanelId=addStudyPanel(finalQuestion,result.reply);if(studyPanelId)updateStudyPanel(studyPanelId,finalQuestion,result.reply);}else if(studyPanelId&&!studyPanelsRef.current.find(panel=>panel.id===studyPanelId)?.reply){closeStudyPanel(studyPanelId);studyPanelId=null;}lastAnswer.current={question:finalQuestion,source,reply:result.reply};if(pendingHeardContext===interruptedContext.current)interruptedContext.current=null;if(result.recognized_text)applyCardRequest(result.recognized_text);setDisplayTurn({question:finalQuestion,source,reply:result.reply});setGraphRevision(value=>value+1);
+      },audio);if(version!==turnVersion.current||controller.signal.aborted)return;if(audio&&result.recognized_text)microphone.acknowledge();if(result.ignored){turnLatency.status='cancelled';saveLatency(turnLatency);const heard=result.recognized_text||text;if(studyPanelId&&!studyPanelsRef.current.find(panel=>panel.id===studyPanelId)?.reply)closeStudyPanel(studyPanelId);setDisplayTurn({question:heard,source,reply:''});tell(prefsRef.current?.called_only?'Ouvi sua fala, mas “Responder só após ser chamado” está ligado. Comece a frase com “Cronos” ou desligue essa opção no painel de Entendimento de Linguagem.':'Ouvi a fala, mas não consegui concluir a resposta. Tente novamente.',true);return;}if(audio&&!voiceAllowed&&result.recognized_text){if(runCommand(result.recognized_text))return;voiceAllowed=true;}textArrived();if(!voiced)turnLatency.chat_ms=Math.round(performance.now()-turnLatency.started);if(!turnLatency.voiceExpected)turnLatency.status='completed';saveLatency(turnLatency);session.current=result.session_id;const finalQuestion=result.recognized_text||text;showStudyText=showStudyText||isStudyQuestion(finalQuestion)&&!isExplicitTextDisplay(finalQuestion);if(!showStudyText)focusStudyPanel(null);if(showStudyText){if(!studyPanelId)studyPanelId=addStudyPanel(finalQuestion,result.reply);if(studyPanelId)updateStudyPanel(studyPanelId,finalQuestion,result.reply);}else if(studyPanelId&&!studyPanelsRef.current.find(panel=>panel.id===studyPanelId)?.reply){closeStudyPanel(studyPanelId);studyPanelId=null;}lastAnswer.current={question:finalQuestion,source,reply:result.reply};if(pendingHeardContext===interruptedContext.current)interruptedContext.current=null;if(result.recognized_text)applyCardRequest(result.recognized_text);setDisplayTurn({question:finalQuestion,source,reply:result.reply});setGraphRevision(value=>value+1);
       const turnTools:ToolResult[]=result.tool_results||[];setTools(old=>[...old,...turnTools]);
       if(showStudyText&&studyPanelId){const references=studyReferences(turnTools);if(references.length)changeStudyPanels(items=>items.map(panel=>panel.id===studyPanelId?{...panel,references}:panel));}
       const filmResult=result.tool_results?.find((r:any)=>r.name==='stremio_search'&&r.status==='completed');if(filmResult?.result){setStremio(filmResult.result);setModule(null);setChatOpen(false);}
@@ -344,8 +346,9 @@ export default function App(){
       turnLatency.status='failed';turnLatency.armed=false;saveLatency(turnLatency);controller.abort();voice.stop();
       if(studyPanelId&&!studyPanelsRef.current.find(panel=>panel.id===studyPanelId)?.reply)closeStudyPanel(studyPanelId);
       if(error instanceof ApiError&&error.detail?.tool_results){session.current=error.detail.session_id;setTools(old=>[...old,...error.detail.tool_results]);}
-      tell(`${error instanceof Error?error.message:'Não foi possível conversar.'}\nSua mensagem ficou guardada no campo para o senhor tentar novamente sem repetir.`,true);
-      setDraft(text); // A pergunta permanece disponível; não repetir ações automaticamente.
+      const retryHelp=audio&&question===text?'Use Reenviar gravação para tentar a mesma fala novamente.':'Sua mensagem ficou guardada no campo para o senhor tentar novamente sem repetir.';
+      tell(`${error instanceof Error?error.message:'Não foi possível conversar.'}\n${retryHelp}`,true);
+      setDraft(audio&&question===text?'':question); // A pergunta permanece disponível; não repetir ações automaticamente.
     }finally{if(version===turnVersion.current){setBusy(false);inFlight.current=false;chatAbort.current=null;}}
   };
   sendRef.current=(text,audio)=>sendText(text,'transcription',audio);
@@ -392,6 +395,7 @@ export default function App(){
       {!eyeActive&&!moduleActive&&!studyActive&&<><button className="reference-attachment" aria-label="Abrir área de estudos" title="Abrir área de estudos" onClick={()=>{restoreWindow('study');setStudyOpen(true);setEyeOpen(false);setModule(null);setChatOpen(false);}}><BookOpen size={16}/></button><button className="reference-attachment" aria-label="Analisar imagem" title="Analisar imagem" onClick={()=>openAnalysis('image')}><ImagePlus size={16}/></button><button className="reference-attachment" aria-label="Analisar ZIP ou código" title="Analisar ZIP ou código" onClick={()=>openAnalysis('document')}><FileArchive size={16}/></button></>}
       <HandControl/>
       {microphone.recording&&<button className="reference-send-audio" aria-label="Enviar fala agora" title={microphone.transcribing?'Transcrevendo a fala':busy?'Aguarde a resposta atual':'Enviar agora sem esperar a detecção de silêncio'} disabled={microphone.transcribing||busy} onClick={()=>microphone.submit()}><Send size={15}/></button>}
+      {microphone.retryAvailable&&<button className="reference-send-audio" aria-label="Reenviar gravação" title="Tentar a mesma gravação sem repetir sua fala" disabled={busy||microphone.transcribing} onClick={()=>void microphone.retry()}><RotateCw size={15}/></button>}
       <button className={`reference-mic ${microphone.starting?'starting':microphone.transcribing?'transcribing':busy?'thinking':voice.isGenerating?'generating':voice.isSpeaking?'speaking':microphone.recording?'recording':''}`} aria-pressed={microphone.recording} title={microphone.starting?'Abrindo microfone':microphone.transcribing?'Transcrevendo':busy?'Aguardando Gemini':voice.isGenerating?'Preparando voz':voice.isSpeaking?'Falando — diga Cronos para interromper':microphone.recording?'Microfone ligado':'Microfone desligado'} aria-label={microphone.recording?'Desligar microfone':'Ligar microfone'} onClick={handleMic} ><Mic size={16}/></button>
       {!eyeActive&&!moduleActive&&<button className="reference-screen" aria-label="Ver minha tela" title="Ver minha tela" onClick={()=>screenMonitor.current?.start()}><MonitorUp size={16}/></button>}
     </div>

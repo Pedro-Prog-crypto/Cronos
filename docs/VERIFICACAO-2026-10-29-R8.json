@@ -1,0 +1,33 @@
+{
+  "revision": "audio-delivery-2026-10-29-r8",
+  "browser": {
+    "checks_passed": 12,
+    "checks": [
+      "compiled App plays first audio before complete provider response",
+      "measured start under five seconds with controlled 150 ms AI / 100 ms TTS fixtures",
+      "timing history is reachable from the stopwatch and records a single turn",
+      "Escape cancels pending server generation and logs cancellation",
+      "failed request stays in history instead of disappearing from measurements",
+      "next question responds after cancellation and failure, without a stale lock",
+      "AudioWorklet manual send includes actual ASR and endpoint delay in the same question timer",
+      "ASR failure is recorded even when no chat request can be sent",
+      "same recording is resent after ASR failure, its actual transcript reaches AI and the answer reaches TTS",
+      "stalled TTS finishes with a visible error while the complete written answer stays available",
+      "native audio leaves transcription state on handoff, receives its recognized question and speaks before final metadata",
+      "native answer failure preserves the actual recognized question for retry, without redundant ASR or the voice placeholder"
+    ],
+    "first_audio_ms": 279.0,
+    "response_ms": 279.0,
+    "environment": "Chromium + compiled UI + real local FastAPI/HTTP + real SSE parser and WAV playback; external AI and TTS controlled, synthetic microphone, controlled ASR/AI/TTS, no physical Windows microphone/speaker validation"
+  },
+  "python_suite": {
+    "passed": 670,
+    "failed": 0,
+    "duration_seconds": 93.86,
+    "warnings": 1
+  },
+  "real_cloud_latency_measured": false,
+  "windows_physical_devices_tested": false,
+  "typescript": "passed",
+  "frontend_build": "passed"
+}
