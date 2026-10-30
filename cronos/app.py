@@ -54,6 +54,19 @@ class ApprovalInput(BaseModel):
     accepted: bool
 
 
+VOICE_REQUEST_TIMEOUT_SECONDS = 8
+TRANSCRIPTION_TIMEOUT_SECONDS = 12
+CONVERSATION_FIRST_REPLY_TIMEOUT_SECONDS = 24
+
+
+async def voice_deadline(operation, seconds):
+    try:
+        async with asyncio.timeout(seconds):
+            return await operation
+    except TimeoutError:
+        raise HTTPException(504, 'O serviço de voz não respondeu a tempo.') from None
+
+
 async def chat_until_disconnect(engine,session,message,request):
     if await request.is_disconnected():raise HTTPException(499,'Conversa interrompida.')
     task=asyncio.create_task(engine.chat(session,message))
@@ -63,7 +76,8 @@ async def chat_until_disconnect(engine,session,message,request):
             await asyncio.sleep(.1)
     watcher=asyncio.create_task(watch())
     try:
-        done,_=await asyncio.wait({task,watcher},return_when=asyncio.FIRST_COMPLETED)
+        done,_=await asyncio.wait({task,watcher},return_when=asyncio.FIRST_COMPLETED,timeout=CONVERSATION_FIRST_REPLY_TIMEOUT_SECONDS)
+        if not done:raise HTTPException(504,'A conversa não concluiu dentro do prazo de recuperação. Sua pergunta permanece disponível para tentar novamente.')
         if task in done:return await task
         task.cancel()
         with suppress(asyncio.CancelledError):await task
@@ -284,7 +298,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         from cronos.reply_stream import reply_sink,intro_sink,transcript_sink
         async def events():
             panels=request.app.state.panels;panels.active+=1
-            queue=asyncio.Queue(maxsize=4);spoken=None;intro_text=None;recognized_question=None
+            queue=asyncio.Queue(maxsize=4);spoken=None;intro_text=None;recognized_question=None;first_response_deadline=None
             def may_speak():
                 import re
                 return audio is None or not panels.preferences.called_only or bool(recognized_question and re.search(r'\b(?:cronos|kronos|chronos)\b',recognized_question,re.I))
@@ -292,41 +306,48 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 nonlocal spoken
                 if spoken is None and may_speak():
                     spoken=reply
+                    if first_response_deadline is not None:first_response_deadline.reschedule(None)
                     await queue.put({'type':'reply','reply':reply,'session_id':str(session)})
             async def intro(text):
                 nonlocal intro_text
                 if intro_text is not None or not may_speak():return
                 intro_text=text
+                if first_response_deadline is not None:first_response_deadline.reschedule(None)
                 await queue.put({'type':'intro','reply':text,'session_id':str(session)})
             async def transcript(text):
                 nonlocal recognized_question
                 recognized_question=text
                 await queue.put({'type':'transcript','text':text})
             async def run():
+                nonlocal first_response_deadline
                 token=reply_sink.set(ready);intro_token=intro_sink.set(intro);transcript_token=transcript_sink.set(transcript)
                 try:
-                    async with request.app.state.lock:
-                        try:
+                    async with asyncio.timeout(CONVERSATION_FIRST_REPLY_TIMEOUT_SECONDS) as deadline:
+                        first_response_deadline=deadline
+                        async with request.app.state.lock:
                             try:
-                                options={'audio':audio} if audio is not None else {}
-                                if heard_context:options['heard_context']=heard_context
-                                result=await request.app.state.engine.chat(session,message,**options)
-                            except ProviderError as exc:
-                                if audio is None or audio_fallback is None or (exc.kind!='audio_transcription_missing' and not exc.retryable) or spoken is not None or intro_text is not None:
-                                    raise
-                                recognized=await transcribe_fallback(audio_fallback)
-                                if not recognized:raise ProviderError('A gravação foi mantida, mas não consegui reconhecer a pergunta. Tente novamente ou use o botão de envio de texto.',502) from None
-                                await transcript(recognized)
-                                if panels.preferences.called_only and not re.search(r'\b(?:cronos|kronos|chronos)\b',recognized,re.I):
-                                    result={'session_id':str(session),'reply':'','recognized_text':recognized,'ignored':True,'topics':[],'notes':[],'tool_results':[],'warnings':[],'timings_ms':{}}
-                                else:
-                                    result=await request.app.state.engine.chat(session,recognized,**({'heard_context':heard_context} if heard_context else {}))
-                                    result['recognized_text']=recognized
-                        finally:request.app.state.engine.phase='idle'
+                                try:
+                                    options={'audio':audio} if audio is not None else {}
+                                    if heard_context:options['heard_context']=heard_context
+                                    result=await request.app.state.engine.chat(session,message,**options)
+                                except ProviderError as exc:
+                                    if audio is None or audio_fallback is None or (exc.kind!='audio_transcription_missing' and not exc.retryable) or spoken is not None or intro_text is not None:
+                                        raise
+                                    recognized=await transcribe_fallback(audio_fallback)
+                                    if not recognized:raise ProviderError('A gravação foi mantida, mas não consegui reconhecer a pergunta. Tente novamente ou use o botão de envio de texto.',502) from None
+                                    await transcript(recognized)
+                                    if panels.preferences.called_only and not re.search(r'\b(?:cronos|kronos|chronos)\b',recognized,re.I):
+                                        result={'session_id':str(session),'reply':'','recognized_text':recognized,'ignored':True,'topics':[],'notes':[],'tool_results':[],'warnings':[],'timings_ms':{}}
+                                    else:
+                                        result=await request.app.state.engine.chat(session,recognized,**({'heard_context':heard_context} if heard_context else {}))
+                                        result['recognized_text']=recognized
+                            finally:request.app.state.engine.phase='idle'
                     if not result.get('ignored') and ((spoken is not None and spoken!=result['reply']) or (intro_text is not None and not result['reply'].startswith(intro_text))):
                         raise ProviderError('A resposta transmitida não corresponde ao resultado final.',502)
                     request.app.state.features.record('language','passed','Conversa processada e salva.')
                     await queue.put({'type':'result','result':result})
+                except TimeoutError:
+                    await queue.put({'type':'error','status':504,'detail':{'message':'Não consegui iniciar a resposta dentro do prazo de recuperação. Sua pergunta foi preservada; tente novamente sem repetir.'}})
                 except ProviderError as exc:
                     detail={'message':str(exc)}
                     if isinstance(exc,TurnError):detail.update(session_id=str(exc.session),tool_results=exc.results)
@@ -463,7 +484,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         try:
             client=await fish_client()
             async with client:
-                result=await client.asr.transcribe(audio=audio_wav,language='pt')
+                result=await voice_deadline(client.asr.transcribe(audio=audio_wav,language='pt'),TRANSCRIPTION_TIMEOUT_SECONDS)
             text=str(getattr(result,'text','') or '').strip()
             if not text:raise ProviderError('O reconhecimento alternativo não encontrou fala inteligível.',502)
             return text
@@ -497,11 +518,12 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         client = await fish_client()
         try:
             async with client:
-                audio = await fish_tts(client, "convert", text=body.text, reference_id=reference or None,
+                audio = await voice_deadline(fish_tts(client, "convert", text=body.text, reference_id=reference or None,
                                                  format=settings.fish_format,
-                                                 speed=body.speed or settings.fish_speed, latency=settings.fish_latency)
+                                                 speed=body.speed or settings.fish_speed, latency=settings.fish_latency), VOICE_REQUEST_TIMEOUT_SECONDS)
             request.app.state.features.record("voice", "passed", "Síntese retornou áudio; reprodução física no dispositivo não foi certificada.")
             return Response(content=audio, media_type="audio/wav" if settings.fish_format == "wav" else "audio/mpeg")
+        except HTTPException:raise
         except Exception as exc:
             raise HTTPException(502, fish_error(exc, "síntese")) from exc
 
@@ -513,8 +535,9 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         from cronos.fish_legacy import stream_json
         iterator=stream_json(settings.fish_key,text=body.text,reference_id=body.reference_id or settings.fish_reference or None,format='pcm',speed=body.speed or settings.fish_speed,latency=settings.fish_latency)
         try:
-            first=await anext(iterator)
-            while len(first)<4:first+=await anext(iterator)
+            async with asyncio.timeout(VOICE_REQUEST_TIMEOUT_SECONDS):
+                first=await anext(iterator)
+                while len(first)<4:first+=await anext(iterator)
             if first.startswith(b'RIFF'):raise ValueError('A síntese não retornou PCM bruto.')
         except Exception as exc:
             await iterator.aclose()
@@ -581,8 +604,9 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         client = await fish_client()
         try:
             async with client:
-                result = await client.asr.transcribe(audio=b"".join(chunks), language="pt")
+                result = await voice_deadline(client.asr.transcribe(audio=b"".join(chunks), language="pt"), TRANSCRIPTION_TIMEOUT_SECONDS)
             return {"text": result.text}
+        except HTTPException:raise
         except Exception as exc:
             raise HTTPException(502, fish_error(exc, "transcrição do microfone")) from exc
 

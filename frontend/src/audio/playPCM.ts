@@ -14,7 +14,11 @@ export async function playPCM(response:Response,context:AudioContext,signal:Abor
   const arrived=performance.now();
   try{
     while(!signal.aborted){
-      const next=await reader.read();if(next.done)break;
+      let idleTimer:ReturnType<typeof setTimeout>|undefined;
+      const idle=new Promise<never>((_,reject)=>{idleTimer=setTimeout(()=>reject(new Error('O serviço parou de enviar a voz. A resposta escrita continua disponível.')),8000);});
+      let next:ReadableStreamReadResult<Uint8Array>;
+      try{next=await Promise.race([reader.read(),idle]);}finally{clearTimeout(idleTimer);}
+      if(next.done)break;
       const bytes=new Uint8Array(carry.length+next.value.length);bytes.set(carry);bytes.set(next.value,carry.length);
       const samples=Math.floor(bytes.length/2);carry=bytes.slice(samples*2);if(!samples)continue;
       if(first&&bytes.length>=4&&new TextDecoder().decode(bytes.slice(0,4))==='RIFF')throw new Error('O provedor retornou WAV em vez de PCM.');

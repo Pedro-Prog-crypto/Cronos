@@ -1,5 +1,6 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {api,getToken} from '../api';
+import {withRequestDeadline} from '../audio/requestDeadline';
+import {api,ApiError,getToken} from '../api';
 import {routeVoiceOutput} from '../audio/outputDevice';
 import {playPCM} from '../audio/playPCM';
 import {spokenText} from '../audio/spokenText';
@@ -69,9 +70,9 @@ export function useCronosVoice({preferences,streaming,onSpeechStart,onSpeechChun
       const fetchChunk=async(part:string)=>{
         const speed=prefs.current?.voice_speed,started=performance.now();
         let error:unknown;
-        for(let attempt=0;attempt<3;attempt++){
-          try{const response=await api(pcm?'/voice/pcm':'/voice/speech',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:part,...(speed!==undefined?{speed}:{})}),signal:controller.signal});return {response:pcm?response:null,blob:pcm?null:await response.blob(),error:null,speed,elapsed:performance.now()-started};}
-          catch(caught){error=caught;if(controller.signal.aborted||attempt===2)break;await new Promise(resolve=>setTimeout(resolve,250*(attempt+1)));}
+        for(let attempt=0;attempt<2;attempt++){
+          try{return await withRequestDeadline(controller.signal,Math.max(1,10000-(performance.now()-started)),async signal=>{const response=await api(pcm?'/voice/pcm':'/voice/speech',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:part,...(speed!==undefined?{speed}:{})}),signal});return {response:pcm?response:null,blob:pcm?null:await response.blob(),error:null,speed,elapsed:performance.now()-started};});}
+          catch(caught){error=caught;if(controller.signal.aborted||attempt===1||performance.now()-started>=9500||!(caught instanceof ApiError)||![429,502,503,504].includes(caught.status))break;await new Promise(resolve=>setTimeout(resolve,250*(attempt+1)));}
         }
         return {response:null,blob:null,error,speed,elapsed:performance.now()-started};
       };
@@ -206,8 +207,7 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
           try{
             const audio=pcmWav(samples,rate);
             if(latest.current.onAudio){await latest.current.onAudio(audio,{recognition_ms:0,endpoint_ms});return;}
-            const response=await api('/voice/transcribe',{method:'POST',headers:{'Content-Type':'audio/wav'},body:audio,signal:abort.signal});
-            const result=await response.json();if(version===captureVersion.current&&!abort.signal.aborted&&enabled.current&&mounted.current){if(result.text?.trim())latest.current.onTranscript(result.text,{recognition_ms:Math.round(performance.now()-recognitionStarted),endpoint_ms});else latest.current.onError('Não consegui transcrever sua fala. O microfone continua ligado; repita a frase ou confira o dispositivo de entrada.');}
+            const result=await withRequestDeadline(abort.signal,12000,async signal=>{const response=await api('/voice/transcribe',{method:'POST',headers:{'Content-Type':'audio/wav'},body:audio,signal});return response.json();});if(version===captureVersion.current&&!abort.signal.aborted&&enabled.current&&mounted.current){if(result.text?.trim())latest.current.onTranscript(result.text,{recognition_ms:Math.round(performance.now()-recognitionStarted),endpoint_ms});else latest.current.onError('Não consegui transcrever sua fala. O microfone continua ligado; repita a frase ou confira o dispositivo de entrada.');}
           }catch(error){if(enabled.current&&!abort.signal.aborted)latest.current.onError(error instanceof Error?error.message:'Transcrição indisponível.');}
           finally{if(version===captureVersion.current){processing.current=false;resumeAfter.current=performance.now()+250;if(mounted.current)setTranscribing(false);}}
         };
@@ -242,8 +242,7 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
             const blob=new Blob(parts,{type:recorder.mimeType}),audio=latest.current.local?await localWave(blob):blob;
             if(!enabled.current||abort.signal.aborted)return;
             if(latest.current.onAudio){await latest.current.onAudio(audio,{recognition_ms:0,endpoint_ms});return;}
-            const response=await api('/voice/transcribe',{method:'POST',headers:{'Content-Type':audio.type},body:audio,signal:abort.signal});
-            const result=await response.json();if(version===captureVersion.current&&!abort.signal.aborted&&enabled.current&&mounted.current){if(result.text?.trim())latest.current.onTranscript(result.text,{recognition_ms:Math.round(performance.now()-recognitionStarted),endpoint_ms});else latest.current.onError('Não consegui transcrever sua fala. O microfone continua ligado; repita a frase ou confira o dispositivo de entrada.');}
+            const result=await withRequestDeadline(abort.signal,12000,async signal=>{const response=await api('/voice/transcribe',{method:'POST',headers:{'Content-Type':audio.type},body:audio,signal});return response.json();});if(version===captureVersion.current&&!abort.signal.aborted&&enabled.current&&mounted.current){if(result.text?.trim())latest.current.onTranscript(result.text,{recognition_ms:Math.round(performance.now()-recognitionStarted),endpoint_ms});else latest.current.onError('Não consegui transcrever sua fala. O microfone continua ligado; repita a frase ou confira o dispositivo de entrada.');}
           }catch(error){if(enabled.current&&!abort.signal.aborted)latest.current.onError(error instanceof Error?error.message:'Transcrição indisponível.');}
           finally{if(version===captureVersion.current){processing.current=false;if(mounted.current)setTranscribing(false);}}
         };

@@ -4,6 +4,7 @@ Run after npm --prefix frontend run build: PYTHONPATH=. .venv/bin/python tools/c
 """
 import asyncio
 import io
+import importlib
 import json
 import math
 import shutil
@@ -149,6 +150,15 @@ async def exercise(base,provider,mic_file):
         failure=(await history())[-1]
         assert failure['source']=='voice' and failure['status']=='failed' and failure['first_audio_ms'] is None
         checks.append('ASR failure is recorded even when no chat request can be sent')
+        await page.get_by_role('button',name='Desligar microfone',exact=True).click()
+        importlib.import_module('cronos.app').VOICE_REQUEST_TIMEOUT_SECONDS=.04
+        await compose('Oi Cronos, teste de voz indisponível')
+        await page.locator('.response-clock').filter(has_text='Resposta interrompida').wait_for()
+        await page.locator('.reference-mic.thinking, .reference-mic.generating').wait_for(state='detached')
+        rows=await history()
+        assert rows[-1]['status']=='failed' and rows[-1]['first_audio_ms'] is None
+        await page.locator('.answer-card-deck').filter(has_text='Como foi seu dia?').wait_for()
+        checks.append('stalled TTS finishes with a visible error while the complete written answer stays available')
         assert not errors,errors
         await page.close();await browser.close()
     return {'checks_passed':len(checks),'checks':checks,'first_audio_ms':measured['first_audio_ms'],'response_ms':measured['response_ms'],
