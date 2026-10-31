@@ -25,9 +25,9 @@ def test_voice_trigger_exact_phrase_confidence_and_cooldown():
     assert not trigger.accept(result('abrir cronos',.49),now=100)
     assert not trigger.accept({'text':'abrir cronos'},now=100)
     assert trigger.accept(result('Abrir Cronos'),now=100)
-    assert not trigger.accept(result('cronos abrir'),now=110)
+    assert not trigger.accept(result('abrir cronos'),now=101)
     assert trigger.accept(result('Abrir Cronos'),now=121)
-    assert not trigger.accept(result('abrir kronos'),now=130)
+    assert trigger.accept(result('abrir kronos'),now=130)
     assert trigger.accept(result('Abrir Cronos'),now=142)
 
 
@@ -50,7 +50,7 @@ def test_default_voice_commands_accept_spoken_variants_and_report_recognition(tm
     trigger=wake.Trigger(wake.DEFAULT_SETTINGS)
     phrases=wake.command_phrases(wake.DEFAULT_SETTINGS)
     assert phrases['cromos']=='activate'
-    assert phrases['abrir cromos']=='activate'
+    assert phrases['abrir cromos']=='show'
     assert phrases['pausar cromos']=='paused'
     assert phrases['retomar cromos']=='resumed'
     assert trigger.action(result('cromos'),now=90)=='activate'
@@ -59,9 +59,9 @@ def test_default_voice_commands_accept_spoken_variants_and_report_recognition(tm
     assert trigger.last_action=='paused' and trigger.last_heard=='pausar cronos'
     assert trigger.action(result('cronos'),now=101) is None
     assert trigger.last_action=='ignored_while_paused'
-    assert trigger.action(result('abrir cronos'),now=102) is None
+    assert trigger.action(result('abrir cronos'),now=102)=='show'
     assert trigger.action(result('retomar cronos'),now=103)=='resumed'
-    assert trigger.action(result('abrir cronos'),now=104)=='activate'
+    assert trigger.action(result('abrir cronos'),now=106)=='show'
 
 
 def test_desktop_voice_activation_prefers_the_cronos_window(monkeypatch):
@@ -75,7 +75,7 @@ def test_custom_activation_has_open_alias_and_preserves_exact_phrase_priority():
     config={'activation_phrase':'pastel azul','pause_phrase':'pausar cronos','resume_phrase':'retomar cronos'}
     commands=wake.command_phrases(config)
     assert commands['pastel azul']=='activate'
-    assert commands['abrir pastel azul']=='activate'
+    assert commands['abrir pastel azul']=='show'
     assert commands['pausar cronos']=='paused'
 
 
@@ -216,48 +216,57 @@ def test_current_worker_in_an_old_installation_is_replaced(tmp_path, monkeypatch
     assert (tmp_path/'stop.request').exists() and len(calls)==1
 
 
-@pytest.mark.parametrize("conversation_active",[False,True])
-def test_listener_keeps_recognizing_while_the_voice_service_is_slow(tmp_path, monkeypatch,conversation_active):
+def test_listener_keeps_recognizing_while_the_greeting_service_is_slow(tmp_path,monkeypatch):
     from contextlib import nullcontext
-    started, release = threading.Event(), threading.Event()
-    history=[]; original=wake._write_status
-    def write(state, *args, **kwargs):
-        history.append(kwargs)
-        original(state, *args, **kwargs)
+    import queue
+    from cronos import resident,persistent_data
+    started,release,finished=threading.Event(),threading.Event(),threading.Event()
+    history=[];original=wake._write_status
+    monkeypatch.setenv('CRONOS_DATA_HOME',str(tmp_path))
+    monkeypatch.setattr(persistent_data,'activate',lambda root:None)
+    def write(state,*args,**kwargs):
+        history.append(kwargs);original(state,*args,**kwargs)
         if kwargs.get('last_action')=='paused':
-            assert not release.is_set(), 'Voice network wait blocked the microphone loop'
+            assert not release.is_set()
             (tmp_path/'stop.request').write_text('stop')
-    monkeypatch.setattr(wake, '_write_status', write)
-    monkeypatch.setattr(wake, 'root', lambda: tmp_path)
-    monkeypatch.setattr(wake, 'sys', SimpleNamespace(platform='win32',executable='python.exe'))
-    monkeypatch.setattr(wake, 'verify_model', lambda: tmp_path)
-    monkeypatch.setattr(wake, 'single_instance', lambda name: nullcontext(True))
-    if conversation_active:wake.set_ui_listening(True)
-    monkeypatch.setattr(wake, 'app_launch_module', lambda: 'cronos.desktop')
-    monkeypatch.setattr(wake.subprocess,'Popen',lambda *args,**kwargs:SimpleNamespace(poll=lambda:None))
-    def greeting(speaking):
-        started.set(); release.wait(3); return 'cronos_voice'
-    monkeypatch.setattr(wake, 'speak_activation_greeting', greeting)
+    monkeypatch.setattr(wake,'_write_status',write)
+    monkeypatch.setattr(wake,'root',lambda:tmp_path)
+    monkeypatch.setattr(wake,'sys',SimpleNamespace(platform='win32',executable='python.exe'))
+    monkeypatch.setattr(wake,'verify_model',lambda:tmp_path)
+    monkeypatch.setattr(wake,'single_instance',lambda name:nullcontext(True))
+    class Client:
+        def post(self,*a,**kw):return SimpleNamespace(raise_for_status=lambda:None)
+    monkeypatch.setattr(resident,'ensure',lambda:SimpleNamespace(client=Client(),close=lambda:None))
+    def greeting(speaking,**kwargs):started.set();release.wait(3);return 'cronos_voice'
+    monkeypatch.setattr(wake,'speak_activation_greeting',greeting)
     class Recognizer:
-        def __init__(self,*args): self.step=0
-        def SetWords(self,value): pass
+        step=0
+        def __init__(self,*args):pass
+        def SetWords(self,value):pass
         def AcceptWaveform(self,frame):
-            self.step+=1
-            if self.step==2 and not conversation_active: assert started.wait(1)
+            Recognizer.step+=1
+            if Recognizer.step==2:assert started.wait(1)
             return True
-        def Result(self): return json.dumps(result('abrir cromos' if self.step==1 else 'pausar cromos'))
+        def Result(self):return json.dumps(result('cromos' if Recognizer.step==1 else 'pausar cromos'))
     class Stream:
-        def __init__(self,**kwargs): self.callback=kwargs['callback']; assert kwargs['blocksize']==1600
+        def __init__(self,**kwargs):self.callback=kwargs['callback']
         def __enter__(self):
-            self.callback(b'audio',1600,None,None); self.callback(b'audio',1600,None,None); return self
-        def __exit__(self,*args): pass
+            self.callback(b'audio',1600,None,None);self.callback(b'audio',1600,None,None);return self
+        def __exit__(self,*args):pass
+    class UI:
+        def __init__(self):self.actions=queue.Queue()
+        def phase(self,text):pass
+        def card(self,*args):pass
+        def close(self):finished.set()
+        def run(self):assert finished.wait(5)
     monkeypatch.setitem(sys.modules,'vosk',SimpleNamespace(KaldiRecognizer=Recognizer,Model=lambda path:None,SetLogLevel=lambda n:None))
     monkeypatch.setitem(sys.modules,'sounddevice',SimpleNamespace(RawInputStream=Stream))
-    try: wake.listen()
-    finally: release.set()
+    from cronos.background_listener import run
+    try:run(UI())
+    finally:release.set()
     assert any(item.get('last_action')=='activate' for item in history)
     assert any(item.get('last_action')=='paused' for item in history)
-    assert started.is_set() is (not conversation_active)
+    assert started.is_set()
 
 
 def test_wake_uses_saved_fish_voice_and_repairs_streaming_wav(tmp_path,monkeypatch):

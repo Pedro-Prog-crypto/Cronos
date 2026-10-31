@@ -249,6 +249,12 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
     if(enabled.current||opening.current)return;
     enabled.current=true;opening.current=true;setStarting(true);
     try{
+      // Release a resident native input stream before opening WebView capture.
+      // This requests ownership only; it does not grant a device permission.
+      try{
+        const ownership=await (await api('/wake/presence',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({listening:false,foreground:true})})).json();
+        if(ownership.native_handoff)await new Promise(resolve=>setTimeout(resolve,250));
+      }catch{/* Older backends may not expose the ownership handshake. */}
       let deviceId:string|undefined;
       if(latest.current.preferences?.input_label){const devices=await navigator.mediaDevices.enumerateDevices();deviceId=devices.find(d=>d.kind==='audioinput'&&d.label===latest.current.preferences.input_label)?.deviceId;if(!deviceId)throw new Error('Microfone selecionado não disponível. Escolha outro dispositivo.');}
       const stream=await navigator.mediaDevices.getUserMedia({audio:{...(deviceId?{deviceId:{exact:deviceId}}:{}),channelCount:{ideal:1},echoCancellation:true,noiseSuppression:true,autoGainControl:true}});

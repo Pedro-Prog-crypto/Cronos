@@ -1,0 +1,107 @@
+{
+  "revision": "native-background-2026-10-31-r12",
+  "python_suite": {
+    "passed": 713,
+    "failed": 0,
+    "duration_seconds": 98.11,
+    "warnings": 9,
+    "warning_types": "Starlette/httpx TestClient deprecations"
+  },
+  "conversation_browser": {
+    "checks_passed": 21,
+    "checks": [
+      "compiled App plays first audio before complete provider response",
+      "measured start under five seconds with controlled 150 ms AI / 100 ms TTS fixtures",
+      "timing history is reachable from the stopwatch and records a single turn",
+      "Escape cancels pending server generation and logs cancellation",
+      "failed request stays in history instead of disappearing from measurements",
+      "next question responds after cancellation and failure, without a stale lock",
+      "AudioWorklet manual send includes actual ASR and endpoint delay in the same question timer",
+      "one receipt ID follows actual microphone bytes through recognition, AI, Fish response and playback",
+      "ASR failure is recorded even when no chat request can be sent",
+      "same recording is resent after ASR failure, its actual transcript reaches AI and the answer reaches TTS",
+      "13-second recognition completes and reaches real audio playback instead of being aborted at the old 12-second deadline",
+      "9-second synthesis finishes with audible playback instead of being killed by the former 8-second voice deadline",
+      "TTS failure keeps the open Language panel unchanged, retains the error past final AI metadata, and only opens written cards when requested",
+      "native audio leaves transcription state on handoff, receives its recognized question and speaks before final metadata",
+      "native answer failure preserves the actual recognized question for retry, without redundant ASR or the voice placeholder",
+      "diagnostic button submits a fresh arithmetic question and plays the computed answer using the same backend and TTS path",
+      "diagnostic stays copyable when the embedded browser does not provide clipboard permission",
+      "open-window microphone ASR reaches AI and the identical complete response is read by controlled device voice when online TTS fails; no panel popup or closure",
+      "10-second online synthesis hedge reads the actual answer locally and a late online completion does not restart speech",
+      "hung AudioContext activation is bounded and reads the same response through device speech instead of leaving generating forever",
+      "Escape cancels active device speech without replaying a queued continuation or changing to another voice"
+    ],
+    "first_audio_ms": 287.0,
+    "response_ms": 287.0,
+    "environment": "Chromium + compiled UI + real local FastAPI/HTTP + real SSE parser and WAV playback; external AI and TTS controlled, synthetic microphone, controlled ASR/AI/TTS, no physical Windows microphone/speaker validation"
+  },
+  "image_wall_browser": {
+    "passed": 12,
+    "scenarios": [
+      "12 decoded unique images despite failures and duplicate pixels",
+      "fullscreen wall moves left, three rows, no transcript",
+      "streaming text does not restart identical media searches",
+      "spoken Plato changes the subject instead of retaining Socrates",
+      "late cancelled search cannot overwrite a newer topic",
+      "empty search is not permanently cached; retry recovers",
+      "all proxy failures report failure and allow working retry",
+      "new page of images is requested while narration continues",
+      "portrait photographs adapt to two rows without forced cropping",
+      "small viewport preserves all photographs and a reachable close button",
+      "closing releases every object URL with no browser errors",
+      "main App sends a study question, plays real WAV and renews images during speech"
+    ],
+    "external_media": "mocked",
+    "browser": "Chromium"
+  },
+  "resident_lifecycle": {
+    "checks_passed": 6,
+    "checks": [
+      "real loopback backend starts without creating a browser or visible WebView",
+      "authenticated assistant state exposes a shared session and separates name activation from opening",
+      "closing and reopening two controlled desktop views keeps the real backend alive",
+      "both desktop views reuse the same non-private WebView profile; no permission auto-grant is installed",
+      "explicit shutdown removes the private endpoint and terminates the resident",
+      "a restarted backend preserves its origin/port and rotates its private access token"
+    ],
+    "environment": "Real Python subprocess + Uvicorn/HTTP lifecycle on Linux, controlled WebView API. Windows microphone/camera permission persistence not physically validated."
+  },
+  "native_overlay": {
+    "checks_passed": 5,
+    "checks": [
+      "native compact card, complete text and separate indicator render without main app",
+      "dragging uses the native header and keeps the close button on screen",
+      "minimizing the card does not close the indicator or the conversation",
+      "X closes only the card",
+      "resident indicator stays available after closing the card"
+    ],
+    "environment": "Real Tk widgets and Xvfb; no Windows microphone, WebView2 or audio device validation"
+  },
+  "typescript": "passed",
+  "frontend_build": "passed",
+  "source_reference": {
+    "uploaded_zip_opened": false,
+    "reason": "The uploaded archive exceeds the 32 MiB transfer limit",
+    "history_commit": "b736566089df7676678a76f1789fe064937059e2",
+    "scope": "Public code of the revision named in the uploaded file; additional private/modified archive contents not inspected"
+  },
+  "actual_cloud_calls_tested_this_revision": false,
+  "runtime_network": {
+    "policy_snapshot_version": 1,
+    "configured_http_policy": "restricted",
+    "google_and_fish_hosts_listed": false,
+    "environment_status_tool_available": false,
+    "current_runtime_readiness_confirmed": false,
+    "proxy_preserved": true,
+    "denied_destinations_bypassed": false
+  },
+  "physical_windows_validation": {
+    "microphone": false,
+    "speaker": false,
+    "webview_permissions": false,
+    "browser_accessibility_reader": false
+  },
+  "native_audio_metrics": "Playback-completed event follows native driver return. No fabricated physical first-sample timing.",
+  "package": "Complete runtime, compiled UI, launcher, migration and shutdown scripts; private .env and vault excluded."
+}

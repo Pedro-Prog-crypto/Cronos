@@ -6,6 +6,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from contextlib import suppress
 from uuid import UUID, uuid4
+from typing import Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,6 +18,7 @@ from cronos.config import Settings
 from cronos.memory import Memory
 from cronos.providers import ProviderError
 from cronos import delivery
+from cronos.turn_cancellation import voice_operation
 from cronos.engine import Engine, TurnError
 from cronos.integrations import provider_catalog, available_models
 from cronos.tools import create_registry, ToolError
@@ -34,12 +36,15 @@ class ChatInput(BaseModel):
     message: str = Field(min_length=1, max_length=16000)
     session_id: UUID | None = None
     heard_context: str | None = Field(default=None, max_length=10000)
+    screen_context: bool = True
+    page_context: str | None = Field(default=None,max_length=16000)
 
 
 class SpeechInput(BaseModel):
     text: str = Field(min_length=1, max_length=50000)
     reference_id: str | None = Field(default=None, max_length=128)
     speed: float | None = Field(default=None, ge=0.5, le=2.0)
+    format: Literal['wav','mp3'] | None = None
 
     @field_validator('text')
     @classmethod
@@ -69,9 +74,12 @@ async def voice_deadline(operation, seconds):
         raise HTTPException(504, 'O serviço de voz não respondeu a tempo.') from None
 
 
-async def chat_until_disconnect(engine,session,message,request):
+async def chat_until_disconnect(engine,session,message,request,screen_context=True,page_context=None):
     if await request.is_disconnected():raise HTTPException(499,'Conversa interrompida.')
-    task=asyncio.create_task(engine.chat(session,message))
+    options={}
+    if not screen_context:options['screen_context']=False
+    if page_context:options['page_context']=page_context
+    task=asyncio.create_task(engine.chat(session,message,**options))
     async def watch():
         while not task.done():
             if await request.is_disconnected():return
@@ -276,6 +284,8 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 "personality_available": settings.personality.is_file()}
 
     install_live_screen(app,authenticate)
+    from cronos.desktop_state import install as install_desktop_state
+    install_desktop_state(app,authenticate)
     from cronos.hand_control import install as install_hand_control
     install_hand_control(app,settings)
 
@@ -287,7 +297,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         # Uma instância/worker: protege ordem das conversas e arquivos compartilhados.
         async with request.app.state.lock:
             try:
-                result = await chat_until_disconnect(request.app.state.engine,session,body.message,request)
+                result = await chat_until_disconnect(request.app.state.engine,session,body.message,request,screen_context=body.screen_context,page_context=body.page_context)
             except TurnError as exc:
                 raise HTTPException(exc.status, {"message": str(exc), "session_id": str(exc.session), "tool_results": exc.results}) from exc
             except ProviderError as exc:
@@ -297,7 +307,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         request.app.state.features.record("language", "passed", "Uma conversa foi processada e salva. Não certifica precisão de todas as respostas.")
         return result
 
-    async def conversation_stream(session,message,request,audio=None,audio_fallback=None,heard_context=None):
+    async def conversation_stream(session,message,request,audio=None,audio_fallback=None,heard_context=None,screen_context=True,page_context=None):
         from cronos.reply_stream import reply_sink,intro_sink,transcript_sink
         async def events():
             panels=request.app.state.panels;panels.active+=1
@@ -337,6 +347,8 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                                 try:
                                     try:
                                         options={'audio':audio} if audio is not None else {}
+                                        if not screen_context:options['screen_context']=False
+                                        if page_context:options['page_context']=page_context
                                         if heard_context:options['heard_context']=heard_context
                                         result=await request.app.state.engine.chat(session,message,**options)
                                     except ProviderError as exc:
@@ -382,7 +394,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
     @app.post("/chat/stream", dependencies=[Depends(authenticate)])
     async def stream_chat(body: ChatInput, request: Request):
         if not body.message.strip():raise HTTPException(422,"A mensagem não pode ser vazia.")
-        return await conversation_stream(body.session_id or uuid4(),body.message,request,heard_context=body.heard_context)
+        return await conversation_stream(body.session_id or uuid4(),body.message,request,heard_context=body.heard_context,screen_context=body.screen_context,page_context=body.page_context)
 
     @app.post('/chat/audio/stream',dependencies=[Depends(authenticate)])
     async def stream_audio(request: Request,session_id: UUID | None = None):
@@ -513,18 +525,19 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
             if not body.text.strip():
                 raise HTTPException(422, "Informe um texto para sintetizar.")
             reference = body.reference_id or settings.fish_reference
+            audio_format = body.format or settings.fish_format
             if not settings.fish_model:
                 raise HTTPException(503, "Configure FISH_MODEL com o modelo liberado para API na sua conta Fish Audio.")
             client = await fish_client()
             try:
                 async with client:
-                    audio = await voice_deadline(fish_tts(client, "convert", text=body.text, reference_id=reference or None,
-                                                     format=settings.fish_format,
-                                                     speed=body.speed or settings.fish_speed, latency=settings.fish_latency), VOICE_REQUEST_TIMEOUT_SECONDS)
+                    audio = await voice_operation(request,lambda:voice_deadline(fish_tts(client, "convert", text=body.text, reference_id=reference or None,
+                                                     format=audio_format,
+                                                     speed=body.speed or settings.fish_speed, latency=settings.fish_latency), VOICE_REQUEST_TIMEOUT_SECONDS))
                 if not audio:raise HTTPException(502,'O Fish Audio retornou áudio vazio.')
                 delivery.mark('voice_received',provider='fish',bytes=len(audio))
                 request.app.state.features.record("voice", "passed", "Síntese retornou áudio; reprodução física no dispositivo não foi certificada.")
-                return Response(content=audio, media_type="audio/wav" if settings.fish_format == "wav" else "audio/mpeg")
+                return Response(content=audio, media_type="audio/wav" if audio_format == "wav" else "audio/mpeg")
             except HTTPException as exc:
                 delivery.mark('failed',provider='fish',http_status=exc.status_code,error_type='voice')
                 raise
@@ -678,7 +691,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 try:check_signal(read_pcm(b''.join(chunks)))
                 except ValueError as exc:raise HTTPException(422,str(exc)) from None
             try:
-                text=await recognize_recording(b''.join(chunks),request.headers.get('content-type','audio/webm'))
+                text=await voice_operation(request,recognize_recording(b''.join(chunks),request.headers.get('content-type','audio/webm')))
                 delivery.mark('question_recognized',characters=len(text))
                 return {'text':text}
             except HTTPException as exc:

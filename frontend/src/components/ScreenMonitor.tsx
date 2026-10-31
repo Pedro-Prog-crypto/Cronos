@@ -7,10 +7,12 @@ export const ScreenMonitor=forwardRef<ScreenMonitorHandle,{sessionId:()=>string|
  const [state,setState]=useState<'off'|'starting'|'local'|'browser'>('off'),[error,setError]=useState(''),[expanded,setExpanded]=useState(false),[preview,setPreview]=useState('');
  const active=useRef(false),owner=useRef<string|null>(null),mode=useRef(''),stream=useRef<MediaStream|null>(null),video=useRef<HTMLVideoElement|null>(null),generation=useRef(0),alive=useRef(true),timer=useRef<ReturnType<typeof setTimeout>|null>(null),heartbeat=useRef<ReturnType<typeof setInterval>|null>(null),url=useRef(''),expandedRef=useRef(false);
  expandedRef.current=expanded;
+ const native=useRef(false);
  const clean=()=>{if(timer.current)clearTimeout(timer.current);if(heartbeat.current)clearInterval(heartbeat.current);timer.current=null;heartbeat.current=null;stream.current?.getTracks().forEach(track=>track.stop());stream.current=null;if(video.current){video.current.srcObject=null;video.current=null;}if(url.current)URL.revokeObjectURL(url.current);url.current='';};
- const stop=async()=>{
+ const stop=async(remember=true)=>{
   generation.current++;active.current=false;clean();if(alive.current){setState('off');setPreview('');setError('');setExpanded(false);}
   const id=owner.current;owner.current=null;if(id)try{await jsonApi('/vision/live/stop',{session_id:id});}catch{if(alive.current)setError('Não consegui confirmar a parada no servidor. Feche o Cronos local se a conexão não voltar; a captura termina ao expirar a conexão.');}
+  if(remember&&native.current)try{await jsonApi('/assistant/vision-setting',{consent:true,enabled:false});}catch{if(alive.current)setError('Não consegui salvar a visão como desligada. Encerre o assistente pelo indicador se a conexão não voltar.');}
  };
  const loop=async(version:number)=>{
   if(!active.current||version!==generation.current||!owner.current)return;
@@ -32,6 +34,10 @@ export const ScreenMonitor=forwardRef<ScreenMonitorHandle,{sessionId:()=>string|
   finally{if(active.current&&version===generation.current)timer.current=setTimeout(()=>void loop(version),1500);}
  };
  const connect=async(source:'local'|'browser',version:number)=>{
+  if(source==='local'){
+   try{const context=await jsonApi('/assistant/state');native.current=Boolean(context.native_available);}catch{/* Backends anteriores usam somente a sessão local. */}
+   if(native.current)await jsonApi('/assistant/vision-setting',{consent:true,enabled:true});
+  }
   const result=await jsonApi('/vision/live/start',{session_id:sessionId()||undefined,consent:true,source});
   if(version!==generation.current||!alive.current){await jsonApi('/vision/live/stop',{session_id:result.session_id});return;}
   owner.current=result.session_id;onSession(result.session_id);mode.current=source;active.current=true;setState(source);setError('');
@@ -62,7 +68,7 @@ export const ScreenMonitor=forwardRef<ScreenMonitorHandle,{sessionId:()=>string|
   alive.current=true;
   const leave=()=>{const id=owner.current;generation.current++;active.current=false;clean();owner.current=null;setState('off');setPreview('');if(id)void api('/vision/live/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:id}),keepalive:true}).catch(()=>{});};
   window.addEventListener('pagehide',leave);
-  return()=>{window.removeEventListener('pagehide',leave);alive.current=false;void stop();};
+  return()=>{window.removeEventListener('pagehide',leave);alive.current=false;void stop(false);};
  },[]);
  if(state==='off'&&!error)return null;
  return <aside className="screen-monitor" aria-label="Acompanhamento da tela" role="region"><header><MonitorUp size={16}/><b>{state==='starting'?'INICIANDO VISÃO DA TELA':state==='off'?'VISÃO DA TELA':'TELA INTEIRA · AO VIVO'}</b>{state!=='off'&&state!=='starting'&&<button aria-label={expanded?'Recolher visão da tela':'Mostrar tela acompanhada'} onClick={()=>setExpanded(v=>!v)}>{expanded?<ChevronDown size={16}/>:<ChevronUp size={16}/>}</button>}<button aria-label="Parar de ver a tela" onClick={()=>void stop()}><Square size={15}/></button></header>{expanded&&preview&&<img src={preview} alt="Última captura da tela inteira acompanhada"/>}{expanded&&state!=='off'&&<p>Sem narração automática. Diga “pare de ver minha tela” para desligar. Capturas atualizadas; áudio não é capturado.</p>}{error&&<p role="alert">{error}</p>}{state==='off'&&error&&<button onClick={()=>void share()}>Compartilhar tela inteira</button>}</aside>;

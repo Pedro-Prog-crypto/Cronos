@@ -28,12 +28,15 @@ DEFAULT_SETTINGS = {
     "activation_phrase": "cronos",
     "pause_phrase": "pausar cronos",
     "resume_phrase": "retomar cronos",
+    "show_phrase": "abrir cronos",
+    "background_enabled": True,
+    "screen_enabled": True,
     "start_with_windows": False,
 }
 PHRASES = {"abrir cronos", "abrir kronos", "cronos abrir", "kronos abrir"}  # compatibilidade antiga
 MODEL_LAYOUTS = (("am/final.mdl", "conf/model.conf"),
                  ("final.mdl", "mfcc.conf", "HCLr.fst", "Gr.fst"))
-WAKE_VERSION = 6
+WAKE_VERSION = 12
 WAKE_GREETING = "Pois não, senhor? O que deseja?"
 
 
@@ -49,15 +52,19 @@ def validate_settings(data):
     if not isinstance(data, dict):
         raise ValueError("As configurações do ouvinte precisam ser um objeto.")
     result = {}
-    for key in ("activation_phrase", "pause_phrase", "resume_phrase"):
-        value = data.get(key)
+    for key in ("activation_phrase", "pause_phrase", "resume_phrase", "show_phrase"):
+        value = data.get(key,DEFAULT_SETTINGS[key])
+        if key=='show_phrase' and key not in data and normalize_phrase(value) in {normalize_phrase(v) for v in result.values()}:
+            value='mostrar janela do cronos'
         normalized = normalize_phrase(value)
         if not normalized or len(normalized) > 80 or len(normalized.split()) > 10:
             raise ValueError("Cada frase precisa ter entre 1 e 10 palavras e até 80 caracteres.")
         result[key] = " ".join(str(value).strip().split())
-    if len({normalize_phrase(result[key]) for key in result}) != 3:
-        raise ValueError("Ativação, pausa e retomada precisam usar frases diferentes.")
+    if len({normalize_phrase(result[key]) for key in result}) != len(result):
+        raise ValueError("Chamada, abertura, pausa e retomada precisam usar frases diferentes.")
     result["start_with_windows"] = bool(data.get("start_with_windows", False))
+    result['background_enabled']=bool(data.get('background_enabled',True))
+    result['screen_enabled']=bool(data.get('screen_enabled',True))
     return result
 
 
@@ -68,7 +75,8 @@ def command_phrases(config):
     commands = {}
     exact = ((config["activation_phrase"], "activate"),
              (config["pause_phrase"], "paused"),
-             (config["resume_phrase"], "resumed"))
+             (config["resume_phrase"], "resumed"),
+             (config.get('show_phrase','abrir cronos'),'show'))
     for phrase, action in exact:
         commands[normalize_phrase(phrase)] = action
 
@@ -78,12 +86,13 @@ def command_phrases(config):
             commands.setdefault(key, action)
 
     if normalized_activation in {"cronos", "kronos", "chronos"}:
-        for phrase in ("cronos", "kronos", "chronos", "abrir cronos", "abrir kronos",
-                       "cronos abrir", "kronos abrir", "abre cronos"):
+        for phrase in ("cronos", "kronos", "chronos"):
             alias(phrase, "activate")
-    else:
-        alias("abrir " + activation, "activate")
-        alias("abre " + activation, "activate")
+    for phrase in ('abrir '+activation,'abre '+activation,'mostrar '+activation,'mostre '+activation,
+                   'abrir cronos','abrir kronos','cronos abrir','kronos abrir','abre cronos','mostrar cronos'):
+        alias(phrase,'show')
+    for phrase in ('fechar cronos','ocultar cronos','minimizar cronos','esconder cronos'):
+        alias(phrase,'hide')
     for phrase in ("pausar cronos", "pausa cronos", "pausar " + activation,
                    "pausa " + activation, "pausar escuta", "parar escuta"):
         alias(phrase, "paused")
@@ -104,12 +113,14 @@ def settings():
     path = root() / "settings.json"
     try:
         stored = json.loads(path.read_text(encoding="utf-8"))
-        return validate_settings({**DEFAULT_SETTINGS, **stored})
+        if isinstance(stored,dict) and 'show_phrase' not in stored and normalize_phrase(stored.get('activation_phrase','')) in {'abrir cronos','abrir kronos','cronos abrir','kronos abrir'}:
+            stored={**stored,'activation_phrase':'cronos','show_phrase':'abrir cronos'}
+        return validate_settings(stored)
     except FileNotFoundError:
         return dict(DEFAULT_SETTINGS)
     except (OSError, ValueError, TypeError):
         # Um arquivo inválido nunca deve impedir a inicialização; status expõe o padrão.
-        return dict(DEFAULT_SETTINGS)
+        return {**DEFAULT_SETTINGS,'background_enabled':False,'screen_enabled':False}
 
 
 def save_settings(data):
@@ -118,9 +129,8 @@ def save_settings(data):
     clean = validate_settings(current)
     folder = root()
     folder.mkdir(parents=True, exist_ok=True)
-    temporary = folder / "settings.tmp"
-    temporary.write_text(json.dumps(clean, ensure_ascii=False, indent=2), encoding="utf-8")
-    temporary.replace(folder / "settings.json")
+    from cronos.resident import write_json
+    write_json(folder/'settings.json',clean)
     return clean
 
 
@@ -134,9 +144,8 @@ def paused():
 def set_paused(value):
     folder = root()
     folder.mkdir(parents=True, exist_ok=True)
-    temporary = folder / "mode.tmp"
-    temporary.write_text(json.dumps({"paused": bool(value)}, ensure_ascii=False), encoding="utf-8")
-    temporary.replace(folder / "mode.json")
+    from cronos.resident import write_json
+    write_json(folder/'mode.json',{'paused':bool(value)})
 
 
 def model_present(folder):
@@ -163,6 +172,19 @@ def ui_is_listening():
         data=json.loads((root()/'conversation-presence.json').read_text(encoding='utf-8'))
         return data.get('listening') is True and 0<=time.time()-float(data['at'])<12
     except (OSError,ValueError,TypeError,KeyError):return False
+
+
+def set_ui_open(active):
+    from cronos.resident import write_json
+    write_json(root()/'ui-ownership.json',{'open':bool(active),'at':time.time()})
+
+
+def ui_owns_microphone():
+    try:
+        data=json.loads((root()/'ui-ownership.json').read_text())
+        reserved=data.get('open') is True and 0<=time.time()-float(data['at'])<12
+    except (OSError,ValueError,TypeError,KeyError):reserved=False
+    return reserved or ui_is_listening()
 
 
 def status():
@@ -220,8 +242,9 @@ def _write_status(state, last_opened=None, reason=None, *, last_heard=None, last
         data["launch_status"] = launch_status
     if reason:
         data["reason"] = reason
-    temporary.write_text(json.dumps(data))
-    temporary.replace(folder / "status.json")
+    from cronos.resident import write_json
+    try:write_json(folder/'status.json',data)
+    except OSError:pass # Diagnostics must not stop a working microphone.
 
 
 def prepare_model(cancel=None):
@@ -303,8 +326,8 @@ class Trigger:
         self.last_heard = text[:80]
         self.last_confidence = confidence
         self.last_action = action or "unrecognized"
-        cooldown = 20 if action == "activate" else 2
-        last_action = self.last_activation if action == "activate" else self.last_transition
+        cooldown = 2
+        last_action = self.last_activation if action in {'activate','show','hide'} else self.last_transition
         if confidence < .50 or action is None or now - last_action < cooldown:
             if action is not None and confidence < .50:
                 self.last_action = "low_confidence"
@@ -317,15 +340,15 @@ class Trigger:
             self.last_transition = now
             set_paused(False)
             return "resumed"
-        if paused():
+        if paused() and action not in {'show','hide'}:
             self.last_action = "ignored_while_paused"
             return None
         self.last_activation = now
-        return "activate"
+        return action
 
     def accept(self, result, now=None):
         """Compatibilidade com integrações antigas que só verificam ativação."""
-        return self.action(result, now) == "activate"
+        return self.action(result, now) in {'activate','show'}
 
 
 @contextmanager
@@ -397,10 +420,14 @@ def start():
         else:
             raise ValueError("O ouvinte antigo não encerrou. Use Parar ouvinte e tente Iniciar novamente.")
     project = Path(__file__).resolve().parent.parent
-    subprocess.Popen([str(python_windowless()), "-m", "cronos.wake"], cwd=project, shell=False, env=independent_environment(),
+    environment=independent_environment();environment['CRONOS_WAKE_STARTED']=str(time.time())
+    subprocess.Popen([str(python_windowless()), "-m", "cronos.wake"], cwd=project, shell=False, env=environment,
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                      creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-    return {"requested": True, "note": "Confira o estado do microfone após alguns segundos. Iniciar processo não comprova reconhecimento de voz."}
+    if settings()['start_with_windows']:
+        try:startup(True)
+        except (OSError,ValueError):pass
+    return {"requested": True, "note": "Confira o estado do microfone após alguns segundos. Chamar o Cronos mantém a janela atual; peça abrir Cronos para mostrar a interface."}
 
 
 def stop():
@@ -423,8 +450,6 @@ def startup(enabled):
     verify_model()
     if not status()["dependencies_installed"]:
         raise ValueError("Instale as dependências do iniciador antes de ativar o início automático.")
-    if destination.exists():
-        raise ValueError("O atalho já existe. Desative a opção antes de recriar.")
     destination.parent.mkdir(parents=True, exist_ok=True)
     def literal(value):
         return "'" + str(value).replace("'", "''") + "'"
@@ -444,7 +469,7 @@ def startup(enabled):
     return {"start_with_windows": True}
 
 
-def speak_activation_greeting(speaking=None):
+def speak_activation_greeting(speaking=None,*,respect_ui=False):
     """Speak the wake acknowledgement with the configured Cronos voice when possible."""
     if sys.platform != "win32":
         return "unavailable"
@@ -503,6 +528,7 @@ def speak_activation_greeting(speaking=None):
                     pass  # A read-only cache must never silence a successful voice response.
             if speaking: speaking.set()
             try:
+                if respect_ui and ui_owns_microphone():return 'conversation_active'
                 winsound.PlaySound(audio, winsound.SND_MEMORY | winsound.SND_NODEFAULT)
             finally:
                 if speaking: speaking.clear()
@@ -512,6 +538,7 @@ def speak_activation_greeting(speaking=None):
     # Offline fallback: use an installed Portuguese Windows speech voice. The
     # command is constant, hidden, and never includes user-provided text.
     try:
+        if respect_ui and ui_owns_microphone():return 'conversation_active'
         import ctypes
         from ctypes import wintypes
         directory = ctypes.create_unicode_buffer(32768)
@@ -534,102 +561,9 @@ def speak_activation_greeting(speaking=None):
 
 
 def listen():
-    if sys.platform != "win32":
-        raise ValueError("Execute no seu Windows.")
-    with single_instance("CronosVoiceLauncher") as acquired:
-        if not acquired:
-            return
-        model = verify_model()
-        import sounddevice
-        from vosk import KaldiRecognizer, Model, SetLogLevel
-        SetLogLevel(-1)
-        config = settings()
-        phrases = list(command_phrases(config))
-        acoustic_model = Model(str(model))
-        grammar = json.dumps([*phrases, "[unk]"], ensure_ascii=False)
-        recognizer = KaldiRecognizer(acoustic_model, 16000, grammar)
-        recognizer.SetWords(True)
-        frames = queue.Queue(maxsize=10)
-        speaking = threading.Event()
-        voice_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="wake-greeting")
-        greeting = None
-        launched = None
-        def audio(data, count, timing, status):
-            if speaking.is_set(): return
-            try:
-                frames.put_nowait(bytes(data))
-            except queue.Full:
-                try: frames.get_nowait()
-                except queue.Empty: pass
-                try: frames.put_nowait(bytes(data))
-                except queue.Full: pass
-        folder = root(); (folder / "stop.request").unlink(missing_ok=True)
-        trigger, opened, heartbeat = Trigger(config), None, 0
-        settings_stamp = (root() / "settings.json").stat().st_mtime if (root() / "settings.json").exists() else None
-        try:
-            with sounddevice.RawInputStream(samplerate=16000, blocksize=1600, dtype="int16", channels=1, callback=audio):
-                while not (folder / "stop.request").exists():
-                    state = "paused" if paused() else "listening"
-                    if greeting is not None and greeting.done():
-                        try: voice_status = greeting.result()
-                        except Exception: voice_status = "unavailable"
-                        _write_status(state, opened, greeting_status=voice_status)
-                        greeting = None
-                    if launched is not None and launched.poll() is not None:
-                        _write_status(state, opened, launch_status="failed" if launched.returncode else "handed_off")
-                        launched = None
-                    settings_path = root() / "settings.json"
-                    try:
-                        next_stamp = settings_path.stat().st_mtime
-                    except OSError:
-                        next_stamp = None
-                    if next_stamp != settings_stamp:
-                        config = settings()
-                        phrases = list(command_phrases(config))
-                        recognizer = KaldiRecognizer(acoustic_model, 16000,
-                                                     json.dumps([*phrases, "[unk]"], ensure_ascii=False))
-                        recognizer.SetWords(True)
-                        trigger = Trigger(config)
-                        settings_stamp = next_stamp
-                    if time.monotonic() - heartbeat > 5:
-                        _write_status("paused" if paused() else "listening", opened); heartbeat = time.monotonic()
-                    try:
-                        frame = frames.get(timeout=.5)
-                    except queue.Empty:
-                        continue
-                    if recognizer.AcceptWaveform(frame):
-                        action = trigger.action(json.loads(recognizer.Result()))
-                        if action == "activate":
-                            # Prefer the packaged desktop shell. It safely
-                            # restores its existing window when already open;
-                            # browser.py is retained for installations without
-                            # pywebview.
-                            module = app_launch_module()
-                            try:
-                                launched = subprocess.Popen([str(python_windowless()), "-m", module],
-                                                 cwd=Path(__file__).resolve().parent.parent, shell=False, env=independent_environment(),
-                                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-                            except OSError:
-                                _write_status(state, opened, launch_status="failed", last_heard=trigger.last_heard,
-                                              last_action="launch_failed", last_confidence=trigger.last_confidence)
-                                continue
-                            opened = datetime.now(timezone.utc).isoformat()
-                            if ui_is_listening():
-                                greeting_status="conversation_active"
-                            else:
-                                if greeting is None or greeting.done():
-                                    greeting = voice_executor.submit(speak_activation_greeting, speaking)
-                                greeting_status = "pending"
-                            _write_status(state, opened, launch_status="requested")
-                        else:
-                            greeting_status = None
-                        _write_status("paused" if paused() else "listening", opened,
-                                      last_heard=trigger.last_heard, last_action=trigger.last_action,
-                                      last_confidence=trigger.last_confidence, greeting_status=greeting_status)
-        finally:
-            voice_executor.shutdown(wait=False, cancel_futures=True)
-            _write_status("stopped", opened)
+    if sys.platform != 'win32':raise ValueError('Execute no seu Windows.')
+    from cronos.background_listener import run
+    return run()
 
 
 def main():

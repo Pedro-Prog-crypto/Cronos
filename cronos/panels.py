@@ -269,6 +269,7 @@ class ClientLatency(BaseModel):
     endpoint_ms: float | None = Field(default=None,ge=0,le=60000)
     speech_request_ms: float | None = Field(default=None,ge=0,le=1_800_000)
     playback_ms: float | None = Field(default=None,ge=0,le=1_800_000)
+    playback_completed_ms: float | None = Field(default=None,ge=0,le=1_800_000)
     first_audio_ms: float | None = Field(default=None,ge=0,le=1_800_000)
     first_text_ms: float | None = Field(default=None,ge=0,le=1_800_000)
     response_ms: float | None = Field(default=None,ge=0,le=1_800_000)
@@ -297,6 +298,8 @@ def install_panels(app, authenticate):
             app.state.delivery.record(str(body.turn_id),body.status,error_type='client')
         if body.first_audio_ms is not None:
             app.state.delivery.record(str(body.turn_id),'playback_started',provider=body.voice_source or 'fish',response_ms=body.response_ms if body.response_ms is not None else body.first_audio_ms)
+        if body.playback_completed_ms is not None:
+            app.state.delivery.record(str(body.turn_id),'playback_completed',provider=body.voice_source or 'fish',response_ms=body.playback_completed_ms)
         return {'recorded':True}
 
     @app.get('/panels', dependencies=auth)

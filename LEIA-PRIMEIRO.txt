@@ -6,7 +6,7 @@ que voce migrar ficam guardados aqui; ele nao precisa abrir outra instalacao.
 
 PRIMEIRA INSTALACAO
 1. Extraia o ZIP inteiro para uma pasta permanente, por exemplo Documentos\Cronos.
-2. Feche o Cronos antigo.
+2. Encerre o Cronos antigo. Se houver indicador na tela, use o menu Encerrar assistente.
 3. Para importar dados, copie a pasta antiga completa para Dados-Para-Importar e
    execute IMPORTAR-DADOS-PARA-CRONOS.bat. Com .env e vault, ele importa integracoes,
    memorias e personalidade, guardando os dados atuais em .cronos-migracao-backups.
@@ -31,10 +31,20 @@ pastas do seu computador pelo migrador.
 Se a migracao disser que nao encontrou o vault ou o .env, cancele e escolha a pasta
 que realmente contem esses dados. Nao apague a instalacao antiga ate conferir a nova.
 
-REVISAO DE 31/10/2026 — CONVERSA COM A JANELA ABERTA
-Consulte docs\JANELA-ABERTA-E-VOZ-2026-10-31-R11.md para as correcoes e os limites dos testes.
-Falhas de voz agora mantem o painel aberto. A voz local em portugues, quando instalada,
-pode ler a resposta da IA se a voz online nao iniciar. O timbre dessa reserva pode mudar.
-No painel Entendimento de linguagem, use TESTAR IA E VOZ para conferir suas integracoes.
-Se os dados estiverem em outra pasta, MIGRAR-DADOS-DA-VERSAO-ANTIGA.bat copia os dados
-para esta instalacao; depois abra pelo ABRIR-CRONOS.bat. Nao envie chaves para o GitHub.
+REVISAO DE 31/10/2026 — CONVERSA EM SEGUNDO PLANO (R12)
+Chamar Cronos ativa a conversa; Abrir Cronos mostra a interface.
+Fechar somente a janela conserva o servico ja iniciado. O indicador no canto permite
+pausar, enviar a fala, interromper a resposta, tentar novamente e desligar a visao.
+Para encerrar tudo, use o menu Encerrar assistente ou ENCERRAR-CRONOS.bat.
+
+No painel Entendimento de linguagem, confira Responder em segundo plano e Acompanhar
+a tela no Windows. Use Iniciar ouvinte se estiver desativado; as dependencias e o modelo
+local precisam estar preparados. Iniciar com Windows e uma opcao salva uma unica vez.
+
+O perfil da interface agora e persistente. A autorizacao inicial do Windows/WebView
+continua necessaria; nao ha concessao automatica nem remocao de uma negativa.
+Resumos pedidos na tela usam um card separado. Imagens e as demais funcoes anteriores
+continuam disponiveis na interface principal.
+
+Passo a passo: docs\SEGUNDO-PLANO-2026-10-31-R12.md
+Resultados e limites dos testes: docs\VERIFICACAO-2026-10-31-R12.json

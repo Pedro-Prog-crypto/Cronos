@@ -153,10 +153,20 @@ export default function App(){
       const microphone=useMicrophone(useCallback((text,metrics)=>{recognition.current=metrics;if(!text.trim()){tell('Não consegui entender a fala. Tente novamente.',true);return;}if(commandRef.current(text)){cancelLatency();return;}if(prefsRef.current?.called_only&&!/\b(?:cronos|kronos|chronos)\b/i.test(text)){cancelLatency();return;}setChatOpen(false);void sendRef.current(text);},[tell]),useCallback(message=>{if(latency.current?.stage==='recognition'){latency.current.status='failed';saveLatency(latency.current);}tell(message,true);},[tell,saveLatency]),Boolean(config?.direct_audio_chat)||config?.transcription_provider==='vosk',busy||analysisBusy||updateBusy||mediaPlaying||voice.isSpeaking||voice.isGenerating||(pageHidden&&panelPrefs?.background_processing===false),panelPrefs,config?.direct_audio_chat?async(audio,metrics)=>{recognition.current=metrics;await sendRef.current('Pergunta por voz',audio);}:undefined,config?.local_voice_interrupt?{active:mediaPlaying||busy,onKeyword:()=>bargeIn.current(),wakeOnly:Boolean(panelPrefs?.called_only)}:undefined,endpoint_ms=>{latency.current={turn_id:crypto.randomUUID(),source:'voice',started:performance.now(),stage:'recognition',armed:false,status:'waiting',voiceExpected:true,chat_ms:0,endpoint_ms};saveLatency(latency.current);return latency.current.turn_id;});
   useEffect(()=>{
     if(!connected)return;
-    const report=()=>{void jsonApi('/wake/presence',{listening:microphone.recording}).catch(()=>{});};
+    const report=()=>{void jsonApi('/wake/presence',{listening:microphone.recording,foreground:microphone.recording||microphone.starting||voice.isSpeaking||voice.isGenerating||busy||mediaPlaying||!autoMic.current}).catch(()=>{});};
     report();const timer=setInterval(report,4000);
     return()=>{clearInterval(timer);};
-  },[connected,microphone.recording]);
+  },[connected,microphone.recording,microphone.starting,voice.isSpeaking,voice.isGenerating,busy,mediaPlaying]);
+  useEffect(()=>{
+    if(!connected||!config)return;
+    let alive=true;
+    void jsonApi('/assistant/state').then(value=>{
+      if(!alive||!value.native_available)return;
+      if(!session.current)session.current=value.session_id;
+      if(value.screen_enabled)screenMonitor.current?.start();
+    }).catch(()=>{});
+    return()=>{alive=false;};
+  },[connected,Boolean(config)]);
   const state=voice.isSpeaking?'SPEAKING':microphone.capturing?'LISTENING':moduleActivity;
   const audioLevelSource=voice.isSpeaking?voice.audioLevelSource:microphone.audioLevelSource;
   const live=useRef({busy:false,recording:false,transcribing:false,speaking:false,generating:false,module:null as string|null,announce:false,fish:false});
@@ -225,6 +235,14 @@ export default function App(){
   const openAnalysis=(kind:AnalysisKind)=>{restoreWindow('analysis:'+kind);if(autoVoice&&config?.fish_speech_configured)voice.prepare();setAnalyses(previous=>previous.includes(kind)?previous:[...previous,kind]);setEyeOpen(false);setModule(null);setChatOpen(false);};
   const runCommand=(text:string)=>{
     const normalizedCommand=text.trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/^(?:kronos|cronos)[,\s:]+/i,'').replace(/[.!?]+$/,'').toLowerCase().replace(/\s+/g,' ');
+    const mainBridge=(window as any).pywebview?.api;
+    if(/^(?:abrir|abre|abra|mostrar|mostre|quero abrir) (?:o |a janela do )?(?:cronos|kronos|chronos)$/.test(normalizedCommand)){
+      if(mainBridge?.show_main)void mainBridge.show_main().catch(()=>tell('Não consegui restaurar a janela.',true));else window.focus();
+      return true;
+    }
+    if(mainBridge?.close_main&&/^(?:fechar|feche|ocultar|esconder) (?:o |a janela do )?(?:cronos|kronos|chronos)$/.test(normalizedCommand)){
+      void mainBridge.close_main().catch(()=>tell('Não consegui fechar a janela.',true));return true;
+    }
     if(/^(?:(?:abrir|abre|abra|mostrar|mostre|entrar em|ir para|vamos para|vamos pra|quero abrir)\s+)?(?:[oa]\s+)?(?:area de\s+)?(?:estudo(?:s)?|caderno de estudos|ambiente de estudos|sala de estudos)(?:\s+(?:agora|por favor))?$/.test(normalizedCommand)){
       restoreWindow('study');setStudyOpen(true);setEyeOpen(false);setModule(null);setChatOpen(false);setNote(null);return true;
     }

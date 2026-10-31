@@ -2,9 +2,9 @@ import React,{useCallback,useEffect,useRef,useState} from 'react';
 import {api,jsonApi} from '../api';
 import {Mic,Pause,Play,Save,Volume2} from 'lucide-react';
 
-type WakeConfig={activation_phrase:string;pause_phrase:string;resume_phrase:string;start_with_windows:boolean};
+type WakeConfig={activation_phrase:string;pause_phrase:string;resume_phrase:string;show_phrase:string;start_with_windows:boolean;background_enabled:boolean;screen_enabled:boolean};
 type WakeStatus={windows_available:boolean;model_installed:boolean;dependencies_installed:boolean;state:string;paused:boolean;settings:WakeConfig;reason?:string;last_heard?:string;last_action?:string;last_confidence?:number;greeting_status?:string;launch_status?:string};
-const defaults:WakeConfig={activation_phrase:'cronos',pause_phrase:'pausar cronos',resume_phrase:'retomar cronos',start_with_windows:false};
+const defaults:WakeConfig={activation_phrase:'cronos',pause_phrase:'pausar cronos',resume_phrase:'retomar cronos',show_phrase:'abrir cronos',start_with_windows:false,background_enabled:true,screen_enabled:true};
 
 export function WakeSettings({onPrepare}:{onPrepare:()=>void}){
  const [data,setData]=useState<WakeStatus|null>(null),[draft,setDraft]=useState(defaults),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),dirty=useRef(false);
@@ -15,11 +15,13 @@ export function WakeSettings({onPrepare}:{onPrepare:()=>void}){
  const toggleStartup=()=>run(async()=>{await jsonApi('/wake/settings',draft);await jsonApi('/wake/startup',{enabled:!draft.start_with_windows});dirty.current=false;},draft.start_with_windows?'Inicialização automática desativada.':'Inicialização automática ativada.');
  const listening=data?.state==='listening'||data?.state==='paused';
  return <section className="wake-settings panel-box" aria-label="Comando de voz em segundo plano">
-  <h3><Mic/> COMANDO DE VOZ EM SEGUNDO PLANO <small>{data?.state==='listening'?'ATIVO':data?.state==='paused'?'PAUSADO':'DESATIVADO'}</small></h3>
-  <p>Depois de iniciar, o ouvinte funciona no notebook inteiro: pode estar no navegador, em outro aplicativo ou com a janela do Cronos fechada. O reconhecimento da frase ocorre localmente. Escolha as palavras que quiser; a pausa continua até o comando de retomada, sem cronômetro obrigatório.</p>
+  <h3><Mic/> COMANDO DE VOZ EM SEGUNDO PLANO <small>{data?.state==='listening'?'ATIVO':data?.state==='paused'?'PAUSADO':data?.state==='error'?'FALHA NA ESCUTA':'DESATIVADO'}</small></h3>
+  <p>Chamar “Cronos” ativa a conversa em segundo plano e mantém sua tela atual. A janela principal só aparece com a frase de abertura. A pergunta segue para o reconhecimento, para a IA e para a voz configurada. Resumos pedidos na tela aparecem em um card separado. Escolha as palavras que quiser.</p>
   <div className="wake-phrases">
-   {([['activation_phrase','Frase para chamar o Cronos'],['pause_phrase','Frase para pausar a escuta'],['resume_phrase','Frase para retomar a escuta']] as const).map(([key,label])=><label key={key}>{label}<input value={draft[key]} maxLength={80} onChange={event=>{dirty.current=true;setDraft(value=>({...value,[key]:event.target.value}));}}/></label>)}
+   {([['activation_phrase','Chamar sem abrir a janela'],['show_phrase','Abrir a janela principal'],['pause_phrase','Pausar a escuta'],['resume_phrase','Retomar a escuta']] as const).map(([key,label])=><label key={key}>{label}<input value={draft[key]} maxLength={80} onChange={event=>{dirty.current=true;setDraft(value=>({...value,[key]:event.target.value}));}}/></label>)}
   </div>
+  <div className="wake-phrases">{([['background_enabled','Responder em segundo plano'],['screen_enabled','Acompanhar a tela no Windows']] as const).map(([key,label])=><label key={key}><input type="checkbox" checked={draft[key]} onChange={event=>{dirty.current=true;setDraft(value=>({...value,[key]:event.target.checked}));}}/>{label}</label>)}</div>
+  <small>O indicador no canto da tela permite pausar, interromper a fala, enviar a gravação, tentar novamente e desligar a visão. As capturas ficam em memória; uma pergunta sobre a tela pode enviá-la à integração configurada. Câmera só é usada quando o senhor ativar uma função de câmera. As permissões do Windows continuam sendo respeitadas.</small>
   <div className="wake-actions">
    <button disabled={busy||!data?.windows_available} onClick={()=>void run(()=>jsonApi('/wake/test-voice',{}),'Teste de voz concluído.')}><Volume2/>TESTAR VOZ</button>
    <button disabled={busy} onClick={()=>void save()}><Save/>SALVAR FRASES</button>
@@ -32,7 +34,7 @@ export function WakeSettings({onPrepare}:{onPrepare:()=>void}){
   {(!data?.model_installed||!data?.dependencies_installed)&&<small>Antes de iniciar a escuta global, prepare o modelo local. As dependências de áudio vêm com a instalação completa do Cronos.</small>}
   {data?.launch_status==='failed'&&<small>O comando foi reconhecido, mas o aplicativo não conseguiu iniciar. Abra ABRIR-CRONOS.bat para reparar as dependências.</small>}
   {data?.reason&&<small>O ouvinte parou por uma falha local ({data.reason}).</small>}
-  <div className="wake-recognition" role="status"><b>ÚLTIMO RECONHECIMENTO</b><span>{data?.last_heard||'Diga uma das frases configuradas para testar o microfone.'}</span>{data?.last_heard&&<small>{({activate:'Chamou o Cronos',paused:'Pausa reconhecida',resumed:'Retomada reconhecida',ignored_while_paused:'Comando ignorado: o ouvinte está pausado',low_confidence:'Frase ouvida, mas a confiança ficou baixa',launch_failed:'Não foi possível abrir o aplicativo; tente ABRIR-CRONOS.bat',unrecognized:'O microfone ouviu fala, mas não reconheceu uma frase configurada'} as Record<string,string>)[data.last_action||'unrecognized']||'Frase ouvida'}{typeof data?.last_confidence==='number'?` · confiança ${Math.round(data.last_confidence*100)}%`:''}{data?.greeting_status?` · retorno de voz: ${data.greeting_status==='cronos_voice'?'voz configurada do Cronos':data.greeting_status==='windows_voice'?'voz do Windows':data.greeting_status==='pending'?'preparando a voz':data.greeting_status==='conversation_active'?'microfone da conversa já ativo':'indisponível'}`:''}</small>}</div>
+  <div className="wake-recognition" role="status"><b>ÚLTIMO RECONHECIMENTO</b><span>{data?.last_heard||'Diga uma das frases configuradas para testar o microfone.'}</span>{data?.last_heard&&<small>{({activate:'Ativou a conversa sem abrir a janela',show:'Solicitou abrir a janela principal',hide:'Fechou a interface; o serviço continua ativo',paused:'Pausa reconhecida',resumed:'Retomada reconhecida',ignored_while_paused:'Comando ignorado: o ouvinte está pausado',low_confidence:'Frase ouvida, mas a confiança ficou baixa',launch_failed:'Não foi possível abrir o aplicativo; tente ABRIR-CRONOS.bat',unrecognized:'O microfone ouviu fala, mas não reconheceu uma frase configurada'} as Record<string,string>)[data.last_action||'unrecognized']||'Frase ouvida'}{typeof data?.last_confidence==='number'?` · confiança ${Math.round(data.last_confidence*100)}%`:''}{data?.greeting_status?` · retorno de voz: ${data.greeting_status==='cronos_voice'?'voz configurada do Cronos':data.greeting_status==='windows_voice'?'voz do Windows':data.greeting_status==='pending'?'preparando a voz':data.greeting_status==='conversation_active'?'microfone da conversa já ativo':'indisponível'}`:''}</small>}</div>
   {message&&<p role="status" className="wake-message">{message}</p>}
  </section>;
 }
