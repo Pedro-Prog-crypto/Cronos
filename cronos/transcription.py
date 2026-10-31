@@ -26,8 +26,8 @@ async def gemini_transcribe(settings, audio, mime_type):
              'generationConfig':{'responseMimeType':'application/json','maxOutputTokens':4096,
                  **({'thinkingConfig':{'thinkingBudget':0}} if model.startswith('gemini-2.5-flash') else {})}}
     try:
-        async with asyncio.timeout(6):
-            async with httpx.AsyncClient(timeout=httpx.Timeout(6,connect=2)) as client:
+        async with asyncio.timeout(30):
+            async with httpx.AsyncClient(timeout=httpx.Timeout(30,connect=5)) as client:
                 response=await client.post(f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent',
                     headers={'x-goog-api-key':settings.gemini_key.strip()},json=payload)
                 response.raise_for_status()
@@ -39,3 +39,33 @@ async def gemini_transcribe(settings, audio, mime_type):
                 return value.strip()
     except (httpx.HTTPError,TimeoutError,ValueError,KeyError,IndexError,TypeError,AttributeError):
         raise ProviderError('O reconhecimento alternativo não conseguiu transcrever a gravação. O áudio pode ser reenviado pelo botão de tentar novamente.',502) from None
+
+
+async def first_valid_transcription(primary, alternative=None, hedge_after=2):
+    """Start a reserve without discarding a primary that is still recognizing."""
+    tasks=[];errors=[]
+    def start(recognizer):
+        task=asyncio.create_task(recognizer());tasks.append(task);return task
+    def result(task):
+        value=task.result()
+        if not isinstance(value,str) or not value.strip():raise ValueError('empty transcription')
+        return value.strip()
+    first=start(primary)
+    try:
+        pending={first}
+        if alternative is not None:
+            done,pending=await asyncio.wait(pending,timeout=hedge_after)
+            if done:
+                try:return result(first)
+                except Exception as exc:errors.append(exc)
+            pending.add(start(alternative))
+        while pending:
+            done,pending=await asyncio.wait(pending,return_when=asyncio.FIRST_COMPLETED)
+            for task in sorted(done,key=tasks.index):
+                try:return result(task)
+                except Exception as exc:errors.append(exc)
+        raise errors[-1] if errors else ProviderError('Não consegui reconhecer a gravação.',502)
+    finally:
+        for task in tasks:
+            if not task.done():task.cancel()
+        await asyncio.gather(*tasks,return_exceptions=True)

@@ -54,8 +54,9 @@ class ApprovalInput(BaseModel):
     accepted: bool
 
 
-VOICE_REQUEST_TIMEOUT_SECONDS = 8
-TRANSCRIPTION_TIMEOUT_SECONDS = 12
+VOICE_REQUEST_TIMEOUT_SECONDS = 30
+TRANSCRIPTION_TIMEOUT_SECONDS = 30
+TRANSCRIPTION_TOTAL_TIMEOUT_SECONDS = 40
 CONVERSATION_FIRST_REPLY_TIMEOUT_SECONDS = 24
 
 
@@ -576,21 +577,21 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
             try:return await asyncio.to_thread(local_recognizer.transcribe,audio)
             except ValueError as exc:raise HTTPException(503,str(exc)) from None
         if current.privacy_mode!='online':raise HTTPException(503,'Reconhecimento online desativado no modo local.')
-        alternative=bool(current.gemini_key.strip())
-        try:
+        from cronos.transcription import gemini_transcribe,first_valid_transcription
+        async def primary():
             client=await fish_client()
             async with client:
-                result=await voice_deadline(client.asr.transcribe(audio=audio,language='pt'),min(5,TRANSCRIPTION_TIMEOUT_SECONDS) if alternative else TRANSCRIPTION_TIMEOUT_SECONDS)
-            text=getattr(result,'text','')
-            if not isinstance(text,str) or not text.strip():raise ValueError('empty transcription')
-            return text.strip()
-        except Exception as exc:
-            if not alternative:
-                if isinstance(exc,HTTPException):raise
-                raise HTTPException(502,fish_error(exc,'transcrição do microfone')) from None
-        from cronos.transcription import gemini_transcribe
-        try:return await gemini_transcribe(current,audio,mime_type)
+                result=await voice_deadline(client.asr.transcribe(audio=audio,language='pt'),TRANSCRIPTION_TIMEOUT_SECONDS)
+            return getattr(result,'text','')
+        async def alternative():return await gemini_transcribe(current,audio,mime_type)
+        try:
+            async with asyncio.timeout(TRANSCRIPTION_TOTAL_TIMEOUT_SECONDS):
+                return await first_valid_transcription(primary,alternative if current.gemini_key.strip() else None)
+        except TimeoutError:
+            raise HTTPException(504,'O reconhecimento continua indisponível. Sua gravação pode ser reenviada sem repetir a fala.') from None
+        except HTTPException:raise
         except ProviderError as exc:raise HTTPException(exc.status,str(exc)) from None
+        except Exception as exc:raise HTTPException(502,fish_error(exc,'transcrição do microfone')) from None
 
     @app.post("/voice/transcribe", dependencies=[Depends(authenticate)])
     async def transcribe(request: Request):

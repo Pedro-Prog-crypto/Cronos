@@ -71,8 +71,8 @@ export function useCronosVoice({preferences,streaming,onSpeechStart,onSpeechChun
         const speed=prefs.current?.voice_speed,started=performance.now();
         let error:unknown;
         for(let attempt=0;attempt<2;attempt++){
-          try{return await withRequestDeadline(controller.signal,Math.max(1,10000-(performance.now()-started)),async signal=>{const response=await api(pcm?'/voice/pcm':'/voice/speech',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:part,...(speed!==undefined?{speed}:{})}),signal});return {response:pcm?response:null,blob:pcm?null:await response.blob(),error:null,speed,elapsed:performance.now()-started};});}
-          catch(caught){error=caught;if(controller.signal.aborted||attempt===1||performance.now()-started>=9500||!(caught instanceof ApiError)||![429,502,503,504].includes(caught.status))break;await new Promise(resolve=>setTimeout(resolve,250*(attempt+1)));}
+          try{return await withRequestDeadline(controller.signal,Math.max(1,40000-(performance.now()-started)),async signal=>{const response=await api(pcm?'/voice/pcm':'/voice/speech',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:part,...(speed!==undefined?{speed}:{})}),signal});return {response:pcm?response:null,blob:pcm?null:await response.blob(),error:null,speed,elapsed:performance.now()-started};});}
+          catch(caught){error=caught;if(controller.signal.aborted||attempt===1||performance.now()-started>=39500||!(caught instanceof ApiError)||![429,502,503,504].includes(caught.status))break;await new Promise(resolve=>setTimeout(resolve,250*(attempt+1)));}
         }
         return {response:null,blob:null,error,speed,elapsed:performance.now()-started};
       };
@@ -181,7 +181,7 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
         setTranscribing(false);
         await submission;return;
       }
-      const result=await withRequestDeadline(abort.signal,12000,async signal=>{
+      const result=await withRequestDeadline(abort.signal,55000,async signal=>{
         const response=await api('/voice/transcribe',{method:'POST',headers:{'Content-Type':audio.type},body:audio,signal});return response.json();
       },'Não consegui reconhecer a gravação a tempo. Use Reenviar gravação para tentar sem repetir sua fala.');
       if(version!==captureVersion.current||abort.signal.aborted||!mounted.current)return;

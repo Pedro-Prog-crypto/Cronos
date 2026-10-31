@@ -42,19 +42,21 @@ def audio_fixture():
 
 class ControlledFish:
     fail_asr=False
+    delay_asr=.25
+    delay_tts=.10
     recordings=[]
     spoken=[]
     def __init__(self):self.tts=self;self.asr=self
     async def transcribe(self,**kwargs):
         self.recordings.append(kwargs['audio'])
-        await asyncio.sleep(.25)
+        await asyncio.sleep(self.delay_asr)
         if self.fail_asr:raise RuntimeError("Controlled ASR failure")
         return SimpleNamespace(text="E aí, Kronos, de boa? Como é que você tá, mano?")
     async def __aenter__(self):return self
     async def __aexit__(self,*args):pass
     async def convert(self,**kwargs):
         self.spoken.append(kwargs['text'])
-        await asyncio.sleep(.10)
+        await asyncio.sleep(self.delay_tts)
         return audio_fixture()
 
 
@@ -169,6 +171,30 @@ async def exercise(base,provider,mic_file):
         assert 'Tudo certo, senhor.' in ''.join(ControlledFish.spoken)
         assert await page.get_by_role('button',name='Reenviar gravação',exact=True).count()==0
         checks.append('same recording is resent after ASR failure, its actual transcript reaches AI and the answer reaches TTS')
+        await page.locator('.reference-mic.thinking, .reference-mic.speaking, .reference-mic.generating').wait_for(state='detached')
+        ControlledFish.delay_asr=13.2
+        await page.wait_for_timeout(1100)
+        await page.get_by_role('button',name='Enviar fala agora',exact=True).click()
+        await page.locator('.response-clock').filter(has_text='Transcrevendo').wait_for()
+        await page.wait_for_timeout(12200)
+        assert await page.locator('.response-clock').filter(has_text='Transcrevendo').count()==1
+        assert await page.get_by_role('button',name='Reenviar gravação',exact=True).count()==0
+        await page.locator('.response-clock').filter(has_text='Voz começou em').wait_for()
+        long_row=(await history())[-1]
+        assert long_row['recognition_ms']>=13200 and long_row['first_audio_ms']>0
+        checks.append('13-second recognition completes and reaches real audio playback instead of being aborted at the old 12-second deadline')
+        ControlledFish.delay_asr=.25
+        await page.locator('.reference-mic.thinking, .reference-mic.speaking, .reference-mic.generating').wait_for(state='detached')
+        ControlledFish.delay_tts=9.2
+        await compose('Oi Cronos')
+        await page.locator('.response-clock').filter(has_text='Preparando voz').wait_for()
+        await page.wait_for_timeout(8500)
+        assert await page.locator('.response-clock').filter(has_text='Preparando voz').count()==1
+        await page.locator('.response-clock').filter(has_text='Voz começou em').wait_for()
+        tts_row=(await history())[-1]
+        assert tts_row['speech_request_ms']>=9200
+        checks.append('9-second synthesis finishes with audible playback instead of being killed by the former 8-second voice deadline')
+        ControlledFish.delay_tts=.10
         await page.locator('.reference-mic.thinking, .reference-mic.speaking, .reference-mic.generating').wait_for(state='detached')
         await page.get_by_role('button',name='Desligar microfone',exact=True).click()
         importlib.import_module('cronos.app').VOICE_REQUEST_TIMEOUT_SECONDS=.04

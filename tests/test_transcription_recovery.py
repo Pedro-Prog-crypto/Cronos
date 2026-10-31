@@ -81,3 +81,50 @@ def test_recognized_question_survives_native_failure_without_transcribing_again(
         events=[json.loads(line) for line in r.text.splitlines()]
         assert [e['type'] for e in events]==['transcript','reply','result']
         assert events[-1]['result']['recognized_text']=='Quem foi Sócrates?'
+
+
+def test_slow_primary_survives_a_failed_fast_alternative():
+    from cronos.transcription import first_valid_transcription
+    events=[]
+    async def primary():
+        try:
+            await asyncio.sleep(.09)
+            events.append('primary finished')
+            return 'A pergunta inteira.'
+        finally:events.append('primary released')
+    async def reserve():
+        events.append('reserve started')
+        raise ProviderError('reserve unavailable',502)
+    result=asyncio.run(first_valid_transcription(primary,reserve,hedge_after=.01))
+    assert result=='A pergunta inteira.' and events==['reserve started','primary finished','primary released']
+
+
+def test_fast_primary_does_not_call_alternative():
+    from cronos.transcription import first_valid_transcription
+    async def primary():return 'Pergunta reconhecida.'
+    async def reserve():raise AssertionError('A fast healthy recognizer needs no duplicate call')
+    assert asyncio.run(first_valid_transcription(primary,reserve,hedge_after=.1))=='Pergunta reconhecida.'
+
+
+def test_valid_alternative_wins_and_cancels_only_the_losing_recognizer():
+    from cronos.transcription import first_valid_transcription
+    released=[]
+    async def primary():
+        try:await asyncio.sleep(60)
+        finally:released.append(True)
+    async def reserve():return 'Pergunta da mesma gravação.'
+    assert asyncio.run(first_valid_transcription(primary,reserve,hedge_after=.01))=='Pergunta da mesma gravação.'
+    assert released==[True]
+
+
+def test_cancelling_recognition_releases_both_network_tasks():
+    from cronos.transcription import first_valid_transcription
+    released=[]
+    async def recognizer():
+        try:await asyncio.sleep(60)
+        finally:released.append(True)
+    async def run():
+        task=asyncio.create_task(first_valid_transcription(recognizer,recognizer,hedge_after=.005))
+        await asyncio.sleep(.02);task.cancel()
+        with pytest.raises(asyncio.CancelledError):await task
+    asyncio.run(run());assert released==[True,True]
