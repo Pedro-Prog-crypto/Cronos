@@ -6,6 +6,7 @@ import subprocess
 import zipfile
 
 ROOT=Path(__file__).resolve().parents[1]
+CURRENT_REPORTS=['docs/JANELA-ABERTA-E-VOZ-2026-10-31-R11.md','docs/VERIFICACAO-2026-10-31-R11.json']
 EXTRA=['docs/ENTREGA-REAL-2026-10-30-R10.md','docs/VERIFICACAO-2026-10-30-R10.json','docs/RECONHECIMENTO-2026-10-30-R9.md','docs/VERIFICACAO-2026-10-30-R9.json','docs/ENTREGA-DE-VOZ-2026-10-29-R8.md','docs/VERIFICACAO-2026-10-29-R8.json','docs/RESPOSTAS-2026-10-29-R7.md','docs/VERIFICACAO-2026-10-29-R7.json','docs/VELOCIDADE-2026-10-29.md','docs/VERIFICACAO-VELOCIDADE-2026-10-29.json','docs/VERIFICACAO-2026-10-28.json','docs/REVISAO-2026-10-28.md','docs/INTEGRACAO-MISTRAL-3D.md','docs/STUDIO_DE_SITES.md','ABRIR-CRONOS.bat','Instalar-Cronos.bat','MIGRAR-DADOS-DA-VERSAO-ANTIGA.bat','IMPORTAR-DADOS-PARA-CRONOS.bat','Criar-Atalho-Cronos.vbs','LEIA-PRIMEIRO.txt','tools/migrate_local_data.py','tools/import_vault_folder.py','tools/apply_interface_update.py','tools/start_bundle.py','tools/launch_bundle.vbs','tools/interface_update_manifest.json']
 
 
@@ -23,7 +24,7 @@ def build():
     tracked=subprocess.check_output(['git','ls-files','-z','--','cronos','modelos','config/providers.example.json','.env.example','pyproject.toml'],cwd=ROOT).decode().split('\0')
     manifest=json.loads((ROOT/'tools/interface_update_manifest.json').read_text())
     ui_assets={p.relative_to(ROOT).as_posix() for p in (ROOT/'cronos/ui/assets').rglob('*') if p.is_file()}
-    names=sorted(name for name in set(filter(None,tracked))|set(EXTRA)|set(manifest['files'])|ui_assets if (ROOT/name).is_file())
+    names=sorted(name for name in set(filter(None,tracked))|set(EXTRA)|set(CURRENT_REPORTS)|set(manifest['files'])|ui_assets if (ROOT/name).is_file())
     names=sorted(set(names)|{p.relative_to(ROOT).as_posix() for p in (ROOT/'examples/3d-product-demo').rglob('*') if p.is_file()})
     for name in names:
         parts=Path(name).parts

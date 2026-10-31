@@ -10,6 +10,7 @@ import {api,jsonApi,getToken,onConnection,ApiError,streamChat} from './api';
 import {MemorySpiral,MemoryGraph} from './components/MemorySpiral';
 import {ScreenMonitor,type ScreenMonitorHandle} from './components/ScreenMonitor';
 import {screenCommand} from './screenCommands';
+import {attachmentCommand} from './attachmentCommand';
 import {AnalysisPanel,AnalysisKind} from './components/AnalysisPanel';
 import {AnswerCards,HolographicCard,MovableCardFrame} from './components/HolographicCards';
 import {localCommand} from './commands';
@@ -148,7 +149,7 @@ export default function App(){
   },[]);
   const cancelLatency=()=>{const current=latency.current;if(current&&!['cancelled','failed','completed'].includes(current.status)){current.status='cancelled';current.armed=false;saveLatency(current);}latency.current=null;};
   const tell=useCallback((message:string,isError=false)=>{setNotice(message);setError(isError);},[]);
-  const voice=useCronosVoice({preferences:panelPrefs,streaming:Boolean(config?.fish_pcm_streaming),onSpeechStart:metrics=>{const current=latency.current;if(current?.armed&&metrics?.turn_id===current.turn_id){current.armed=false;Object.assign(current,metrics,{first_audio_ms:Math.round(performance.now()-current.started),status:'responding'});current.response_ms=current.first_audio_ms+(current.endpoint_ms||0)+(current.recognitionBeforeSend||0);saveLatency(current);}},onSpeechChunk:(spoken,index,turnId)=>{if(!turnId)return;const progress=speechProgress.current;if(progress&&progress.turnId===turnId){if(index>progress.chunkIndex&&progress.current)progress.completed+=`${progress.completed?' ':''}${progress.current}`;progress.current=spoken;progress.chunkIndex=index;}if(turnId!==expectedStudyTurn.current)return;const panelId=activeStudyPanel.current;if(panelId)changeStudyPanels(items=>items.map(panel=>panel.id===panelId?{...panel,spokenChunk:spoken,spokenChunkIndex:index}:panel));},onError:message=>{if(latency.current){latency.current.armed=false;latency.current.status='failed';saveLatency(latency.current);focusStudyPanel(null);setShowSpokenCards(true);setChatOpen(false);setModule(null);}tell(message,true);}});
+  const voice=useCronosVoice({preferences:panelPrefs,streaming:Boolean(config?.fish_pcm_streaming),onSpeechStart:metrics=>{const current=latency.current;if(current?.armed&&metrics?.turn_id===current.turn_id){current.armed=false;Object.assign(current,metrics,{first_audio_ms:Math.round(performance.now()-current.started),status:'responding'});current.response_ms=current.first_audio_ms+(current.endpoint_ms||0)+(current.recognitionBeforeSend||0);saveLatency(current);}},onSpeechChunk:(spoken,index,turnId)=>{if(!turnId)return;const progress=speechProgress.current;if(progress&&progress.turnId===turnId){if(index>progress.chunkIndex&&progress.current)progress.completed+=`${progress.completed?' ':''}${progress.current}`;progress.current=spoken;progress.chunkIndex=index;}if(turnId!==expectedStudyTurn.current)return;const panelId=activeStudyPanel.current;if(panelId)changeStudyPanels(items=>items.map(panel=>panel.id===panelId?{...panel,spokenChunk:spoken,spokenChunkIndex:index}:panel));},onWarning:message=>tell(message,true),onError:message=>{if(latency.current){latency.current.armed=false;latency.current.status='failed';saveLatency(latency.current);}tell(message,true);}});
       const microphone=useMicrophone(useCallback((text,metrics)=>{recognition.current=metrics;if(!text.trim()){tell('Não consegui entender a fala. Tente novamente.',true);return;}if(commandRef.current(text)){cancelLatency();return;}if(prefsRef.current?.called_only&&!/\b(?:cronos|kronos|chronos)\b/i.test(text)){cancelLatency();return;}setChatOpen(false);void sendRef.current(text);},[tell]),useCallback(message=>{if(latency.current?.stage==='recognition'){latency.current.status='failed';saveLatency(latency.current);}tell(message,true);},[tell,saveLatency]),Boolean(config?.direct_audio_chat)||config?.transcription_provider==='vosk',busy||analysisBusy||updateBusy||mediaPlaying||voice.isSpeaking||voice.isGenerating||(pageHidden&&panelPrefs?.background_processing===false),panelPrefs,config?.direct_audio_chat?async(audio,metrics)=>{recognition.current=metrics;await sendRef.current('Pergunta por voz',audio);}:undefined,config?.local_voice_interrupt?{active:mediaPlaying||busy,onKeyword:()=>bargeIn.current(),wakeOnly:Boolean(panelPrefs?.called_only)}:undefined,endpoint_ms=>{latency.current={turn_id:crypto.randomUUID(),source:'voice',started:performance.now(),stage:'recognition',armed:false,status:'waiting',voiceExpected:true,chat_ms:0,endpoint_ms};saveLatency(latency.current);return latency.current.turn_id;});
   useEffect(()=>{
     if(!connected)return;
@@ -238,10 +239,7 @@ export default function App(){
     const screenAction=screenCommand(text);if(screenAction){screenMonitor.current?.[screenAction]();return true;}
     if(studioActive&&studioHandle.current?.handle(text))return true;
     const site=studioCommand(text);if(site){restoreWindow('studio');if(!studio||site.brief)setStudio({brief:site.brief,request:Date.now()});setEyeOpen(false);setModule(null);setChatOpen(false);return true;}
-    const attachment=text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-    if(/\b(?:analis\w*|examin\w*|abr\w*|envi\w*|carreg\w*)\b/.test(attachment)&&/\b(?:imagem|foto|fotografia|arquivo|zip|codigo)\b/.test(attachment)){
-      openAnalysis(/\b(?:imagem|foto|fotografia)\b/.test(attachment)?'image':'document');return true;
-    }
+    const attachment=attachmentCommand(text);if(attachment){openAnalysis(attachment);return true;}
     const film=stremioCommand(text);if(film){if(config?.privacy_mode==='local'){tell('Stremio online desativado no modo local.',true);return true;}voice.stop();restoreWindow('stremio');setStremio(film);setModule(null);setChatOpen(false);return true;}
     const leadCommand=prospectCommand(text);if(leadCommand){if(config?.privacy_mode==='local'){tell('Prospecção online desativada no modo local.',true);return true;}voice.stop();restoreWindow('prospect');setProspect(leadCommand);setModule(null);setChatOpen(false);return true;}
     if(music.current?.handle(text)){if(studioActive)minimizeWindow('studio');setChatOpen(false);voice.stop();return true;}
@@ -265,7 +263,7 @@ export default function App(){
   interrupt.current=()=>{preserveInterruptedSpeech();if(studioActive)studioHandle.current?.handle('fechar estúdio de sites');analysisSpeechQueue.current=[];setAnalyses([]);spokenCards.current=false;setStremio(null);setProspect(null);music.current?.stop();cancelLatency();turnVersion.current++;chatAbort.current?.abort();voice.stop();microphone.cancelCapture();eyeAnnouncement.current=false;pendingAlerts.current.clear();setBusy(false);inFlight.current=false;setModule(null);setEyeOpen(false);setStudyOpen(false);setNote(null);setChatOpen(false);setShowSpokenCards(false);setNotice('');};
   bargeIn.current=()=>{preserveInterruptedSpeech();music.current?.pause();window.dispatchEvent(new Event('cronos:listen'));analysisSpeechQueue.current=[];cancelLatency();turnVersion.current++;chatAbort.current?.abort();voice.stop();microphone.cancelCapture();pendingAlerts.current.clear();setBusy(false);inFlight.current=false;setNotice('');};
   useEffect(()=>{const key=(event:KeyboardEvent)=>{if(event.key==='F4'&&!event.altKey&&!event.ctrlKey&&!event.metaKey){event.preventDefault();if(!event.repeat)handlers.current.f4();return;}if(event.key==='Escape'){if(!live.current.speaking&&!live.current.generating&&!live.current.busy&&music.current?.exitView()){event.preventDefault();return;}event.preventDefault();interrupt.current();}};window.addEventListener('keydown',key);return()=>{window.removeEventListener('keydown',key);chatAbort.current?.abort();};},[]);
-  useEffect(()=>{if(!notice)return;const timer=setTimeout(()=>setNotice(''),8000);return()=>clearTimeout(timer);},[notice]);
+  useEffect(()=>{if(!notice||error)return;const timer=setTimeout(()=>setNotice(''),8000);return()=>clearTimeout(timer);},[notice,error]);
 
   const autoMic=useRef(false);
   useEffect(()=>{if(connected&&!autoMic.current){autoMic.current=true;if(prefsRef.current?.device_auto_connect!==false)void microphone.start();}},[connected,microphone.start]);
@@ -314,7 +312,7 @@ export default function App(){
         if(version!==turnVersion.current||controller.signal.aborted)return;
         if(!voiceAllowed||replyDelivered)return;textArrived();replyDelivered=true;if(showStudyText){if(!studyPanelId)studyPanelId=addStudyPanel(question,reply);if(studyPanelId)updateStudyPanel(studyPanelId,question,reply);}
         if(autoVoice&&config?.fish_speech_configured)updateSpeechProgress(reply);
-        if(!audio||question!==text)lastAnswer.current={question,source,reply};setDisplayTurn({question,source,reply});setNotice('');
+        if(!audio||question!==text)lastAnswer.current={question,source,reply};setDisplayTurn({question,source,reply});if(turnLatency.status!=='failed')setNotice('');
         if(introText){
           if(!reply.startsWith(introText))throw new ApiError('A resposta inicial divergiu da resposta completa.',502);
           const rest=reply.slice(introText.length);
@@ -344,7 +342,7 @@ export default function App(){
       const leadResult=result.tool_results?.find((r:any)=>r.name==='prospect_restaurants'&&r.status==='completed');if(leadResult?.result){setProspect({city:leadResult.result.city,category:leadResult.result.category,report:leadResult.result});setModule(null);setChatOpen(false);}
       if(result.warnings?.length)tell(result.warnings.join('\n'),true);
       else if(result.fallback_used)tell(`A integração principal não respondeu. Esta resposta veio da reserva ${result.provider_used}.`,false);
-      else setNotice('');
+      else if(turnLatency.status!=='failed')setNotice('');
       if(autoVoice&&config?.fish_speech_configured){ready(result.reply);}
       else if(autoVoice)tell('A resposta está escrita, mas a voz não está configurada. Confira a configuração da voz no arquivo .env.',true);
     }catch(error){
@@ -412,7 +410,7 @@ export default function App(){
     {stremio&&<WindowSurface minimized={minimizedWindows.includes('stremio')}><Suspense fallback={<div className="panel-loading">Abrindo Stremio…</div>}><StremioPanel key={JSON.stringify(stremio)} initial={stremio} onMinimize={()=>minimizeWindow('stremio')} onPlayback={setFilmPlaying} onClose={()=>setStremio(null)}/></Suspense></WindowSurface>}
     {prospect&&<WindowSurface minimized={minimizedWindows.includes('prospect')}><Suspense fallback={<div className="panel-loading">Abrindo prospecção…</div>}><ProspectPanel key={prospect.city+'|'+prospect.category+'|'+(prospect.report?.id||'')} initial={prospect} onMinimize={()=>minimizeWindow('prospect')} onClose={()=>setProspect(null)} onAsk={text=>{setProspect(null);void sendText(text);}}/></Suspense></WindowSurface>}
     <MusicPlayer ref={music} onWindowChange={setMusicWindow} onPlayback={setMusicPlaying} onTalk={async()=>{voice.stop();microphone.cancelCapture();await microphone.start();}} local={config?.privacy_mode==='local'} onError={message=>tell(message,true)}/>
-    {notice&&error&&<div className="scene-notice" role="status">{notice}</div>}
+    {notice&&error&&<div className="scene-notice" role="status"><span>{notice}</span>{displayTurn?.reply&&<button onClick={()=>{setShowSpokenCards(true);setModule(null);setChatOpen(false);focusStudyPanel(null);}}>Ler resposta</button>}<button aria-label="Fechar aviso" onClick={()=>{setNotice('');setError(false);}}><X size={16}/></button></div>}
     {note&&<WindowSurface minimized={minimizedWindows.includes('note')}><section className="note-window" aria-label="Nota Obsidian"><MinimizeWindow label="nota" onClick={()=>minimizeWindow('note')}/><button onClick={()=>setNote(null)} aria-label="Fechar nota"><X size={18}/></button><pre>{note.content}</pre></section></WindowSurface>}
     {studyPanels.length>0&&!chatOpen&&!moduleActive&&!eyeActive&&!studyActive&&!studioActive&&<StudyExplanationPanel panels={studyPanels} activeId={focusedStudyPanel} speaking={voice.isSpeaking||voice.isGenerating} onClose={closeStudyPanel}/>}
     {displayTurn?.reply&&showSpokenCards&&!chatOpen&&!module&&!eyeOpen&&<AnswerCards reply={displayTurn.reply} layout={cardLayout}/>}

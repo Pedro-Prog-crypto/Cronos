@@ -85,3 +85,5 @@
 .reference-mic.recording{background:#063a50;border-color:#77f6ff;color:white;box-shadow:0 0 18px #00eaffcc,inset 0 0 8px #00dfff55}
 .reference-mic.speaking{border-color:#73f2ff;background:#062337}
 @keyframes mic-wait{to{box-shadow:0 0 20px #ffbe6899}}
+
+.scene-notice{display:flex;align-items:center;gap:10px;z-index:300;max-height:40vh;overflow:auto;flex-wrap:wrap}.scene-notice span{white-space:pre-wrap}.scene-notice button{flex-shrink:0;background:#052332;color:#9ceaff;border:1px solid #297b91;border-radius:5px;padding:6px;cursor:pointer}

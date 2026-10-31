@@ -263,6 +263,7 @@ class ClientLatency(BaseModel):
     model_config = ConfigDict(extra='forbid',allow_inf_nan=False)
     turn_id: UUID
     source: Literal['text','voice']
+    voice_source: Literal['fish','device'] | None = None
     chat_ms: float = Field(ge=0,le=1_800_000)
     recognition_ms: float | None = Field(default=None,ge=0,le=1_800_000)
     endpoint_ms: float | None = Field(default=None,ge=0,le=60000)
@@ -295,7 +296,7 @@ def install_panels(app, authenticate):
         if body.status in {'failed','cancelled'}:
             app.state.delivery.record(str(body.turn_id),body.status,error_type='client')
         if body.first_audio_ms is not None:
-            app.state.delivery.record(str(body.turn_id),'playback_started',response_ms=body.response_ms if body.response_ms is not None else body.first_audio_ms)
+            app.state.delivery.record(str(body.turn_id),'playback_started',provider=body.voice_source or 'fish',response_ms=body.response_ms if body.response_ms is not None else body.first_audio_ms)
         return {'recorded':True}
 
     @app.get('/panels', dependencies=auth)

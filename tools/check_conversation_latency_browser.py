@@ -11,6 +11,7 @@ import re
 import shutil
 import socket
 import struct
+import sys
 import tempfile
 import threading
 import time
@@ -95,13 +96,21 @@ class ControlledProvider:
 
 
 async def exercise(base,provider,mic_file):
-    checks=[];errors=[]
+    class Checks(list):
+        def append(self,item):
+            super().append(item)
+            print(f'passed {len(self)}: {item}',file=sys.stderr,flush=True)
+    checks=Checks();errors=[]
     async with async_playwright() as driver:
         browser=await driver.chromium.launch(executable_path=shutil.which('chromium'),args=['--no-sandbox','--autoplay-policy=no-user-gesture-required','--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream',f'--use-file-for-fake-audio-capture={mic_file}'])
         page=await browser.new_page(viewport={'width':1366,'height':768})
         page.on('pageerror',lambda error:errors.append(str(error)))
         await page.goto(base+'/#cronos-session=latency-fixture')
         async def compose(text):
+            # Stop synthetic capture before a typed turn. Otherwise a new VAD
+            # segment can submit over the composer and invalidate the scenario.
+            stop=page.get_by_role('button',name='Desligar microfone',exact=True)
+            if await stop.is_visible():await stop.click()
             if not await page.locator('#chat-input').is_visible():
                 await page.get_by_role('button',name='ENTENDIMENTO DE LINGUAGEM',exact=True).click()
                 await page.locator('.phrase-card').click()
@@ -205,15 +214,24 @@ async def exercise(base,provider,mic_file):
         checks.append('9-second synthesis finishes with audible playback instead of being killed by the former 8-second voice deadline')
         ControlledFish.delay_tts=.10
         await page.locator('.reference-mic.thinking, .reference-mic.speaking, .reference-mic.generating').wait_for(state='detached')
-        await page.get_by_role('button',name='Desligar microfone',exact=True).click()
+        stop=page.get_by_role('button',name='Desligar microfone',exact=True)
+        if await stop.is_visible():await stop.click()
         importlib.import_module('cronos.app').VOICE_REQUEST_TIMEOUT_SECONDS=.04
         await compose('Oi Cronos, teste de voz indisponível')
+        await page.get_by_role('button',name='ENTENDIMENTO DE LINGUAGEM',exact=True).click()
         await page.locator('.response-clock').filter(has_text='Resposta interrompida').wait_for()
         await page.locator('.reference-mic.thinking, .reference-mic.generating').wait_for(state='detached')
         rows=await history()
         assert rows[-1]['status']=='failed' and rows[-1]['first_audio_ms'] is None
+        await page.wait_for_timeout(2400)
+        assert await page.get_by_role('button',name='TESTAR IA E VOZ',exact=True).is_visible()
+        assert await page.locator('.answer-card-deck').count()==0
+        await page.locator('.scene-notice').wait_for()
+        await page.get_by_role('button',name='Ler resposta',exact=True).click()
         await page.locator('.answer-card-deck').filter(has_text='Como foi seu dia?').wait_for()
-        checks.append('stalled TTS finishes with a visible error while the complete written answer stays available')
+        await page.get_by_role('button',name='Fechar aviso',exact=True).click()
+        assert await page.locator('.scene-notice').count()==0
+        checks.append('TTS failure keeps the open Language panel unchanged, retains the error past final AI metadata, and only opens written cards when requested')
         # Exercise the native-audio branch that previously stayed in
         # 'Transcrevendo' throughout the full conversation.
         importlib.import_module('cronos.app').VOICE_REQUEST_TIMEOUT_SECONDS=8
@@ -265,6 +283,87 @@ async def exercise(base,provider,mic_file):
         assert 'audio_base64' not in report and 'api_key' not in report
         assert json.loads(report)['turns']
         checks.append('diagnostic stays copyable when the embedded browser does not provide clipboard permission')
+        # The probe restores its microphone. Close this independent native-
+        # audio page before testing another mic so two fixtures cannot submit
+        # concurrent questions into the shared timing history.
+        await native.close()
+
+        # A controlled OS speech engine, not a claim about voices installed on
+        # the physical notebook. Exercise actual App fallback and cancellation.
+        fallback=await browser.new_page(viewport={'width':1366,'height':768})
+        fallback.on('pageerror',lambda error:errors.append(str(error)))
+        await fallback.add_init_script("""
+        window.localParts=[];window.localCancelled=0;
+        const events=new EventTarget();let pending=null;
+        Object.defineProperty(window,'SpeechSynthesisUtterance',{value:class {constructor(text){this.text=text;}}});
+        Object.defineProperty(window,'speechSynthesis',{value:{
+          getVoices:()=>[{name:'Controlled Portuguese voice',lang:'pt-BR',localService:true}],
+          addEventListener:events.addEventListener.bind(events),removeEventListener:events.removeEventListener.bind(events),resume(){},
+          cancel(){window.localCancelled++;if(pending){pending.onstart=null;pending.onend=null;pending=null;}},
+          speak(u){pending=u;window.localParts.push(u.text);setTimeout(()=>u.onstart?.(),20);setTimeout(()=>{u.onend?.();if(pending===u)pending=null;},80);}
+        }});
+        """)
+        await fallback.route('**/voice/speech',lambda route:route.fulfill(status=502,json={'detail':'Controlled online voice failure'}))
+        await fallback.goto(base+'/#cronos-session=latency-fixture')
+        await fallback.get_by_role('button',name='Ligar microfone',exact=True).click()
+        await fallback.locator('.reference-mic.recording').wait_for()
+        await fallback.wait_for_timeout(1100)
+        await fallback.get_by_role('button',name='Enviar fala agora',exact=True).click()
+        await fallback.get_by_role('button',name='ENTENDIMENTO DE LINGUAGEM',exact=True).click()
+        await fallback.locator('.response-clock').filter(has_text='Voz começou em').wait_for()
+        await fallback.locator('.reference-mic.thinking, .reference-mic.speaking, .reference-mic.generating').wait_for(state='detached')
+        assert ' '.join(await fallback.evaluate('localParts'))=='Tudo certo, senhor. Como foi seu dia?'
+        assert await fallback.get_by_role('button',name='TESTAR IA E VOZ',exact=True).is_visible()
+        assert await fallback.locator('.answer-card-deck').count()==0
+        receipts=(await (await fallback.request.get(base+'/voice/delivery',headers=AUTH)).json())['turns']
+        turn=(await history())[-1]['turn_id']
+        receipt=next(row for row in receipts if row['turn_id']==turn)
+        playback=next((event for event in receipt['events'] if event['stage']=='playback_started'),None)
+        assert playback,receipt
+        assert playback['provider']=='device'
+        checks.append('open-window microphone ASR reaches AI and the identical complete response is read by controlled device voice when online TTS fails; no panel popup or closure')
+        await fallback.keyboard.press('Escape')
+        await fallback.get_by_role('button',name='Desligar microfone',exact=True).click()
+        # A late primary must not speak over the fallback. Use the real 10 s
+        # hedge and verify it cancels only synthesis, not the stored AI answer.
+        await fallback.unroute('**/voice/speech')
+        importlib.import_module('cronos.app').VOICE_REQUEST_TIMEOUT_SECONDS=30
+        ControlledFish.delay_tts=12
+        await fallback.get_by_role('button',name='ENTENDIMENTO DE LINGUAGEM',exact=True).click()
+        await fallback.locator('.phrase-card').click()
+        await fallback.locator('#chat-input').fill('Oi Cronos, teste de voz online atrasada')
+        await fallback.get_by_role('button',name='Enviar mensagem',exact=True).click()
+        await fallback.locator('.response-clock').filter(has_text='Voz começou em').wait_for(timeout=16000)
+        await fallback.locator('.reference-mic.thinking, .reference-mic.speaking, .reference-mic.generating').wait_for(state='detached')
+        assert ' '.join(await fallback.evaluate('localParts'))==' '.join(['Tudo certo, senhor. Como foi seu dia?']*2)
+        await fallback.wait_for_timeout(2300)
+        assert not await fallback.locator('.reference-mic.speaking').count()
+        checks.append('10-second online synthesis hedge reads the actual answer locally and a late online completion does not restart speech')
+        ControlledFish.delay_tts=.1
+        await fallback.evaluate("()=>{window.originalResume=AudioContext.prototype.resume;AudioContext.prototype.resume=()=>new Promise(()=>{});}")
+        await fallback.get_by_role('button',name='ENTENDIMENTO DE LINGUAGEM',exact=True).click()
+        await fallback.locator('.phrase-card').click()
+        await fallback.locator('#chat-input').fill('Oi Cronos, dispositivo Web Audio sem resposta')
+        await fallback.get_by_role('button',name='Enviar mensagem',exact=True).click()
+        await fallback.locator('.response-clock').filter(has_text='Voz começou em').wait_for(timeout=6500)
+        await fallback.locator('.reference-mic.thinking, .reference-mic.speaking, .reference-mic.generating').wait_for(state='detached')
+        assert ' '.join(await fallback.evaluate('localParts'))==' '.join(['Tudo certo, senhor. Como foi seu dia?']*3)
+        checks.append('hung AudioContext activation is bounded and reads the same response through device speech instead of leaving generating forever')
+        # Keep the local utterance active, then cancel it. Starting a new
+        # question must never resume the interrupted utterance.
+        await fallback.evaluate("()=>{speechSynthesis.speak=u=>{window.localParts.push(u.text);setTimeout(()=>u.onstart?.(),20);};}")
+        await fallback.get_by_role('button',name='ENTENDIMENTO DE LINGUAGEM',exact=True).click()
+        await fallback.locator('.phrase-card').click()
+        await fallback.locator('#chat-input').fill('Oi Cronos, interromper voz reserva')
+        await fallback.get_by_role('button',name='Enviar mensagem',exact=True).click()
+        await fallback.locator('.reference-mic.speaking').wait_for(timeout=6500)
+        await fallback.keyboard.press('Escape')
+        await fallback.locator('.reference-mic.speaking, .reference-mic.generating').wait_for(state='detached')
+        before_parts=await fallback.evaluate('localParts.length')
+        await fallback.wait_for_timeout(300)
+        assert await fallback.evaluate('localParts.length')==before_parts
+        checks.append('Escape cancels active device speech without replaying a queued continuation or changing to another voice')
+        await fallback.close()
         assert not errors,errors
         await native.close();await page.close();await browser.close()
     return {'checks_passed':len(checks),'checks':checks,'first_audio_ms':measured['first_audio_ms'],'response_ms':measured['response_ms'],

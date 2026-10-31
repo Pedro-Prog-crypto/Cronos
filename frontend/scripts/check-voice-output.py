@@ -42,7 +42,7 @@ navigator.mediaDevices.enumerateDevices=async()=>[];
     await page.wait_for_function('()=>window.audioStarts+window.pcmStarts>0')
     await expect(page.locator('.scene-notice')).to_contain_text('Usando a saída padrão')
     assert calls==[{'text':'Estou na escuta.','speed':1} ] or calls==[{'text':'Estou na escuta.'}],calls
-    if streaming:assert await page.evaluate('sinks.includes("")')
+    if streaming:assert await page.evaluate('sinks.length===0'),'A new default context must not require optional sink APIs'
    else:
     await expect(page.locator('.scene-notice')).to_contain_text('volume da voz está em zero')
     assert not calls and await page.evaluate('audioStarts+pcmStarts')==0

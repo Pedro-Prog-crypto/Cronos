@@ -1,0 +1,64 @@
+{
+  "revision": "stable-window-speech-2026-10-31-r11",
+  "scope": "Microphone conversation with application window already open",
+  "python_suite": {
+    "passed": 686,
+    "failed": 0,
+    "duration_seconds": 88.71,
+    "warnings": 1
+  },
+  "browser": {
+    "checks_passed": 21,
+    "checks": [
+      "compiled App plays first audio before complete provider response",
+      "measured start under five seconds with controlled 150 ms AI / 100 ms TTS fixtures",
+      "timing history is reachable from the stopwatch and records a single turn",
+      "Escape cancels pending server generation and logs cancellation",
+      "failed request stays in history instead of disappearing from measurements",
+      "next question responds after cancellation and failure, without a stale lock",
+      "AudioWorklet manual send includes actual ASR and endpoint delay in the same question timer",
+      "one receipt ID follows actual microphone bytes through recognition, AI, Fish response and playback",
+      "ASR failure is recorded even when no chat request can be sent",
+      "same recording is resent after ASR failure, its actual transcript reaches AI and the answer reaches TTS",
+      "13-second recognition completes and reaches real audio playback instead of being aborted at the old 12-second deadline",
+      "9-second synthesis finishes with audible playback instead of being killed by the former 8-second voice deadline",
+      "TTS failure keeps the open Language panel unchanged, retains the error past final AI metadata, and only opens written cards when requested",
+      "native audio leaves transcription state on handoff, receives its recognized question and speaks before final metadata",
+      "native answer failure preserves the actual recognized question for retry, without redundant ASR or the voice placeholder",
+      "diagnostic button submits a fresh arithmetic question and plays the computed answer using the same backend and TTS path",
+      "diagnostic stays copyable when the embedded browser does not provide clipboard permission",
+      "open-window microphone ASR reaches AI and the identical complete response is read by controlled device voice when online TTS fails; no panel popup or closure",
+      "10-second online synthesis hedge reads the actual answer locally and a late online completion does not restart speech",
+      "hung AudioContext activation is bounded and reads the same response through device speech instead of leaving generating forever",
+      "Escape cancels active device speech without replaying a queued continuation or changing to another voice"
+    ],
+    "first_audio_ms": 281.0,
+    "response_ms": 281.0,
+    "environment": "Chromium + compiled UI + real local FastAPI/HTTP + real SSE parser and WAV playback; external AI and TTS controlled, synthetic microphone, controlled ASR/AI/TTS, no physical Windows microphone/speaker validation"
+  },
+  "output_device_browser": {
+    "passed": 3,
+    "scenarios": [
+      "Missing saved output with unsupported sink API: WAV playback",
+      "Missing saved output: real PCM playback with default output",
+      "Muted volume: no synthesis or playback, explicit explanation"
+    ],
+    "external_synthesis": "controlled fixtures"
+  },
+  "command_routing": {
+    "distinct_utterances_passed": 10000,
+    "expected_attachment_requests": 2500,
+    "expected_conversation_without_popup": 7500,
+    "additional_card_screen_regressions_passed": 9,
+    "scope": "Synthetic input routing assertions; not 10,000 microphone or provider conversations"
+  },
+  "typescript": "passed",
+  "frontend_build": "passed",
+  "package_private_data_scan": "passed; no .env, vault or configured key/token values in runtime bundle",
+  "real_cloud_verification": {
+    "performed_this_revision": false,
+    "prior_blocker": "Development proxy refused Google and Fish connections before reaching the providers; this does not diagnose the user notebook"
+  },
+  "windows_physical_devices_tested": false,
+  "device_speech_browser_engine": "Controlled SpeechSynthesis fixture; requires installed Portuguese voice in actual Windows/WebView"
+}

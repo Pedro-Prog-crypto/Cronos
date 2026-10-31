@@ -29,14 +29,20 @@ export async function playPCM(response:Response,context:AudioContext,signal:Abor
       node.onended=()=>{node.disconnect();nodes.delete(node);if(ended&&!nodes.size)finish();};node.start(start);
       if(first){first=false;const bytesMs=performance.now()-arrived,playbackMs=(start-context.currentTime)*1000;firstTimer=setTimeout(()=>{if(!signal.aborted)options.onStart(bytesMs,playbackMs);},Math.max(0,playbackMs));}
       // Bound scheduled audio to roughly two seconds; HTTP applies backpressure.
+      let observed=context.currentTime,advanced=performance.now();
       while(scheduled-context.currentTime>2&&!signal.aborted){
+        if(context.currentTime>observed){observed=context.currentTime;advanced=performance.now();}
+        else if(performance.now()-advanced>5000)throw new Error('O dispositivo parou de reproduzir a voz. A resposta escrita continua disponível.');
         await new Promise<void>(resolve=>{const cancel=()=>{clearTimeout(timer);resolve();};const timer=setTimeout(()=>{signal.removeEventListener('abort',cancel);resolve();},40);signal.addEventListener('abort',cancel,{once:true});});
       }
     }
     if(signal.aborted)return;
     if(first)throw new Error('O provedor retornou áudio vazio.');
     if(carry.length)throw new Error('O provedor encerrou um bloco PCM incompleto.');
-    ended=true;if(!nodes.size)finish();await played;
+    ended=true;if(!nodes.size)finish();
+    let playbackTimer:ReturnType<typeof setTimeout>|undefined;
+    try{await Promise.race([played,new Promise<never>((_,reject)=>{playbackTimer=setTimeout(()=>reject(new Error('O dispositivo não concluiu a reprodução da voz. A resposta escrita continua disponível.')),Math.max(0,scheduled-context.currentTime)*1000+10000);})]);}
+    finally{clearTimeout(playbackTimer);}
   }finally{
     signal.removeEventListener('abort',abort);abort();reader.releaseLock();meter.disconnect();gain.disconnect();
   }

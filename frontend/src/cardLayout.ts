@@ -1,8 +1,8 @@
 export type CardLayout='orbit'|'left'|'right';
 export function cardPositionCommand(text:string):CardLayout|null{
- const value=text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+ const value=text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().replace(/^(?:cronos|kronos|chronos)[,\s:]*/,'').replace(/^por favor[,\s]*/,'');
  if(/\b(?:imagem|foto|arquivo|zip|painel|holograma)\b/.test(value)&&!/\b(?:cards?|cartoes|textos?|resposta)\b/.test(value))return null;
- if(!/\b(?:colo[cq]\w*|deix\w*|mov\w*|pux\w*|lev\w*|organiz\w*|distribu\w*)\b/.test(value))return null;
+ if(!/^(?:(?:eu )?quero que (?:voce |vc )?)?(?:colo[cq]\w*|deix\w*|mov\w*|pux\w*|lev\w*|organiz\w*|distribu\w*)\b/.test(value))return null;
  if(/\bdireit[ao]\b/.test(value))return 'right';
  if(/\besquerd[ao]\b/.test(value))return 'left';
  if(/\b(?:redor|circulo|volta|circular)\b/.test(value))return 'orbit';

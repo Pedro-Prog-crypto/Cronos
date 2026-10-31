@@ -1,4 +1,5 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
+import {findDeviceVoice,speakDeviceText} from '../audio/deviceSpeech';
 import {withRequestDeadline} from '../audio/requestDeadline';
 import {api,ApiError,getToken} from '../api';
 import {routeVoiceOutput} from '../audio/outputDevice';
@@ -32,20 +33,20 @@ export function speechChunks(text:string,firstLimit=80):string[]{
   return chunks.filter(chunk=>chunk.trim());
 }
 
-interface VoiceProps { preferences?: any; streaming?:boolean; onSpeechStart?: (metrics?:{speech_request_ms:number;playback_ms:number;turn_id?:string}) => void; onSpeechChunk?: (text:string,index:number,turnId?:string) => void; onSpeechEnd?: () => void; onError?: (message: string) => void; }
-export function useCronosVoice({preferences,streaming,onSpeechStart,onSpeechChunk,onSpeechEnd,onError}: VoiceProps = {}) {
+interface VoiceProps { preferences?: any; streaming?:boolean; onSpeechStart?: (metrics?:{speech_request_ms:number;playback_ms:number;turn_id?:string;voice_source?:'fish'|'device'}) => void; onSpeechChunk?: (text:string,index:number,turnId?:string) => void; onSpeechEnd?: () => void; onError?: (message: string) => void; onWarning?: (message:string)=>void; }
+export function useCronosVoice({preferences,streaming,onSpeechStart,onSpeechChunk,onSpeechEnd,onError,onWarning}: VoiceProps = {}) {
   const [isSpeaking,setIsSpeaking]=useState(false), [isGenerating,setIsGenerating]=useState(false);
   const audioLevelSource=useRef(0);
   const prefs=useRef(preferences);prefs.current=preferences;
-  const callbacks=useRef({streaming,onSpeechStart,onSpeechChunk,onSpeechEnd,onError});
-  callbacks.current={streaming,onSpeechStart,onSpeechChunk,onSpeechEnd,onError};
+  const callbacks=useRef({streaming,onSpeechStart,onSpeechChunk,onSpeechEnd,onError,onWarning});
+  callbacks.current={streaming,onSpeechStart,onSpeechChunk,onSpeechEnd,onError,onWarning};
   const context=useRef<AudioContext|null>(null), audio=useRef<HTMLAudioElement|null>(null);
   const frame=useRef(0), url=useRef(''), pending=useRef<AbortController|null>(null);
   const source=useRef<MediaElementAudioSourceNode|null>(null), analyser=useRef<AnalyserNode|null>(null);
   const outputGain=useRef<GainNode|null>(null),renderedSpeed=useRef(1);
   useEffect(()=>{if(outputGain.current)outputGain.current.gain.value=preferences?.voice_volume??1;if(audio.current)audio.current.playbackRate=2**(((preferences?.voice_pitch??.5)-.5)*.7)*(preferences?.voice_speed??renderedSpeed.current)/renderedSpeed.current;},[preferences?.voice_volume,preferences?.voice_pitch,preferences?.voice_speed]);
   const outputWarning=useRef('');
-  const configureOutput=async()=>routeVoiceOutput(context.current!,prefs.current?.output_label,message=>{if(outputWarning.current!==message){outputWarning.current=message;callbacks.current.onError?.(message);}});
+  const configureOutput=async()=>routeVoiceOutput(context.current!,prefs.current?.output_label,message=>{if(outputWarning.current!==message){outputWarning.current=message;callbacks.current.onWarning?.(message);}});
   const generation=useRef(0);
   const prepare=useCallback(()=>{
     context.current ||= new AudioContext();
@@ -61,17 +62,23 @@ export function useCronosVoice({preferences,streaming,onSpeechStart,onSpeechChun
   },[]);
   const speak=useCallback(async(text:string,turn_id?:string,continuation?:Promise<string>,completeFile=false)=>{
     text=spokenText(text);stop();if(!text)return;const current=generation.current;setIsGenerating(true);
+    const controller=new AbortController(),remote=new AbortController();pending.current=controller;
+    const abortRemote=()=>remote.abort();controller.signal.addEventListener('abort',abortRemote,{once:true});
+    let started=false;const requested=performance.now();
+    const deviceVoice=findDeviceVoice(controller.signal);
+    const hedge=setTimeout(()=>{if(!started)void deviceVoice.then(voice=>{if(voice&&!started&&current===generation.current)remote.abort();});},10000);
     try {
       if((prefs.current?.voice_volume??1)<=0)throw new Error('O volume da voz está em zero. Aumente no painel Síntese de voz e tente novamente.');
       // Web Audio ativado no gesto do usuário; nunca simular fala se houver falha.
-      context.current ||= new AudioContext(); await context.current.resume();
-      const controller=new AbortController();pending.current=controller;const pcm=Boolean(callbacks.current.streaming&&!completeFile);
+      context.current ||= new AudioContext(); await withRequestDeadline(controller.signal,2500,()=>context.current!.resume(),'O dispositivo não ativou a saída de áudio.');
+      if(context.current.state!=='running')throw new Error('A saída de áudio continua suspensa. Confira a permissão de som.');
+      const pcm=Boolean(callbacks.current.streaming&&!completeFile);
       const chunks=speechChunks(text);
       const fetchChunk=async(part:string)=>{
         const speed=prefs.current?.voice_speed,started=performance.now();
         let error:unknown;
         for(let attempt=0;attempt<2;attempt++){
-          try{return await withRequestDeadline(controller.signal,Math.max(1,40000-(performance.now()-started)),async signal=>{const response=await api(pcm?'/voice/pcm':'/voice/speech',{method:'POST',headers:{'Content-Type':'application/json',...(turn_id?{'X-Cronos-Turn':turn_id}:{})},body:JSON.stringify({text:part,...(speed!==undefined?{speed}:{})}),signal});return {response:pcm?response:null,blob:pcm?null:await response.blob(),error:null,speed,elapsed:performance.now()-started};});}
+          try{return await withRequestDeadline(remote.signal,Math.max(1,40000-(performance.now()-started)),async signal=>{const response=await api(pcm?'/voice/pcm':'/voice/speech',{method:'POST',headers:{'Content-Type':'application/json',...(turn_id?{'X-Cronos-Turn':turn_id}:{})},body:JSON.stringify({text:part,...(speed!==undefined?{speed}:{})}),signal});return {response:pcm?response:null,blob:pcm?null:await response.blob(),error:null,speed,elapsed:performance.now()-started};});}
           catch(caught){error=caught;if(controller.signal.aborted||attempt===1||performance.now()-started>=39500||!(caught instanceof ApiError)||![429,502,503,504].includes(caught.status))break;await new Promise(resolve=>setTimeout(resolve,250*(attempt+1)));}
         }
         return {response:null,blob:null,error,speed,elapsed:performance.now()-started};
@@ -101,7 +108,7 @@ export function useCronosVoice({preferences,streaming,onSpeechStart,onSpeechChun
           await playPCM(received.response,context.current,controller.signal,{
             rate:()=>2**(((prefs.current?.voice_pitch??.5)-.5)*.7)*(prefs.current?.voice_speed??renderedSpeed.current)/renderedSpeed.current,volume:()=>prefs.current?.voice_volume??1,
             onNodes:(meter,gain)=>{analyser.current=meter;outputGain.current=gain;const values=new Uint8Array(meter.fftSize);let last=0;const measure=(now:number)=>{if(current!==generation.current)return;if(now-last>50){meter.getByteTimeDomainData(values);let sum=0;for(const v of values)sum+=((v-128)/128)**2;audioLevelSource.current=Math.min(1,Math.sqrt(sum/values.length)*4);last=now;}frame.current=requestAnimationFrame(measure);};frame.current=requestAnimationFrame(measure);},
-            onStart:(bytesMs,playbackMs)=>{setIsGenerating(false);setIsSpeaking(true);callbacks.current.onSpeechChunk?.(chunks[index]||'',index,turn_id);if(!index)callbacks.current.onSpeechStart?.({turn_id,speech_request_ms:Math.round(received.elapsed+bytesMs),playback_ms:Math.round(playbackMs)});}
+            onStart:(bytesMs,playbackMs)=>{started=true;clearTimeout(hedge);setIsGenerating(false);setIsSpeaking(true);callbacks.current.onSpeechChunk?.(chunks[index]||'',index,turn_id);if(!index)callbacks.current.onSpeechStart?.({turn_id,speech_request_ms:Math.round(received.elapsed+bytesMs),playback_ms:Math.round(playbackMs)});}
           });
           cancelAnimationFrame(frame.current);
         }else{
@@ -114,12 +121,15 @@ export function useCronosVoice({preferences,streaming,onSpeechStart,onSpeechChun
         source.current=context.current.createMediaElementSource(player);source.current.connect(meter);outputGain.current?.disconnect();const gain=context.current.createGain();outputGain.current=gain;gain.gain.value=prefs.current?.voice_volume??1;meter.connect(gain);gain.connect(context.current.destination);
         const values=new Uint8Array(meter.fftSize);let last=0;
         const measure=(time:number)=>{if(current!==generation.current)return;if(time-last>50){meter.getByteTimeDomainData(values);let sum=0;for(const value of values)sum+=((value-128)/128)**2;audioLevelSource.current=Math.min(1,Math.sqrt(sum/values.length)*4);last=time;}frame.current=requestAnimationFrame(measure);};
-        player.onplaying=()=>{setIsGenerating(false);setIsSpeaking(true);callbacks.current.onSpeechChunk?.(chunks[index]||'',index,turn_id);if(!index)callbacks.current.onSpeechStart?.({turn_id,speech_request_ms:Math.round(received.elapsed),playback_ms:Math.round(performance.now()-receivedAt)});frame.current=requestAnimationFrame(measure);};
+        player.onplaying=()=>{started=true;clearTimeout(hedge);setIsGenerating(false);setIsSpeaking(true);callbacks.current.onSpeechChunk?.(chunks[index]||'',index,turn_id);if(!index)callbacks.current.onSpeechStart?.({turn_id,speech_request_ms:Math.round(received.elapsed),playback_ms:Math.round(performance.now()-receivedAt)});frame.current=requestAnimationFrame(measure);};
         await new Promise<void>((resolve,reject)=>{
-          const aborted=()=>{player.pause();resolve();};controller.signal.addEventListener('abort',aborted,{once:true});
-          const cleanup=()=>controller.signal.removeEventListener('abort',aborted);
-          player.onended=()=>{cleanup();resolve();};player.onerror=()=>{cleanup();reject(new Error('O áudio recebido não pôde ser reproduzido.'));};
-          player.play().catch(error=>{cleanup();reject(error);});
+          let settled=false;
+          let timeout=setTimeout(()=>finish(new Error('O áudio chegou, mas a reprodução não iniciou. Confira a permissão de som.')),3000);
+          const finish=(error?:unknown)=>{if(settled)return;settled=true;clearTimeout(timeout);controller.signal.removeEventListener('abort',aborted);player.onplaying=null;player.onended=null;player.onerror=null;player.removeEventListener('playing',playing);if(error){player.pause();reject(error);}else resolve();};
+          const aborted=()=>{player.pause();finish();};controller.signal.addEventListener('abort',aborted,{once:true});
+          const playing=()=>{clearTimeout(timeout);const duration=Number.isFinite(player.duration)?player.duration*1000/player.playbackRate:Math.max(30000,(chunks[index]||'').length*450);timeout=setTimeout(()=>finish(new Error('A reprodução da voz parou de responder. A resposta escrita continua disponível.')),duration+15000);};player.addEventListener('playing',playing,{once:true});
+          player.onended=()=>finish();player.onerror=()=>finish(new Error('O áudio recebido não pôde ser reproduzido.'));
+          player.play().catch(error=>finish(error));
         });
         }
         if(current!==generation.current)return;
@@ -133,8 +143,30 @@ export function useCronosVoice({preferences,streaming,onSpeechStart,onSpeechChun
       if(current===generation.current)stop();
     } catch(error) {
       if(current!==generation.current)return;
+      if(!started&&!controller.signal.aborted&&(prefs.current?.voice_volume??1)>0){
+        try{
+          const selected=await deviceVoice;
+          if(!selected)throw error;
+          if(current!==generation.current||controller.signal.aborted)return;
+          remote.abort();audio.current?.pause();source.current?.disconnect();outputGain.current?.disconnect();cancelAnimationFrame(frame.current);
+          callbacks.current.onWarning?.('A voz online não iniciou. Vou ler a mesma resposta com a voz do dispositivo.');
+          let index=0;
+          const read=async(value:string)=>speakDeviceText(value,selected,controller.signal,{volume:prefs.current?.voice_volume??1,rate:prefs.current?.voice_speed??1,onStart:part=>{
+            setIsGenerating(false);setIsSpeaking(true);callbacks.current.onSpeechChunk?.(part,index++,turn_id);
+            if(!started){started=true;callbacks.current.onSpeechStart?.({turn_id,speech_request_ms:Math.round(performance.now()-requested),playback_ms:0,voice_source:'device'});}
+          }});
+          await read(text);
+          if(continuation&&!controller.signal.aborted){
+            let onAbort=()=>{};
+            const cancelled=new Promise<string>(resolve=>{onAbort=()=>resolve('');controller.signal.addEventListener('abort',onAbort,{once:true});});
+            try{const rest=await Promise.race([continuation,cancelled]);if(rest.trim()&&!controller.signal.aborted)await read(spokenText(rest));}
+            finally{controller.signal.removeEventListener('abort',onAbort);}
+          }
+          if(current===generation.current)stop();return;
+        }catch(fallbackError){if(current!==generation.current)return;error=fallbackError;}
+      }
       stop();callbacks.current.onError?.(error instanceof Error?error.message:'Não foi possível gerar ou reproduzir a voz.');
-    }
+    }finally{clearTimeout(hedge);controller.signal.removeEventListener('abort',abortRemote);}
   },[stop]);
   useEffect(()=>()=>{generation.current++;pending.current?.abort();audio.current?.pause();cancelAnimationFrame(frame.current);if(url.current)URL.revokeObjectURL(url.current);source.current?.disconnect();outputGain.current?.disconnect();context.current?.close();},[]);
   return {isSpeaking,isGenerating,audioLevelSource,speak,stop,prepare,audio,analyser};

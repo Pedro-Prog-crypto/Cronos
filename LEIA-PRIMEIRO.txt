@@ -31,7 +31,10 @@ pastas do seu computador pelo migrador.
 Se a migracao disser que nao encontrou o vault ou o .env, cancele e escolha a pasta
 que realmente contem esses dados. Nao apague a instalacao antiga ate conferir a nova.
 
-REVISAO DE 28/10/2026
-Consulte docs\REVISAO-2026-10-28.md para as correcoes e o passo a passo de voz.
-No painel Entendimento de linguagem, use TESTAR VOZ e reinicie o ouvinte antigo
-(PARAR OUVINTE, depois INICIAR OUVINTE) para carregar o codigo desta versao.
+REVISAO DE 31/10/2026 — CONVERSA COM A JANELA ABERTA
+Consulte docs\JANELA-ABERTA-E-VOZ-2026-10-31-R11.md para as correcoes e os limites dos testes.
+Falhas de voz agora mantem o painel aberto. A voz local em portugues, quando instalada,
+pode ler a resposta da IA se a voz online nao iniciar. O timbre dessa reserva pode mudar.
+No painel Entendimento de linguagem, use TESTAR IA E VOZ para conferir suas integracoes.
+Se os dados estiverem em outra pasta, MIGRAR-DADOS-DA-VERSAO-ANTIGA.bat copia os dados
+para esta instalacao; depois abra pelo ABRIR-CRONOS.bat. Nao envie chaves para o GitHub.
