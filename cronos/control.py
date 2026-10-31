@@ -38,6 +38,10 @@ class Vision(Input):
     source: Literal['image','screen'] = 'image'
 
 
+class WakePresence(Input):
+    listening: bool
+
+
 class Consent(Input):
     consent: Literal[True]
 
@@ -259,6 +263,20 @@ def install_routes(app, authenticate):
     async def wake_status(request: Request):
         from cronos.wake import status
         return {"windows_available": request.app.state.windows.platform == "win32", **status()}
+
+    @app.post('/wake/presence',dependencies=auth)
+    async def wake_presence(body: WakePresence,request: Request):
+        if request.app.state.windows.platform!='win32':return {'updated':False}
+        from cronos.wake import set_ui_listening,status,start,WAKE_VERSION
+        await asyncio.to_thread(set_ui_listening,body.listening)
+        info=status()
+        task=getattr(app.state,'wake_upgrade_task',None)
+        if body.listening and info.get('state') in {'listening','paused'} and info.get('worker_version')!=WAKE_VERSION and (task is None or task.done()):
+            async def refresh_listener():
+                try:await asyncio.to_thread(start)
+                except (OSError,ValueError):pass
+            app.state.wake_upgrade_task=asyncio.create_task(refresh_listener())
+        return {'updated':True}
 
     @app.post("/wake/settings", dependencies=auth)
     async def wake_settings(body: WakeSettingsInput):

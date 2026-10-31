@@ -292,6 +292,10 @@ def install_panels(app, authenticate):
     @app.post('/panels/latency', dependencies=auth)
     async def latency(body: ClientLatency):
         await asyncio.to_thread(conversation_metrics.save_client, body.model_dump(mode='json'))
+        if body.status in {'failed','cancelled'}:
+            app.state.delivery.record(str(body.turn_id),body.status,error_type='client')
+        if body.first_audio_ms is not None:
+            app.state.delivery.record(str(body.turn_id),'playback_started',response_ms=body.response_ms if body.response_ms is not None else body.first_audio_ms)
         return {'recorded':True}
 
     @app.get('/panels', dependencies=auth)

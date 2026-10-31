@@ -157,15 +157,21 @@ class Engine:
                 self.phase="generation"
                 generation_started=time.perf_counter()
                 with request_scope('conversation',turn):
+                    from cronos.delivery import mark
+                    mark('answer_requested',provider=self.settings.provider,**({'bytes':len(audio)} if audio is not None else {'characters':len(messages[-1].get('content',''))}))
                     result = await provider.reply(system, messages)
                 provider_seconds+=time.perf_counter()-generation_started;provider_calls+=1
             except ProviderError as exc:
+                from cronos.delivery import mark
+                mark('failed',provider=self.settings.provider,http_status=exc.http_status or exc.status,error_type=type(exc.__cause__).__name__ if exc.__cause__ else (exc.kind or 'answer'))
                 if results:
                     raise TurnError(str(exc), session, results,exc.status) from exc
                 raise
             if audio is not None:
                 recognized_text=result.get('recognized_text','').strip()
                 if not recognized_text:raise ProviderError('A pergunta falada não foi reconhecida; nenhuma nota ou ferramenta foi executada.',502)
+                from cronos.delivery import mark
+                mark('question_recognized',characters=len(recognized_text));mark('question_received',characters=len(recognized_text))
                 message=recognized_text;image=messages[-1].get('image');messages[-1]={'role':'user','content':message,**({'image':image} if image else {})};audio=None
                 if prefs and prefs.called_only:
                     import re
@@ -226,6 +232,8 @@ class Engine:
         final['topics']=knowledge_topics(message,final['topics'])
         # Speak a validated answer before disk exports/indexing finish.
         from cronos.reply_stream import deliver
+        from cronos.delivery import mark
+        mark('answer_received',provider=final.get('provider_used',self.settings.provider),characters=len(final['reply']))
         await deliver(final["reply"])
         self.phase="memory"
         write_started=time.perf_counter()

@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field, field_validator
 from cronos.config import Settings
 from cronos.memory import Memory
 from cronos.providers import ProviderError
+from cronos import delivery
 from cronos.engine import Engine, TurnError
 from cronos.integrations import provider_catalog, available_models
 from cronos.tools import create_registry, ToolError
@@ -102,6 +103,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
 
     @asynccontextmanager
     async def lifespan(app):
+        app.state.delivery=delivery.DeliveryLog()
         app.state.memory = Memory(settings.vault)
         app.state.lock = asyncio.Lock()
         app.state.monitor = Monitor(settings, app.state.memory)
@@ -307,58 +309,64 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 nonlocal spoken
                 if spoken is None and may_speak():
                     spoken=reply
+                    delivery.mark('answer_received',characters=len(reply))
                     if first_response_deadline is not None:first_response_deadline.reschedule(None)
                     await queue.put({'type':'reply','reply':reply,'session_id':str(session)})
             async def intro(text):
                 nonlocal intro_text
                 if intro_text is not None or not may_speak():return
                 intro_text=text
+                delivery.mark('answer_received',characters=len(text))
                 if first_response_deadline is not None:first_response_deadline.reschedule(None)
                 await queue.put({'type':'intro','reply':text,'session_id':str(session)})
             async def transcript(text):
                 nonlocal recognized_question
                 recognized_question=text
+                delivery.mark('question_recognized',characters=len(text))
+                delivery.mark('question_received',characters=len(text))
                 await queue.put({'type':'transcript','text':text})
             async def run():
-                nonlocal first_response_deadline
-                token=reply_sink.set(ready);intro_token=intro_sink.set(intro);transcript_token=transcript_sink.set(transcript)
-                try:
-                    async with asyncio.timeout(CONVERSATION_FIRST_REPLY_TIMEOUT_SECONDS) as deadline:
-                        first_response_deadline=deadline
-                        async with request.app.state.lock:
-                            try:
+                with delivery.scope(request.app.state.delivery,request.headers.get('x-cronos-turn')):
+                    delivery.mark('audio_received',bytes=len(audio)) if audio is not None else delivery.mark('question_received',characters=len(message))
+                    nonlocal first_response_deadline
+                    token=reply_sink.set(ready);intro_token=intro_sink.set(intro);transcript_token=transcript_sink.set(transcript)
+                    try:
+                        async with asyncio.timeout(CONVERSATION_FIRST_REPLY_TIMEOUT_SECONDS) as deadline:
+                            first_response_deadline=deadline
+                            async with request.app.state.lock:
                                 try:
-                                    options={'audio':audio} if audio is not None else {}
-                                    if heard_context:options['heard_context']=heard_context
-                                    result=await request.app.state.engine.chat(session,message,**options)
-                                except ProviderError as exc:
-                                    if audio is None or audio_fallback is None or (exc.kind!='audio_transcription_missing' and not exc.retryable) or spoken is not None or intro_text is not None:
-                                        raise
-                                    recognized=recognized_question or await transcribe_fallback(audio_fallback)
-                                    if not recognized:raise ProviderError('A gravação foi mantida, mas não consegui reconhecer a pergunta. Tente novamente ou use o botão de envio de texto.',502) from None
-                                    if not recognized_question:await transcript(recognized)
-                                    if panels.preferences.called_only and not re.search(r'\b(?:cronos|kronos|chronos)\b',recognized,re.I):
-                                        result={'session_id':str(session),'reply':'','recognized_text':recognized,'ignored':True,'topics':[],'notes':[],'tool_results':[],'warnings':[],'timings_ms':{}}
-                                    else:
-                                        result=await request.app.state.engine.chat(session,recognized,**({'heard_context':heard_context} if heard_context else {}))
-                                        result['recognized_text']=recognized
-                            finally:request.app.state.engine.phase='idle'
-                    if not result.get('ignored') and ((spoken is not None and spoken!=result['reply']) or (intro_text is not None and not result['reply'].startswith(intro_text))):
-                        raise ProviderError('A resposta transmitida não corresponde ao resultado final.',502)
-                    request.app.state.features.record('language','passed','Conversa processada e salva.')
-                    await queue.put({'type':'result','result':result})
-                except TimeoutError:
-                    await queue.put({'type':'error','status':504,'detail':{'message':'Não consegui iniciar a resposta dentro do prazo de recuperação. Sua pergunta foi preservada; tente novamente sem repetir.'}})
-                except ProviderError as exc:
-                    detail={'message':str(exc)}
-                    if isinstance(exc,TurnError):detail.update(session_id=str(exc.session),tool_results=exc.results)
-                    await queue.put({'type':'error','status':exc.status,'detail':detail})
-                except (OSError,ValueError):
-                    await queue.put({'type':'error','status':500,'detail':{'message':'Não foi possível ler ou salvar personalidade/memória.'}})
-                except Exception:
-                    await queue.put({'type':'error','status':500,'detail':{'message':'Falha ao concluir a conversa.'}})
-                finally:
-                    reply_sink.reset(token);intro_sink.reset(intro_token);transcript_sink.reset(transcript_token)
+                                    try:
+                                        options={'audio':audio} if audio is not None else {}
+                                        if heard_context:options['heard_context']=heard_context
+                                        result=await request.app.state.engine.chat(session,message,**options)
+                                    except ProviderError as exc:
+                                        if audio is None or audio_fallback is None or (exc.kind!='audio_transcription_missing' and not exc.retryable) or spoken is not None or intro_text is not None:
+                                            raise
+                                        recognized=recognized_question or await transcribe_fallback(audio_fallback)
+                                        if not recognized:raise ProviderError('A gravação foi mantida, mas não consegui reconhecer a pergunta. Tente novamente ou use o botão de envio de texto.',502) from None
+                                        if not recognized_question:await transcript(recognized)
+                                        if panels.preferences.called_only and not re.search(r'\b(?:cronos|kronos|chronos)\b',recognized,re.I):
+                                            result={'session_id':str(session),'reply':'','recognized_text':recognized,'ignored':True,'topics':[],'notes':[],'tool_results':[],'warnings':[],'timings_ms':{}}
+                                        else:
+                                            result=await request.app.state.engine.chat(session,recognized,**({'heard_context':heard_context} if heard_context else {}))
+                                            result['recognized_text']=recognized
+                                finally:request.app.state.engine.phase='idle'
+                        if not result.get('ignored') and ((spoken is not None and spoken!=result['reply']) or (intro_text is not None and not result['reply'].startswith(intro_text))):
+                            raise ProviderError('A resposta transmitida não corresponde ao resultado final.',502)
+                        request.app.state.features.record('language','passed','Conversa processada e salva.')
+                        await queue.put({'type':'result','result':result})
+                    except TimeoutError:
+                        await queue.put({'type':'error','status':504,'detail':{'message':'Não consegui iniciar a resposta dentro do prazo de recuperação. Sua pergunta foi preservada; tente novamente sem repetir.'}})
+                    except ProviderError as exc:
+                        detail={'message':str(exc)}
+                        if isinstance(exc,TurnError):detail.update(session_id=str(exc.session),tool_results=exc.results)
+                        await queue.put({'type':'error','status':exc.status,'detail':detail})
+                    except (OSError,ValueError):
+                        await queue.put({'type':'error','status':500,'detail':{'message':'Não foi possível ler ou salvar personalidade/memória.'}})
+                    except Exception:
+                        await queue.put({'type':'error','status':500,'detail':{'message':'Falha ao concluir a conversa.'}})
+                    finally:
+                        reply_sink.reset(token);intro_sink.reset(intro_token);transcript_sink.reset(transcript_token)
             task=asyncio.create_task(run())
             try:
                 while True:
@@ -500,44 +508,54 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
 
     @app.post("/voice/speech", dependencies=[Depends(authenticate)])
     async def speech(body: SpeechInput, request: Request):
-        if not body.text.strip():
-            raise HTTPException(422, "Informe um texto para sintetizar.")
-        reference = body.reference_id or settings.fish_reference
-        if not settings.fish_model:
-            raise HTTPException(503, "Configure FISH_MODEL com o modelo liberado para API na sua conta Fish Audio.")
-        client = await fish_client()
-        try:
-            async with client:
-                audio = await voice_deadline(fish_tts(client, "convert", text=body.text, reference_id=reference or None,
-                                                 format=settings.fish_format,
-                                                 speed=body.speed or settings.fish_speed, latency=settings.fish_latency), VOICE_REQUEST_TIMEOUT_SECONDS)
-            request.app.state.features.record("voice", "passed", "Síntese retornou áudio; reprodução física no dispositivo não foi certificada.")
-            return Response(content=audio, media_type="audio/wav" if settings.fish_format == "wav" else "audio/mpeg")
-        except HTTPException:raise
-        except Exception as exc:
-            raise HTTPException(502, fish_error(exc, "síntese")) from exc
+        with delivery.scope(request.app.state.delivery,request.headers.get('x-cronos-turn')):
+            delivery.mark('voice_requested',provider='fish',characters=len(body.text))
+            if not body.text.strip():
+                raise HTTPException(422, "Informe um texto para sintetizar.")
+            reference = body.reference_id or settings.fish_reference
+            if not settings.fish_model:
+                raise HTTPException(503, "Configure FISH_MODEL com o modelo liberado para API na sua conta Fish Audio.")
+            client = await fish_client()
+            try:
+                async with client:
+                    audio = await voice_deadline(fish_tts(client, "convert", text=body.text, reference_id=reference or None,
+                                                     format=settings.fish_format,
+                                                     speed=body.speed or settings.fish_speed, latency=settings.fish_latency), VOICE_REQUEST_TIMEOUT_SECONDS)
+                if not audio:raise HTTPException(502,'O Fish Audio retornou áudio vazio.')
+                delivery.mark('voice_received',provider='fish',bytes=len(audio))
+                request.app.state.features.record("voice", "passed", "Síntese retornou áudio; reprodução física no dispositivo não foi certificada.")
+                return Response(content=audio, media_type="audio/wav" if settings.fish_format == "wav" else "audio/mpeg")
+            except HTTPException as exc:
+                delivery.mark('failed',provider='fish',http_status=exc.status_code,error_type='voice')
+                raise
+            except Exception as exc:
+                delivery.mark('failed',provider='fish',error_type=type(exc).__name__)
+                raise HTTPException(502, fish_error(exc, "síntese")) from exc
 
     @app.post('/voice/pcm',dependencies=[Depends(authenticate)])
-    async def speech_pcm(body: SpeechInput):
-        if settings.privacy_mode!='online' or not settings.fish_key:raise HTTPException(503,'Configure a voz Fish Audio em modo online.')
-        if active_fish_model!='s2.1-pro-free':raise HTTPException(503,'Streaming PCM não habilitado para este modelo. Nenhum modelo foi trocado.')
-        if not body.text.strip():raise HTTPException(422,'Informe um texto para sintetizar.')
-        from cronos.fish_legacy import stream_json
-        iterator=stream_json(settings.fish_key,text=body.text,reference_id=body.reference_id or settings.fish_reference or None,format='pcm',speed=body.speed or settings.fish_speed,latency=settings.fish_latency)
-        try:
-            async with asyncio.timeout(VOICE_REQUEST_TIMEOUT_SECONDS):
-                first=await anext(iterator)
-                while len(first)<4:first+=await anext(iterator)
-            if first.startswith(b'RIFF'):raise ValueError('A síntese não retornou PCM bruto.')
-        except Exception as exc:
-            await iterator.aclose()
-            raise HTTPException(502,fish_error(exc,'síntese')) from exc
-        async def chunks():
+    async def speech_pcm(body: SpeechInput,request:Request):
+        with delivery.scope(request.app.state.delivery,request.headers.get('x-cronos-turn')):
+            delivery.mark('voice_requested',provider='fish',characters=len(body.text))
+            if settings.privacy_mode!='online' or not settings.fish_key:raise HTTPException(503,'Configure a voz Fish Audio em modo online.')
+            if active_fish_model!='s2.1-pro-free':raise HTTPException(503,'Streaming PCM não habilitado para este modelo. Nenhum modelo foi trocado.')
+            if not body.text.strip():raise HTTPException(422,'Informe um texto para sintetizar.')
+            from cronos.fish_legacy import stream_json
+            iterator=stream_json(settings.fish_key,text=body.text,reference_id=body.reference_id or settings.fish_reference or None,format='pcm',speed=body.speed or settings.fish_speed,latency=settings.fish_latency)
             try:
-                yield first
-                async for chunk in iterator:yield chunk
-            finally:await iterator.aclose()
-        return StreamingResponse(chunks(),media_type='audio/x-pcm',headers={'Cache-Control':'no-store','X-PCM-Sample-Rate':'24000','X-PCM-Channels':'1','X-PCM-Bits':'16'})
+                async with asyncio.timeout(VOICE_REQUEST_TIMEOUT_SECONDS):
+                    first=await anext(iterator)
+                    while len(first)<4:first+=await anext(iterator)
+                delivery.mark('voice_received',provider='fish',bytes=len(first))
+                if first.startswith(b'RIFF'):raise ValueError('A síntese não retornou PCM bruto.')
+            except Exception as exc:
+                await iterator.aclose()
+                raise HTTPException(502,fish_error(exc,'síntese')) from exc
+            async def chunks():
+                try:
+                    yield first
+                    async for chunk in iterator:yield chunk
+                finally:await iterator.aclose()
+            return StreamingResponse(chunks(),media_type='audio/x-pcm',headers={'Cache-Control':'no-store','X-PCM-Sample-Rate':'24000','X-PCM-Channels':'1','X-PCM-Bits':'16'})
 
     @app.post("/voice/stream", dependencies=[Depends(authenticate)])
     async def speech_stream(body: SpeechInput):
@@ -579,10 +597,17 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         if current.privacy_mode!='online':raise HTTPException(503,'Reconhecimento online desativado no modo local.')
         from cronos.transcription import gemini_transcribe,first_valid_transcription
         async def primary():
-            client=await fish_client()
-            async with client:
-                result=await voice_deadline(client.asr.transcribe(audio=audio,language='pt'),TRANSCRIPTION_TIMEOUT_SECONDS)
-            return getattr(result,'text','')
+            delivery.mark('recognition_requested',provider='fish',bytes=len(audio))
+            try:
+                client=await fish_client()
+                async with client:
+                    result=await voice_deadline(client.asr.transcribe(audio=audio,language='pt'),TRANSCRIPTION_TIMEOUT_SECONDS)
+                text=getattr(result,'text','')
+                delivery.mark('recognition_response',provider='fish',characters=len(text) if isinstance(text,str) else 0)
+                return text
+            except Exception as exc:
+                delivery.mark('recognition_error',provider='fish',error_type=type(exc).__name__,http_status=getattr(exc,'status_code',getattr(exc,'status',0)) or 0)
+                raise
         async def alternative():return await gemini_transcribe(current,audio,mime_type)
         try:
             async with asyncio.timeout(TRANSCRIPTION_TOTAL_TIMEOUT_SECONDS):
@@ -593,22 +618,72 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         except ProviderError as exc:raise HTTPException(exc.status,str(exc)) from None
         except Exception as exc:raise HTTPException(502,fish_error(exc,'transcrição do microfone')) from None
 
+    @app.post('/voice/check',dependencies=[Depends(authenticate)])
+    async def check_voice_delivery(request: Request):
+        import base64
+        from cronos.conversation_transport import conversation_provider
+        from cronos.evolution import ResilientProvider
+        current=app.state.engine.settings
+        with delivery.scope(app.state.delivery) as turn:
+            stage='answer'
+            try:
+                async with asyncio.timeout(25):
+                    a,b=secrets.randbelow(70)+10,secrets.randbelow(70)+10
+                    question=f'Quanto é {a} mais {b}? Responda somente o número inteiro do resultado.'
+                    delivery.mark('question_received',characters=len(question))
+                    delivery.mark('answer_requested',provider=current.provider,characters=len(question))
+                    result=await ResilientProvider(current,app.state.engine.provider or conversation_provider(current)).reply('Responda à pergunta aritmética sem usar ferramentas.',[{'role':'user','content':question}])
+                    answer=result.get('reply','').strip()
+                    delivery.mark('answer_received',provider=result.get('provider_used',current.provider),characters=len(answer))
+                    numbers=re.findall(r'\d+',answer)
+                    if result.get('tool_calls') or not numbers or numbers[-1]!=str(a+b):
+                        raise ProviderError('A integração respondeu, mas não devolveu o resultado esperado ao teste. Uma saudação não é uma resposta válida.',502)
+                    stage='voice';delivery.mark('voice_requested',provider='fish',characters=len(answer))
+                    client=await fish_client()
+                    async with client:
+                        audio=await fish_tts(client,'convert',text=answer,reference_id=current.fish_reference or None,format=current.fish_format,speed=current.fish_speed,latency=current.fish_latency)
+                    if not audio or len(audio)>2*1024*1024:raise ValueError('invalid diagnostic audio')
+                    delivery.mark('voice_received',provider='fish',bytes=len(audio))
+                    return {'turn_id':turn,'answer':answer,'audio_base64':base64.b64encode(audio).decode(),'mime_type':'audio/wav' if current.fish_format=='wav' else 'audio/mpeg'}
+            except TimeoutError:
+                delivery.mark('failed',error_type=stage+'_timeout',http_status=504)
+                raise HTTPException(504,'O teste não completou IA e voz em 25 segundos. Confira a última etapa confirmada abaixo.') from None
+            except HTTPException as exc:
+                delivery.mark('failed',error_type=stage,http_status=exc.status_code);raise
+            except ProviderError as exc:
+                delivery.mark('failed',provider=current.provider,error_type=type(exc.__cause__).__name__ if exc.__cause__ else stage,http_status=exc.http_status or exc.status)
+                raise HTTPException(exc.status,str(exc)) from None
+            except Exception as exc:
+                delivery.mark('failed',error_type=type(exc).__name__,http_status=502)
+                raise HTTPException(502,'A integração não concluiu o teste. Confira a etapa registrada abaixo.') from None
+
+    @app.get('/voice/delivery',dependencies=[Depends(authenticate)])
+    async def voice_delivery():
+        current=app.state.engine.settings
+        return {'turns':app.state.delivery.snapshot(),'configured':{'gemini':bool(current.gemini_key),'fish':bool(current.fish_key),'provider':current.provider,'gemini_model':current.gemini_model,'voice_model':current.fish_model},'target_seconds':25}
+
     @app.post("/voice/transcribe", dependencies=[Depends(authenticate)])
     async def transcribe(request: Request):
         # Corpo binário: não precisa de multipart ou base64.
-        chunks, size = [], 0
-        async for chunk in request.stream():
-            size += len(chunk)
-            if size > 10 * 1024 * 1024:
-                raise HTTPException(413, "Limite de áudio: 10 MiB.")
-            chunks.append(chunk)
-        if not size:
-            raise HTTPException(422, "Envie um arquivo de áudio no corpo da requisição.")
-        if request.headers.get('content-type','').split(';')[0]=='audio/wav':
-            from cronos.recognition import read_pcm,check_signal
-            try:check_signal(read_pcm(b''.join(chunks)))
-            except ValueError as exc:raise HTTPException(422,str(exc)) from None
-        return {'text':await recognize_recording(b''.join(chunks),request.headers.get('content-type','audio/webm'))}
+        with delivery.scope(request.app.state.delivery,request.headers.get('x-cronos-turn')):
+            chunks,size=[],0
+            async for chunk in request.stream():
+                size+=len(chunk)
+                if size>10*1024*1024:raise HTTPException(413,'Limite de áudio: 10 MiB.')
+                chunks.append(chunk)
+            delivery.mark('audio_received',bytes=size)
+            if not size:raise HTTPException(422,'Envie um arquivo de áudio no corpo da requisição.')
+            if request.headers.get('content-type','').split(';')[0]=='audio/wav':
+                from cronos.recognition import read_pcm,check_signal
+                try:check_signal(read_pcm(b''.join(chunks)))
+                except ValueError as exc:raise HTTPException(422,str(exc)) from None
+            try:
+                text=await recognize_recording(b''.join(chunks),request.headers.get('content-type','audio/webm'))
+                delivery.mark('question_recognized',characters=len(text))
+                return {'text':text}
+            except HTTPException as exc:
+                delivery.mark('failed',http_status=exc.status_code,error_type='recognition')
+                raise
 
     from cronos.studio.routes import install_studio
     install_studio(app, authenticate)

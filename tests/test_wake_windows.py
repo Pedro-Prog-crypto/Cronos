@@ -216,7 +216,8 @@ def test_current_worker_in_an_old_installation_is_replaced(tmp_path, monkeypatch
     assert (tmp_path/'stop.request').exists() and len(calls)==1
 
 
-def test_listener_keeps_recognizing_while_the_voice_service_is_slow(tmp_path, monkeypatch):
+@pytest.mark.parametrize("conversation_active",[False,True])
+def test_listener_keeps_recognizing_while_the_voice_service_is_slow(tmp_path, monkeypatch,conversation_active):
     from contextlib import nullcontext
     started, release = threading.Event(), threading.Event()
     history=[]; original=wake._write_status
@@ -231,6 +232,7 @@ def test_listener_keeps_recognizing_while_the_voice_service_is_slow(tmp_path, mo
     monkeypatch.setattr(wake, 'sys', SimpleNamespace(platform='win32',executable='python.exe'))
     monkeypatch.setattr(wake, 'verify_model', lambda: tmp_path)
     monkeypatch.setattr(wake, 'single_instance', lambda name: nullcontext(True))
+    if conversation_active:wake.set_ui_listening(True)
     monkeypatch.setattr(wake, 'app_launch_module', lambda: 'cronos.desktop')
     monkeypatch.setattr(wake.subprocess,'Popen',lambda *args,**kwargs:SimpleNamespace(poll=lambda:None))
     def greeting(speaking):
@@ -241,7 +243,7 @@ def test_listener_keeps_recognizing_while_the_voice_service_is_slow(tmp_path, mo
         def SetWords(self,value): pass
         def AcceptWaveform(self,frame):
             self.step+=1
-            if self.step==2: assert started.wait(1)
+            if self.step==2 and not conversation_active: assert started.wait(1)
             return True
         def Result(self): return json.dumps(result('abrir cromos' if self.step==1 else 'pausar cromos'))
     class Stream:
@@ -255,6 +257,7 @@ def test_listener_keeps_recognizing_while_the_voice_service_is_slow(tmp_path, mo
     finally: release.set()
     assert any(item.get('last_action')=='activate' for item in history)
     assert any(item.get('last_action')=='paused' for item in history)
+    assert started.is_set() is (not conversation_active)
 
 
 def test_wake_uses_saved_fish_voice_and_repairs_streaming_wav(tmp_path,monkeypatch):

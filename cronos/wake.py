@@ -33,7 +33,7 @@ DEFAULT_SETTINGS = {
 PHRASES = {"abrir cronos", "abrir kronos", "cronos abrir", "kronos abrir"}  # compatibilidade antiga
 MODEL_LAYOUTS = (("am/final.mdl", "conf/model.conf"),
                  ("final.mdl", "mfcc.conf", "HCLr.fst", "Gr.fst"))
-WAKE_VERSION = 5
+WAKE_VERSION = 6
 WAKE_GREETING = "Pois não, senhor? O que deseja?"
 
 
@@ -146,6 +146,23 @@ def model_present(folder):
 def root():
     base = Path(os.getenv("LOCALAPPDATA") or (Path.home() / ".local/share"))
     return base / "Cronos" / "wake"
+
+
+def set_ui_listening(active):
+    folder=root();folder.mkdir(parents=True,exist_ok=True)
+    path=folder/'conversation-presence.json'
+    with tempfile.NamedTemporaryFile(dir=folder,suffix='.tmp',delete=False) as output:
+        temporary=Path(output.name)
+        output.write(json.dumps({'listening':bool(active),'at':time.time()}).encode())
+    try:temporary.replace(path)
+    finally:temporary.unlink(missing_ok=True)
+
+
+def ui_is_listening():
+    try:
+        data=json.loads((root()/'conversation-presence.json').read_text(encoding='utf-8'))
+        return data.get('listening') is True and 0<=time.time()-float(data['at'])<12
+    except (OSError,ValueError,TypeError,KeyError):return False
 
 
 def status():
@@ -598,9 +615,12 @@ def listen():
                                               last_action="launch_failed", last_confidence=trigger.last_confidence)
                                 continue
                             opened = datetime.now(timezone.utc).isoformat()
-                            if greeting is None or greeting.done():
-                                greeting = voice_executor.submit(speak_activation_greeting, speaking)
-                            greeting_status = "pending"
+                            if ui_is_listening():
+                                greeting_status="conversation_active"
+                            else:
+                                if greeting is None or greeting.done():
+                                    greeting = voice_executor.submit(speak_activation_greeting, speaking)
+                                greeting_status = "pending"
                             _write_status(state, opened, launch_status="requested")
                         else:
                             greeting_status = None

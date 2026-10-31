@@ -28,16 +28,22 @@ async def gemini_transcribe(settings, audio, mime_type):
     try:
         async with asyncio.timeout(30):
             async with httpx.AsyncClient(timeout=httpx.Timeout(30,connect=5)) as client:
+                from cronos.delivery import mark
+                mark('recognition_requested',provider='gemini',bytes=len(audio))
                 response=await client.post(f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent',
                     headers={'x-goog-api-key':settings.gemini_key.strip()},json=payload)
+                mark('recognition_http',provider='gemini',http_status=response.status_code)
                 response.raise_for_status()
                 candidate=response.json()['candidates'][0]
                 if candidate.get('finishReason') not in (None,'STOP'):raise ValueError()
                 raw=''.join(part.get('text','') for part in candidate['content']['parts'] if not part.get('thought'))
                 value=json.loads(raw)['text']
                 if not isinstance(value,str) or not value.strip() or len(value)>16000:raise ValueError()
+                mark('recognition_response',provider='gemini',characters=len(value.strip()))
                 return value.strip()
-    except (httpx.HTTPError,TimeoutError,ValueError,KeyError,IndexError,TypeError,AttributeError):
+    except (httpx.HTTPError,TimeoutError,ValueError,KeyError,IndexError,TypeError,AttributeError) as exc:
+        from cronos.delivery import mark
+        mark('recognition_error',provider='gemini',error_type=type(exc).__name__,http_status=exc.response.status_code if isinstance(exc,httpx.HTTPStatusError) else 0)
         raise ProviderError('O reconhecimento alternativo não conseguiu transcrever a gravação. O áudio pode ser reenviado pelo botão de tentar novamente.',502) from None
 
 

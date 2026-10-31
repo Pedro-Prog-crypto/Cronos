@@ -1,0 +1,41 @@
+{
+  "revision": "delivery-proof-2026-10-30-r10",
+  "python_suite": {
+    "passed": 681,
+    "failed": 0,
+    "duration_seconds": 86.9,
+    "warnings": 1
+  },
+  "browser": {
+    "checks_passed": 17,
+    "checks": [
+      "compiled App plays first audio before complete provider response",
+      "measured start under five seconds with controlled 150 ms AI / 100 ms TTS fixtures",
+      "timing history is reachable from the stopwatch and records a single turn",
+      "Escape cancels pending server generation and logs cancellation",
+      "failed request stays in history instead of disappearing from measurements",
+      "next question responds after cancellation and failure, without a stale lock",
+      "AudioWorklet manual send includes actual ASR and endpoint delay in the same question timer",
+      "one receipt ID follows actual microphone bytes through recognition, AI, Fish response and playback",
+      "ASR failure is recorded even when no chat request can be sent",
+      "same recording is resent after ASR failure, its actual transcript reaches AI and the answer reaches TTS",
+      "13-second recognition completes and reaches real audio playback instead of being aborted at the old 12-second deadline",
+      "9-second synthesis finishes with audible playback instead of being killed by the former 8-second voice deadline",
+      "stalled TTS finishes with a visible error while the complete written answer stays available",
+      "native audio leaves transcription state on handoff, receives its recognized question and speaks before final metadata",
+      "native answer failure preserves the actual recognized question for retry, without redundant ASR or the voice placeholder",
+      "diagnostic button submits a fresh arithmetic question and plays the computed answer using the same backend and TTS path",
+      "diagnostic stays copyable when the embedded browser does not provide clipboard permission"
+    ],
+    "first_audio_ms": 282.0,
+    "response_ms": 282.0,
+    "environment": "Chromium + compiled UI + real local FastAPI/HTTP + real SSE parser and WAV playback; external AI and TTS controlled, synthetic microphone, controlled ASR/AI/TTS, no physical Windows microphone/speaker validation"
+  },
+  "typescript": "passed",
+  "frontend_build": "passed",
+  "real_cloud_attempt": {
+    "reached_provider": false,
+    "blocker": "Execution environment proxy refused connections to generativelanguage.googleapis.com and api.fish.audio with ProxyError 403; not evidence about the user notebook"
+  },
+  "windows_physical_devices_tested": false
+}

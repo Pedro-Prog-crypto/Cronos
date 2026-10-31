@@ -7,6 +7,7 @@ import io
 import importlib
 import json
 import math
+import re
 import shutil
 import socket
 import struct
@@ -67,6 +68,8 @@ class ControlledProvider:
         question='E aí, Kronos, de boa? Como é que você tá, mano?' if native else messages[-1]['content']
         self.questions.append(question)
         if native and transcript_sink.get():await transcript_sink.get()(question)
+        if 'somente o número inteiro' in question:
+            return {'reply':str(sum(map(int,re.findall(r'\d+',question)))),'tool_calls':[],'topics':[]}
         if self.mode=='fail':raise ProviderError('Falha externa simulada.',503)
         if self.mode=='wait':
             try:await asyncio.sleep(30)
@@ -155,6 +158,12 @@ async def exercise(base,provider,mic_file):
         assert voice_row['source']=='voice' and voice_row['recognition_ms']>=250
         assert voice_row['response_ms']==voice_row['first_audio_ms']+voice_row['recognition_ms']+voice_row['endpoint_ms']
         checks.append('AudioWorklet manual send includes actual ASR and endpoint delay in the same question timer')
+        receipt_response=await page.request.get(base+'/voice/delivery',headers=AUTH)
+        receipts=(await receipt_response.json())['turns']
+        receipt=next(row for row in receipts if row['turn_id']==voice_row['turn_id'])
+        stages=[event['stage'] for event in receipt['events']]
+        for expected in ('audio_received','recognition_requested','question_recognized','question_received','answer_requested','answer_received','voice_requested','voice_received','playback_started'):assert expected in stages,(expected,stages)
+        checks.append('one receipt ID follows actual microphone bytes through recognition, AI, Fish response and playback')
         await page.locator('.reference-mic.thinking, .reference-mic.speaking, .reference-mic.generating').wait_for(state='detached')
         ControlledFish.fail_asr=True
         await page.wait_for_timeout(1100)
@@ -236,6 +245,26 @@ async def exercise(base,provider,mic_file):
         assert await native.locator('#chat-input').input_value()=='E aí, Kronos, de boa? Como é que você tá, mano?'
         assert len(ControlledFish.recordings)==before
         checks.append('native answer failure preserves the actual recognized question for retry, without redundant ASR or the voice placeholder')
+
+        provider.mode='normal'
+        await native.keyboard.press('Escape')
+        await native.get_by_role('button',name='ENTENDIMENTO DE LINGUAGEM',exact=True).click()
+        await native.get_by_role('button',name='TESTAR IA E VOZ',exact=True).click()
+        await native.locator('audio[controls]').wait_for()
+        await native.locator('audio[controls]').evaluate('(audio)=>audio.play()')
+        await native.wait_for_timeout(200)
+        check_response=await native.request.get(base+'/voice/delivery',headers=AUTH)
+        check=(await check_response.json())['turns'][0]
+        assert any(event['stage']=='voice_received' and event.get('bytes',0)>0 for event in check['events'])
+        assert any(event['stage']=='playback_started' and event.get('response_ms',0)>0 for event in check['events'])
+        assert await native.get_by_role('button',name='COPIAR DIAGNÓSTICO',exact=True).is_enabled()
+        checks.append('diagnostic button submits a fresh arithmetic question and plays the computed answer using the same backend and TTS path')
+        await native.evaluate("()=>Object.defineProperty(navigator,'clipboard',{value:undefined,configurable:true})")
+        await native.get_by_role('button',name='COPIAR DIAGNÓSTICO',exact=True).click()
+        report=await native.get_by_role('textbox',name='Diagnóstico de entrega').input_value()
+        assert 'audio_base64' not in report and 'api_key' not in report
+        assert json.loads(report)['turns']
+        checks.append('diagnostic stays copyable when the embedded browser does not provide clipboard permission')
         assert not errors,errors
         await native.close();await page.close();await browser.close()
     return {'checks_passed':len(checks),'checks':checks,'first_audio_ms':measured['first_audio_ms'],'response_ms':measured['response_ms'],

@@ -50,7 +50,7 @@ export async function streamChat(body:unknown,signal:AbortSignal,onReply:(reply:
   const session=(body as any)?.session_id;
   const heardContext=(body as any)?.heard_context;
   const path=audio?'/chat/audio/stream'+(session?'?session_id='+encodeURIComponent(session):''):'/chat/stream';
-  const response=await api(path,{method:'POST',headers:{'Content-Type':audio?'audio/wav':'application/json',...(audio&&heardContext?{'X-Cronos-Heard-Context':encodeURIComponent(String(heardContext))}:{})},body:audio||JSON.stringify(body),signal});
+  const response=await api(path,{method:'POST',headers:{'Content-Type':audio?'audio/wav':'application/json',...((body as any)?.turn_id?{'X-Cronos-Turn':(body as any).turn_id}:{}),...(audio&&heardContext?{'X-Cronos-Heard-Context':encodeURIComponent(String(heardContext))}:{})},body:audio||JSON.stringify(body),signal});
   const reader=response.body?.getReader();
   let buffer='',result:any=null;
   const event=(line:string)=>{
