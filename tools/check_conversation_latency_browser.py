@@ -91,6 +91,7 @@ class ControlledProvider:
         async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
             response=await receive_conversation(client,'https://fixture.invalid/model:generateContent',{}, {})
         result=parse_completed_reply(response.json()['candidates'][0]['content']['parts'][0]['text'])
+        if self.mode=='metadata_fail':raise ProviderError('Falha controlada após a resposta completa.',503)
         if native:result['recognized_text']=question
         return result
 
@@ -100,11 +101,12 @@ async def exercise(base,provider,mic_file):
         def append(self,item):
             super().append(item)
             print(f'passed {len(self)}: {item}',file=sys.stderr,flush=True)
-    checks=Checks();errors=[]
+    checks=Checks();errors=[];rejected_timings=[]
     async with async_playwright() as driver:
         browser=await driver.chromium.launch(executable_path=shutil.which('chromium'),args=['--no-sandbox','--autoplay-policy=no-user-gesture-required','--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream',f'--use-file-for-fake-audio-capture={mic_file}'])
         page=await browser.new_page(viewport={'width':1366,'height':768})
         page.on('pageerror',lambda error:errors.append(str(error)))
+        page.on('response',lambda response:rejected_timings.append(response.status) if response.url.endswith('/panels/latency') and response.status>=400 else None)
         await page.goto(base+'/#cronos-session=latency-fixture')
         async def compose(text):
             # Stop synthetic capture before a typed turn. Otherwise a new VAD
@@ -164,6 +166,11 @@ async def exercise(base,provider,mic_file):
         await page.locator('.response-clock').filter(has_text='Transcrevendo').wait_for()
         await page.locator('.response-clock').filter(has_text='Voz começou em').wait_for()
         voice_row=(await history())[-1]
+        # React updates the clock before its asynchronous timing POST reaches
+        # the server. Wait for that receipt, not just the rendered clock.
+        for _ in range(50):
+            if voice_row.get('first_audio_ms') is not None and voice_row.get('recognition_ms') is not None:break
+            await page.wait_for_timeout(40);voice_row=(await history())[-1]
         assert voice_row['source']=='voice' and voice_row['recognition_ms']>=250
         assert voice_row['response_ms']==voice_row['first_audio_ms']+voice_row['recognition_ms']+voice_row['endpoint_ms']
         checks.append('AudioWorklet manual send includes actual ASR and endpoint delay in the same question timer')
@@ -364,7 +371,45 @@ async def exercise(base,provider,mic_file):
         assert await fallback.evaluate('localParts.length')==before_parts
         checks.append('Escape cancels active device speech without replaying a queued continuation or changing to another voice')
         await fallback.close()
+        # WebView installations may have no browser speech voices. Exercise
+        # the Windows WAV bridge separately, without a configured Fish model.
+        windows=await browser.new_page(viewport={'width':1366,'height':768})
+        windows.on('pageerror',lambda error:errors.append(str(error)))
+        local_parts=[];remote_requests=[]
+        async def no_fish_status(route):
+            response=await route.fetch();data=await response.json()
+            data.update(native_voice_available=True,fish_speech_configured=False,fish_pcm_streaming=False)
+            await route.fulfill(response=response,json=data)
+        async def local_wav(route):
+            local_parts.append(route.request.post_data_json['text'])
+            await route.fulfill(status=200,body=audio_fixture(),content_type='audio/wav')
+        await windows.route('**/status',no_fish_status)
+        await windows.route('**/voice/device',local_wav)
+        await windows.route('**/voice/speech',lambda route:(remote_requests.append(True),route.abort())[1])
+        await windows.add_init_script('speechSynthesis.getVoices=()=>[];')
+        await windows.goto(base+'/#cronos-session=latency-fixture')
+        async def windows_question(text):
+            if not await windows.locator('#chat-input').is_visible():
+                await windows.get_by_role('button',name='ENTENDIMENTO DE LINGUAGEM',exact=True).click()
+                await windows.locator('.phrase-card').click()
+            await windows.locator('#chat-input').fill(text)
+            await windows.get_by_role('button',name='Enviar mensagem',exact=True).click()
+        provider.mode='normal'
+        await windows_question('Oi Cronos, responda com a voz do Windows')
+        await windows.locator('.response-clock').filter(has_text='Voz começou em').wait_for()
+        await windows.locator('.reference-mic.thinking, .reference-mic.speaking, .reference-mic.generating').wait_for(state='detached')
+        assert local_parts and not remote_requests
+        assert 'Tudo certo' in ''.join(local_parts) and 'Como foi seu dia?' in ''.join(local_parts)
+        checks.append('no Fish model and no browser voices: compiled UI plays the actual answer through the Windows WAV fallback contract')
+        provider.mode='metadata_fail';before=len(local_parts)
+        await windows_question('Oi Cronos, preserve a resposta já recebida')
+        await windows.get_by_text('A resposta chegou. Não consegui confirmar o salvamento final desta conversa; a fala continua.',exact=True).wait_for()
+        await windows.locator('.reference-mic.thinking, .reference-mic.speaking, .reference-mic.generating').wait_for(state='detached')
+        assert 'Como foi seu dia?' in ''.join(local_parts[before:])
+        checks.append('metadata failure after a complete reply preserves answer playback and reports unconfirmed persistence instead of cancelling the voice')
+        await windows.close()
         assert not errors,errors
+        assert not rejected_timings,rejected_timings
         await native.close();await page.close();await browser.close()
     return {'checks_passed':len(checks),'checks':checks,'first_audio_ms':measured['first_audio_ms'],'response_ms':measured['response_ms'],
             'environment':'Chromium + compiled UI + real local FastAPI/HTTP + real SSE parser and WAV playback; external AI and TTS controlled, synthetic microphone, controlled ASR/AI/TTS, no physical Windows microphone/speaker validation'}

@@ -52,7 +52,7 @@ def test_audio_permission_format_and_validation(settings):
 
 
 @pytest.mark.parametrize(('transcription_provider','fish_key','expected_direct'),[
-    ('fish','configured',False),('vosk','',False),('fish','',True),
+    ('fish','configured',False),('vosk','',False),('fish','',False),
 ])
 def test_status_routes_through_configured_asr_before_gemini_live(settings,transcription_provider,fish_key,expected_direct):
     configured=replace(settings,provider='gemini',gemini_transport='live',

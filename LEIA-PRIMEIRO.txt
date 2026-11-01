@@ -48,3 +48,11 @@ continuam disponiveis na interface principal.
 
 Passo a passo: docs\SEGUNDO-PLANO-2026-10-31-R12.md
 Resultados e limites dos testes: docs\VERIFICACAO-2026-10-31-R12.json
+
+REVISAO DE 01/11/2026 — ENTREGA DE RESPOSTAS (R13)
+A reserva entra sem descartar uma resposta principal ainda valida. Uma chamada de
+voz confirmada vale para a pergunta seguinte, sem exigir o nome duas vezes.
+Ha recuperacao local de reconhecimento WAV e voz de reserva do Windows em portugues.
+O pacote conserva imagens, memoria e separacao entre chamar e abrir a janela.
+Encerre o assistente antigo antes de usar esta pasta.
+Detalhes e limites reais: docs\RESPOSTAS-2026-11-01-R13.md

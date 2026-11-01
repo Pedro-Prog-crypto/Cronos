@@ -63,7 +63,9 @@ class ApprovalInput(BaseModel):
 VOICE_REQUEST_TIMEOUT_SECONDS = 30
 TRANSCRIPTION_TIMEOUT_SECONDS = 30
 TRANSCRIPTION_TOTAL_TIMEOUT_SECONDS = 40
-CONVERSATION_FIRST_REPLY_TIMEOUT_SECONDS = 24
+# Recovery ceiling, not the latency target. Each route has its own timeout;
+# a reserve is hedged after eight seconds without cancelling a valid primary.
+CONVERSATION_FIRST_REPLY_TIMEOUT_SECONDS = 120
 
 
 async def voice_deadline(operation, seconds):
@@ -273,7 +275,8 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 # Prefer the explicitly configured speech recognizer when it is
                 # available. Native Live audio bypasses Fish/Vosk and cannot
                 # use the normal text-provider failover after recognition.
-                "direct_audio_chat":current.privacy_mode=="online" and current.provider=="gemini" and current.gemini_transport=="live" and not (
+                "native_voice_available":__import__('sys').platform=='win32',
+                "direct_audio_chat":current.direct_audio_chat and current.privacy_mode=="online" and current.provider=="gemini" and current.gemini_transport=="live" and not (
                     current.transcription_provider == "vosk" or
                     current.transcription_provider == "fish" and bool(current.fish_key) and current.privacy_mode == "online"
                 ),
@@ -307,14 +310,14 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         request.app.state.features.record("language", "passed", "Uma conversa foi processada e salva. Não certifica precisão de todas as respostas.")
         return result
 
-    async def conversation_stream(session,message,request,audio=None,audio_fallback=None,heard_context=None,screen_context=True,page_context=None):
+    async def conversation_stream(session,message,request,audio=None,audio_fallback=None,heard_context=None,screen_context=True,page_context=None,wake_confirmed=False):
         from cronos.reply_stream import reply_sink,intro_sink,transcript_sink
         async def events():
             panels=request.app.state.panels;panels.active+=1
             queue=asyncio.Queue(maxsize=4);spoken=None;intro_text=None;recognized_question=None;first_response_deadline=None
             def may_speak():
                 import re
-                return audio is None or not panels.preferences.called_only or bool(recognized_question and re.search(r'\b(?:cronos|kronos|chronos)\b',recognized_question,re.I))
+                return audio is None or wake_confirmed or not panels.preferences.called_only or bool(recognized_question and re.search(r'\b(?:cronos|kronos|chronos)\b',recognized_question,re.I))
             async def ready(reply):
                 nonlocal spoken
                 if spoken is None and may_speak():
@@ -346,7 +349,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                             async with request.app.state.lock:
                                 try:
                                     try:
-                                        options={'audio':audio} if audio is not None else {}
+                                        options={'audio':audio,**({'wake_confirmed':True} if wake_confirmed else {})} if audio is not None else {}
                                         if not screen_context:options['screen_context']=False
                                         if page_context:options['page_context']=page_context
                                         if heard_context:options['heard_context']=heard_context
@@ -357,7 +360,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                                         recognized=recognized_question or await transcribe_fallback(audio_fallback)
                                         if not recognized:raise ProviderError('A gravação foi mantida, mas não consegui reconhecer a pergunta. Tente novamente ou use o botão de envio de texto.',502) from None
                                         if not recognized_question:await transcript(recognized)
-                                        if panels.preferences.called_only and not re.search(r'\b(?:cronos|kronos|chronos)\b',recognized,re.I):
+                                        if panels.preferences.called_only and not wake_confirmed and not re.search(r'\b(?:cronos|kronos|chronos)\b',recognized,re.I):
                                             result={'session_id':str(session),'reply':'','recognized_text':recognized,'ignored':True,'topics':[],'notes':[],'tool_results':[],'warnings':[],'timings_ms':{}}
                                         else:
                                             result=await request.app.state.engine.chat(session,recognized,**({'heard_context':heard_context} if heard_context else {}))
@@ -415,7 +418,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         except ValueError as exc:raise HTTPException(422,str(exc)) from None
         from urllib.parse import unquote
         heard_context=unquote(request.headers.get('X-Cronos-Heard-Context','')[:30000])[:10000] or None
-        return await conversation_stream(session_id or uuid4(),'Pergunta falada',request,pcm,audio_fallback=audio_wav,heard_context=heard_context)
+        return await conversation_stream(session_id or uuid4(),'Pergunta falada',request,pcm,audio_fallback=audio_wav,heard_context=heard_context,wake_confirmed=request.headers.get('X-Cronos-Wake-Confirmed')=='1')
 
     @app.get("/conversations/{session_id}", dependencies=[Depends(authenticate)])
     async def conversation(session_id: UUID, request: Request):
@@ -570,6 +573,19 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 finally:await iterator.aclose()
             return StreamingResponse(chunks(),media_type='audio/x-pcm',headers={'Cache-Control':'no-store','X-PCM-Sample-Rate':'24000','X-PCM-Channels':'1','X-PCM-Bits':'16'})
 
+    @app.post('/voice/device',dependencies=[Depends(authenticate)])
+    async def device_speech(body: SpeechInput,request: Request):
+        from cronos.device_voice import synthesize
+        with delivery.scope(request.app.state.delivery,request.headers.get('x-cronos-turn')):
+            delivery.mark('voice_requested',provider='windows',characters=len(body.text))
+            try:
+                audio=await voice_operation(request,lambda:synthesize(body.text,body.speed or 1))
+            except RuntimeError as exc:
+                delivery.mark('failed',provider='windows',error_type='device_voice')
+                raise HTTPException(503,str(exc)) from None
+            delivery.mark('voice_received',provider='windows',bytes=len(audio))
+            return Response(content=audio,media_type='audio/wav')
+
     @app.post("/voice/stream", dependencies=[Depends(authenticate)])
     async def speech_stream(body: SpeechInput):
         if not body.text.strip():
@@ -604,11 +620,17 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
 
     async def recognize_recording(audio, mime_type):
         current=app.state.engine.settings
-        if current.transcription_provider=='vosk':
-            try:return await asyncio.to_thread(local_recognizer.transcribe,audio)
-            except ValueError as exc:raise HTTPException(503,str(exc)) from None
-        if current.privacy_mode!='online':raise HTTPException(503,'Reconhecimento online desativado no modo local.')
         from cronos.transcription import gemini_transcribe,first_valid_transcription
+        async def local():
+            delivery.mark('recognition_requested',provider='vosk',bytes=len(audio))
+            try:
+                text=await asyncio.to_thread(local_recognizer.transcribe,audio)
+                delivery.mark('recognition_response',provider='vosk',characters=len(text))
+                return text
+            except ValueError as exc:
+                delivery.mark('recognition_error',provider='vosk',error_type='unrecognized')
+                raise HTTPException(503,str(exc)) from None
+        if current.transcription_provider=='vosk' or current.privacy_mode!='online':return await local()
         async def primary():
             delivery.mark('recognition_requested',provider='fish',bytes=len(audio))
             try:
@@ -622,9 +644,17 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 delivery.mark('recognition_error',provider='fish',error_type=type(exc).__name__,http_status=getattr(exc,'status_code',getattr(exc,'status',0)) or 0)
                 raise
         async def alternative():return await gemini_transcribe(current,audio,mime_type)
+        # Use the already installed Portuguese model only for WAV input. Do not
+        # download anything or convert arbitrary containers inside recognition.
+        local_ready=False
+        if mime_type.split(';',1)[0] in {'audio/wav','audio/x-wav'}:
+            try:
+                from cronos.wake import verify_model
+                verify_model();local_ready=True
+            except (OSError,ValueError):pass
         try:
             async with asyncio.timeout(TRANSCRIPTION_TOTAL_TIMEOUT_SECONDS):
-                return await first_valid_transcription(primary,alternative if current.gemini_key.strip() else None)
+                return await first_valid_transcription(primary,alternative if current.gemini_key.strip() else None,local=local if local_ready else None)
         except TimeoutError:
             raise HTTPException(504,'O reconhecimento continua indisponível. Sua gravação pode ser reenviada sem repetir a fala.') from None
         except HTTPException:raise

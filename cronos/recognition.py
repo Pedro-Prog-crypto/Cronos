@@ -23,7 +23,7 @@ def read_pcm(audio):
         with wave.open(io.BytesIO(audio),'rb') as reader:
             if (reader.getnchannels(),reader.getsampwidth(),reader.getframerate())!=(1,2,16000):
                 raise ValueError('Áudio requer WAV mono, PCM 16 bits, 16 kHz.')
-            if not 1<=reader.getnframes()<=61*16000:raise ValueError('Gravação deve conter áudio e durar no máximo 61 segundos.')
+            if not 1<=reader.getnframes()<=180*16000:raise ValueError('Gravação deve conter áudio e durar no máximo três minutos.')
             frames=reader.readframes(reader.getnframes())
             if len(frames)!=reader.getnframes()*2:raise ValueError('Áudio WAV incompleto.')
             return frames

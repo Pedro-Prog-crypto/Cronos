@@ -152,7 +152,7 @@ class Gemini:
             raise ProviderError("Modo local: Gemini está desabilitado. Selecione um modelo Ollama local.")
         key = self.settings.gemini_key.strip()
         if not key:
-            raise ProviderError("Configure GEMINI_API_KEY para usar o Gemini.")
+            raise ProviderError("Configure GEMINI_API_KEY para usar o Gemini.",503,kind='configuration')
         if self.settings.gemini_transport=='live':
             from cronos.gemini_live import reply
             return await reply(self.settings,system,messages)

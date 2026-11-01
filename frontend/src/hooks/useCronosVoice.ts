@@ -33,13 +33,13 @@ export function speechChunks(text:string,firstLimit=80):string[]{
   return chunks.filter(chunk=>chunk.trim());
 }
 
-interface VoiceProps { preferences?: any; streaming?:boolean; onSpeechStart?: (metrics?:{speech_request_ms:number;playback_ms:number;turn_id?:string;voice_source?:'fish'|'device'}) => void; onSpeechChunk?: (text:string,index:number,turnId?:string) => void; onSpeechEnd?: () => void; onError?: (message: string) => void; onWarning?: (message:string)=>void; }
-export function useCronosVoice({preferences,streaming,onSpeechStart,onSpeechChunk,onSpeechEnd,onError,onWarning}: VoiceProps = {}) {
+interface VoiceProps { preferences?: any; remoteEnabled?:boolean; nativeEnabled?:boolean; streaming?:boolean; onSpeechStart?: (metrics?:{speech_request_ms:number;playback_ms:number;turn_id?:string;voice_source?:'fish'|'device'}) => void; onSpeechChunk?: (text:string,index:number,turnId?:string) => void; onSpeechEnd?: () => void; onError?: (message: string) => void; onWarning?: (message:string)=>void; }
+export function useCronosVoice({preferences,remoteEnabled=true,nativeEnabled=false,streaming,onSpeechStart,onSpeechChunk,onSpeechEnd,onError,onWarning}: VoiceProps = {}) {
   const [isSpeaking,setIsSpeaking]=useState(false), [isGenerating,setIsGenerating]=useState(false);
   const audioLevelSource=useRef(0);
   const prefs=useRef(preferences);prefs.current=preferences;
-  const callbacks=useRef({streaming,onSpeechStart,onSpeechChunk,onSpeechEnd,onError,onWarning});
-  callbacks.current={streaming,onSpeechStart,onSpeechChunk,onSpeechEnd,onError,onWarning};
+  const callbacks=useRef({remoteEnabled,nativeEnabled,streaming,onSpeechStart,onSpeechChunk,onSpeechEnd,onError,onWarning});
+  callbacks.current={remoteEnabled,nativeEnabled,streaming,onSpeechStart,onSpeechChunk,onSpeechEnd,onError,onWarning};
   const context=useRef<AudioContext|null>(null), audio=useRef<HTMLAudioElement|null>(null);
   const frame=useRef(0), url=useRef(''), pending=useRef<AbortController|null>(null);
   const source=useRef<MediaElementAudioSourceNode|null>(null), analyser=useRef<AnalyserNode|null>(null);
@@ -77,11 +77,20 @@ export function useCronosVoice({preferences,streaming,onSpeechStart,onSpeechChun
       const fetchChunk=async(part:string)=>{
         const speed=prefs.current?.voice_speed,started=performance.now();
         let error:unknown;
-        for(let attempt=0;attempt<2;attempt++){
-          try{return await withRequestDeadline(remote.signal,Math.max(1,40000-(performance.now()-started)),async signal=>{const response=await api(pcm?'/voice/pcm':'/voice/speech',{method:'POST',headers:{'Content-Type':'application/json',...(turn_id?{'X-Cronos-Turn':turn_id}:{})},body:JSON.stringify({text:part,...(speed!==undefined?{speed}:{})}),signal});return {response:pcm?response:null,blob:pcm?null:await response.blob(),error:null,speed,elapsed:performance.now()-started};});}
+        for(let attempt=0;callbacks.current.remoteEnabled&&attempt<2;attempt++){
+          try{return await withRequestDeadline(remote.signal,Math.max(1,40000-(performance.now()-started)),async signal=>{const response=await api(pcm?'/voice/pcm':'/voice/speech',{method:'POST',headers:{'Content-Type':'application/json',...(turn_id?{'X-Cronos-Turn':turn_id}:{})},body:JSON.stringify({text:part,...(speed!==undefined?{speed}:{})}),signal});return {response:pcm?response:null,blob:pcm?null:await response.blob(),error:null,speed,voiceSource:'fish' as const,elapsed:performance.now()-started};});}
           catch(caught){error=caught;if(controller.signal.aborted||attempt===1||performance.now()-started>=39500||!(caught instanceof ApiError)||![429,502,503,504].includes(caught.status))break;await new Promise(resolve=>setTimeout(resolve,250*(attempt+1)));}
         }
-        return {response:null,blob:null,error,speed,elapsed:performance.now()-started};
+        if(callbacks.current.nativeEnabled&&!controller.signal.aborted){
+          try{
+            const blob=await withRequestDeadline(controller.signal,35000,async signal=>{
+              const response=await api('/voice/device',{method:'POST',headers:{'Content-Type':'application/json',...(turn_id?{'X-Cronos-Turn':turn_id}:{})},body:JSON.stringify({text:part,speed:speed??1}),signal});return response.blob();
+            });
+            callbacks.current.onWarning?.('A voz online está indisponível. Lendo a mesma resposta com a voz do Windows.');
+            return {response:null,blob,error:null,speed,voiceSource:'device' as const,elapsed:performance.now()-started};
+          }catch(localError){error=localError;}
+        }
+        return {response:null,blob:null,error:error||new Error('A voz online não está configurada.'),speed,voiceSource:'fish' as const,elapsed:performance.now()-started};
       };
       // Start the next synthesis as soon as the final reply arrives, while
       // the introduction is still playing. Keep one playback/cancellation session.
@@ -108,7 +117,7 @@ export function useCronosVoice({preferences,streaming,onSpeechStart,onSpeechChun
           await playPCM(received.response,context.current,controller.signal,{
             rate:()=>2**(((prefs.current?.voice_pitch??.5)-.5)*.7)*(prefs.current?.voice_speed??renderedSpeed.current)/renderedSpeed.current,volume:()=>prefs.current?.voice_volume??1,
             onNodes:(meter,gain)=>{analyser.current=meter;outputGain.current=gain;const values=new Uint8Array(meter.fftSize);let last=0;const measure=(now:number)=>{if(current!==generation.current)return;if(now-last>50){meter.getByteTimeDomainData(values);let sum=0;for(const v of values)sum+=((v-128)/128)**2;audioLevelSource.current=Math.min(1,Math.sqrt(sum/values.length)*4);last=now;}frame.current=requestAnimationFrame(measure);};frame.current=requestAnimationFrame(measure);},
-            onStart:(bytesMs,playbackMs)=>{started=true;clearTimeout(hedge);setIsGenerating(false);setIsSpeaking(true);callbacks.current.onSpeechChunk?.(chunks[index]||'',index,turn_id);if(!index)callbacks.current.onSpeechStart?.({turn_id,speech_request_ms:Math.round(received.elapsed+bytesMs),playback_ms:Math.round(playbackMs)});}
+            onStart:(bytesMs,playbackMs)=>{started=true;clearTimeout(hedge);setIsGenerating(false);setIsSpeaking(true);callbacks.current.onSpeechChunk?.(chunks[index]||'',index,turn_id);if(!index)callbacks.current.onSpeechStart?.({turn_id,speech_request_ms:Math.round(received.elapsed+bytesMs),playback_ms:Math.round(playbackMs),voice_source:received.voiceSource});}
           });
           cancelAnimationFrame(frame.current);
         }else{
@@ -121,7 +130,7 @@ export function useCronosVoice({preferences,streaming,onSpeechStart,onSpeechChun
         source.current=context.current.createMediaElementSource(player);source.current.connect(meter);outputGain.current?.disconnect();const gain=context.current.createGain();outputGain.current=gain;gain.gain.value=prefs.current?.voice_volume??1;meter.connect(gain);gain.connect(context.current.destination);
         const values=new Uint8Array(meter.fftSize);let last=0;
         const measure=(time:number)=>{if(current!==generation.current)return;if(time-last>50){meter.getByteTimeDomainData(values);let sum=0;for(const value of values)sum+=((value-128)/128)**2;audioLevelSource.current=Math.min(1,Math.sqrt(sum/values.length)*4);last=time;}frame.current=requestAnimationFrame(measure);};
-        player.onplaying=()=>{started=true;clearTimeout(hedge);setIsGenerating(false);setIsSpeaking(true);callbacks.current.onSpeechChunk?.(chunks[index]||'',index,turn_id);if(!index)callbacks.current.onSpeechStart?.({turn_id,speech_request_ms:Math.round(received.elapsed),playback_ms:Math.round(performance.now()-receivedAt)});frame.current=requestAnimationFrame(measure);};
+        player.onplaying=()=>{started=true;clearTimeout(hedge);setIsGenerating(false);setIsSpeaking(true);callbacks.current.onSpeechChunk?.(chunks[index]||'',index,turn_id);if(!index)callbacks.current.onSpeechStart?.({turn_id,speech_request_ms:Math.round(received.elapsed),playback_ms:Math.round(performance.now()-receivedAt),voice_source:received.voiceSource});frame.current=requestAnimationFrame(measure);};
         await new Promise<void>((resolve,reject)=>{
           let settled=false;
           let timeout=setTimeout(()=>finish(new Error('O áudio chegou, mas a reprodução não iniciou. Confira a permissão de som.')),3000);
@@ -186,20 +195,21 @@ async function localWave(blob:Blob){
   return new Blob([bytes],{type:'audio/wav'});
 }
 
-export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms:number;endpoint_ms:number})=>void,onError:(message:string)=>void,local=false,blocked=false,preferences?:any,onAudio?:(audio:Blob,metrics:{recognition_ms:number;endpoint_ms:number})=>Promise<void>,interrupt?:{active:boolean;onKeyword:()=>void;wakeOnly?:boolean},onRecognitionStart?:(endpoint_ms:number)=>string|void) {
+export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms:number;endpoint_ms:number;wake_confirmed?:boolean})=>void,onError:(message:string)=>void,local=false,blocked=false,preferences?:any,onAudio?:(audio:Blob,metrics:{recognition_ms:number;endpoint_ms:number;wake_confirmed?:boolean})=>Promise<void>,interrupt?:{active:boolean;onKeyword:()=>void;wakeOnly?:boolean},onRecognitionStart?:(endpoint_ms:number)=>string|void) {
   const [recording,setRecording]=useState(false),[capturing,setCapturing]=useState(false),[starting,setStarting]=useState(false),[transcribing,setTranscribing]=useState(false);
   const audioLevelSource=useRef(0),enabled=useRef(false),opening=useRef(false),processing=useRef(false),mounted=useRef(true);
   const latest=useRef({onTranscript,onError,local,blocked,preferences,onAudio,interrupt,onRecognitionStart});latest.current={onTranscript,onError,local,blocked,preferences,onAudio,interrupt,onRecognitionStart};
   const keywordSocket=useRef<WebSocket|null>(null),keywordReady=useRef(false),keywordError=useRef(false);
-  const [wakeOpen,setWakeOpen]=useState(false),wakeUntil=useRef(0);
+  const [wakeOpen,setWakeOpen]=useState(false),wakeUntil=useRef(0),turnWake=useRef(false);
   const captureVersion=useRef(0),resumeAfter=useRef(0);
   const resources=useRef<{stream?:MediaStream;recorded?:MediaStream;context?:AudioContext;recorder?:MediaRecorder;node?:AudioWorkletNode;timer?:ReturnType<typeof setInterval>;abort?:AbortController;vad?:Awaited<ReturnType<typeof createSpeechDetector>>;submit?:()=>void}>({});
-  const lastRecording=useRef<{audio:Blob;endpoint_ms:number}|null>(null);
+  const lastRecording=useRef<{audio:Blob;endpoint_ms:number;wake_confirmed:boolean}|null>(null);
   const [retryAvailable,setRetryAvailable]=useState(false);
   const acknowledge=useCallback(()=>{lastRecording.current=null;setRetryAvailable(false);},[]);
-  const deliverRecording=useCallback(async(audio:Blob,endpoint_ms:number)=>{
+  const deliverRecording=useCallback(async(audio:Blob,endpoint_ms:number,retryWake?:boolean)=>{
     const version=captureVersion.current;
-    lastRecording.current={audio,endpoint_ms};setRetryAvailable(false);
+    const wake_confirmed=retryWake??turnWake.current;turnWake.current=false;
+    lastRecording.current={audio,endpoint_ms,wake_confirmed};setRetryAvailable(false);
     processing.current=true;setTranscribing(true);wakeUntil.current=0;setWakeOpen(false);
     resources.current.node?.port.postMessage({blocked:true});
     const abort=new AbortController();resources.current.abort=abort;
@@ -209,7 +219,7 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
         // Native audio is now owned by the conversation, not a pending Fish
         // transcription. Keep the recording until a real transcript arrives.
         setRetryAvailable(true);
-        const submission=latest.current.onAudio(audio,{recognition_ms:0,endpoint_ms});
+        const submission=latest.current.onAudio(audio,{recognition_ms:0,endpoint_ms,wake_confirmed});
         setTranscribing(false);
         await submission;return;
       }
@@ -219,7 +229,7 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
       if(version!==captureVersion.current||abort.signal.aborted||!mounted.current)return;
       if(typeof result.text!=='string'||!result.text.trim())throw new Error('Não consegui entender a gravação. Use Reenviar gravação para tentar sem repetir sua fala.');
       acknowledge();
-      latest.current.onTranscript(result.text,{recognition_ms:Math.round(performance.now()-recognitionStarted),endpoint_ms});
+      latest.current.onTranscript(result.text,{recognition_ms:Math.round(performance.now()-recognitionStarted),endpoint_ms,wake_confirmed});
     }catch(error){
       if(version===captureVersion.current&&!abort.signal.aborted&&mounted.current){
         setRetryAvailable(Boolean(lastRecording.current));
@@ -231,11 +241,11 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
   },[acknowledge]);
   const retry=useCallback(async()=>{
     const saved=lastRecording.current;if(!saved||processing.current||latest.current.blocked)return;
-    await deliverRecording(saved.audio,saved.endpoint_ms);
+    await deliverRecording(saved.audio,saved.endpoint_ms,saved.wake_confirmed);
   },[deliverRecording]);
-  const cancelCapture=useCallback(()=>{captureVersion.current++;processing.current=false;wakeUntil.current=0;resumeAfter.current=performance.now()+250;resources.current.abort?.abort();resources.current.node?.port.postMessage({blocked:true});if(resources.current.recorder?.state==='recording')resources.current.recorder.stop();audioLevelSource.current=0;if(mounted.current){setWakeOpen(false);setCapturing(false);setTranscribing(false);}},[]);
+  const cancelCapture=useCallback(()=>{captureVersion.current++;processing.current=false;turnWake.current=false;wakeUntil.current=0;resumeAfter.current=performance.now()+250;resources.current.abort?.abort();resources.current.node?.port.postMessage({blocked:true});if(resources.current.recorder?.state==='recording')resources.current.recorder.stop();audioLevelSource.current=0;if(mounted.current){setWakeOpen(false);setCapturing(false);setTranscribing(false);}},[]);
   const stop=useCallback(()=>{
-    enabled.current=false;captureVersion.current++;processing.current=false;resources.current.abort?.abort();
+    enabled.current=false;captureVersion.current++;processing.current=false;turnWake.current=false;resources.current.abort?.abort();
     wakeUntil.current=0;if(mounted.current)setWakeOpen(false);resources.current.vad?.dispose();resources.current.vad=undefined;
     if(resources.current.timer)clearInterval(resources.current.timer);
     const recorder=resources.current.recorder;if(recorder?.state==='recording')recorder.stop();
@@ -355,7 +365,7 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
     const open=()=>{
       socket=new WebSocket(url);const current=socket;keywordSocket.current=current;
       current.onopen=()=>current.send(JSON.stringify({token:getToken()}));
-      current.onmessage=event=>{if(!alive)return;try{const data=JSON.parse(event.data);if(data.type==='ready'){keywordReady.current=true;keywordError.current=false;}if(data.type==='keyword'){if(latest.current.interrupt?.active)latest.current.interrupt.onKeyword();else if(latest.current.interrupt?.wakeOnly&&!latest.current.blocked){wakeUntil.current=performance.now()+65000;resources.current.node?.port.postMessage({arm:true});setWakeOpen(true);setCapturing(true);}}if(data.type==='unavailable'&&!keywordError.current){keywordError.current=true;latest.current.onError(data.message);}}catch{/* Ignore unrelated or malformed keyword events. */}};
+      current.onmessage=event=>{if(!alive)return;try{const data=JSON.parse(event.data);if(data.type==='ready'){keywordReady.current=true;keywordError.current=false;}if(data.type==='keyword'){if(latest.current.interrupt?.active)latest.current.interrupt.onKeyword();else if(latest.current.interrupt?.wakeOnly&&!latest.current.blocked){turnWake.current=true;wakeUntil.current=performance.now()+65000;resources.current.node?.port.postMessage({arm:true});setWakeOpen(true);setCapturing(true);}}if(data.type==='unavailable'&&!keywordError.current){keywordError.current=true;latest.current.onError(data.message);}}catch{/* Ignore unrelated or malformed keyword events. */}};
       current.onclose=event=>{if(keywordSocket.current===current){keywordReady.current=false;resources.current.node?.port.postMessage({keyword:false});}if(alive&&[1006,1013].includes(event.code)&&attempts++<2)retry=setTimeout(open,300);};
     };open();
     return()=>{alive=false;clearTimeout(retry);keywordReady.current=false;if(keywordSocket.current===socket)keywordSocket.current=null;resources.current.node?.port.postMessage({keyword:false});socket?.close();};

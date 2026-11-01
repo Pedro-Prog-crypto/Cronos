@@ -53,6 +53,7 @@ export default function App(){
   const analysisBusy=analysisTasks.length>0;
   const analysisSpeechQueue=useRef<string[]>([]),[analysisSpeechRevision,setAnalysisSpeechRevision]=useState(0);
   const [connected,setConnected]=useState(false),[config,setConfig]=useState<any>(null);
+  const canSpeak=Boolean(config?.fish_speech_configured||config?.native_voice_available||globalThis.speechSynthesis);
   const [notice,setNotice]=useState(''),[error,setError]=useState(false);
   const [chatOpen,setChatOpen]=useState(false),[module,setModule]=useState<string|null>(null);
   const [draft,setDraft]=useState(''),[busy,setBusy]=useState(false),[tools,setTools]=useState<ToolResult[]>([]);
@@ -70,7 +71,7 @@ export default function App(){
     interruptedContext.current=JSON.stringify({question:progress.question,complete_answer_not_necessarily_heard:progress.fullReply,
       audio_chunks_that_finished:progress.completed,audio_chunk_at_interruption_may_be_partial:progress.current});
   };
-  const sendRef=useRef<(text:string,audio?:Blob)=>Promise<void>>(async()=>{});
+  const sendRef=useRef<(text:string,audio?:Blob,wakeConfirmed?:boolean)=>Promise<void>>(async()=>{});
   const commandRef=useRef<(text:string)=>boolean>(()=>false),eyeAnnouncement=useRef(false);
   const screenMonitor=useRef<ScreenMonitorHandle>(null);
   const music=useRef<MusicHandle>(null);
@@ -143,14 +144,14 @@ export default function App(){
   const saveLatency=useCallback((value:any)=>{
     value.sequence=(value.sequence||0)+1;
     value.elapsed_ms=Math.round(performance.now()-value.started);
-    const {started,armed,voiceExpected,recognitionBeforeSend,stage,...metrics}=value;
+    const {started,armed,voiceExpected,recognitionBeforeSend,stage,wake_confirmed,...metrics}=value;
     if(latency.current?.turn_id===value.turn_id)setLatencyDisplay({...value});
     void jsonApi('/panels/latency',metrics).catch(()=>{});
   },[]);
-  const cancelLatency=()=>{const current=latency.current;if(current&&!['cancelled','failed','completed'].includes(current.status)){current.status='cancelled';current.armed=false;saveLatency(current);}latency.current=null;};
+  const cancelLatency=()=>{const current=latency.current;if(current&&!['cancelled','failed','completed'].includes(current.status)){void jsonApi('/assistant/cancel',{turn_id:current.turn_id}).catch(()=>{});current.status='cancelled';current.armed=false;saveLatency(current);}latency.current=null;};
   const tell=useCallback((message:string,isError=false)=>{setNotice(message);setError(isError);},[]);
-  const voice=useCronosVoice({preferences:panelPrefs,streaming:Boolean(config?.fish_pcm_streaming),onSpeechStart:metrics=>{const current=latency.current;if(current?.armed&&metrics?.turn_id===current.turn_id){current.armed=false;Object.assign(current,metrics,{first_audio_ms:Math.round(performance.now()-current.started),status:'responding'});current.response_ms=current.first_audio_ms+(current.endpoint_ms||0)+(current.recognitionBeforeSend||0);saveLatency(current);}},onSpeechChunk:(spoken,index,turnId)=>{if(!turnId)return;const progress=speechProgress.current;if(progress&&progress.turnId===turnId){if(index>progress.chunkIndex&&progress.current)progress.completed+=`${progress.completed?' ':''}${progress.current}`;progress.current=spoken;progress.chunkIndex=index;}if(turnId!==expectedStudyTurn.current)return;const panelId=activeStudyPanel.current;if(panelId)changeStudyPanels(items=>items.map(panel=>panel.id===panelId?{...panel,spokenChunk:spoken,spokenChunkIndex:index}:panel));},onWarning:message=>tell(message,true),onError:message=>{if(latency.current){latency.current.armed=false;latency.current.status='failed';saveLatency(latency.current);}tell(message,true);}});
-      const microphone=useMicrophone(useCallback((text,metrics)=>{recognition.current=metrics;if(!text.trim()){tell('Não consegui entender a fala. Tente novamente.',true);return;}if(commandRef.current(text)){cancelLatency();return;}if(prefsRef.current?.called_only&&!/\b(?:cronos|kronos|chronos)\b/i.test(text)){cancelLatency();return;}setChatOpen(false);void sendRef.current(text);},[tell]),useCallback(message=>{if(latency.current?.stage==='recognition'){latency.current.status='failed';saveLatency(latency.current);}tell(message,true);},[tell,saveLatency]),Boolean(config?.direct_audio_chat)||config?.transcription_provider==='vosk',busy||analysisBusy||updateBusy||mediaPlaying||voice.isSpeaking||voice.isGenerating||(pageHidden&&panelPrefs?.background_processing===false),panelPrefs,config?.direct_audio_chat?async(audio,metrics)=>{recognition.current=metrics;await sendRef.current('Pergunta por voz',audio);}:undefined,config?.local_voice_interrupt?{active:mediaPlaying||busy,onKeyword:()=>bargeIn.current(),wakeOnly:Boolean(panelPrefs?.called_only)}:undefined,endpoint_ms=>{latency.current={turn_id:crypto.randomUUID(),source:'voice',started:performance.now(),stage:'recognition',armed:false,status:'waiting',voiceExpected:true,chat_ms:0,endpoint_ms};saveLatency(latency.current);return latency.current.turn_id;});
+  const voice=useCronosVoice({preferences:panelPrefs,remoteEnabled:config?.fish_speech_configured!==false,nativeEnabled:Boolean(config?.native_voice_available),streaming:Boolean(config?.fish_pcm_streaming),onSpeechStart:metrics=>{const current=latency.current;if(current?.armed&&metrics?.turn_id===current.turn_id){current.armed=false;Object.assign(current,metrics,{first_audio_ms:Math.round(performance.now()-current.started),status:'responding'});current.response_ms=current.first_audio_ms+(current.endpoint_ms||0)+(current.recognitionBeforeSend||0);saveLatency(current);}},onSpeechChunk:(spoken,index,turnId)=>{if(!turnId)return;const progress=speechProgress.current;if(progress&&progress.turnId===turnId){if(index>progress.chunkIndex&&progress.current)progress.completed+=`${progress.completed?' ':''}${progress.current}`;progress.current=spoken;progress.chunkIndex=index;}if(turnId!==expectedStudyTurn.current)return;const panelId=activeStudyPanel.current;if(panelId)changeStudyPanels(items=>items.map(panel=>panel.id===panelId?{...panel,spokenChunk:spoken,spokenChunkIndex:index}:panel));},onWarning:message=>tell(message,true),onError:message=>{if(latency.current){latency.current.armed=false;latency.current.status='failed';saveLatency(latency.current);}tell(message,true);}});
+      const microphone=useMicrophone(useCallback((text,metrics)=>{recognition.current=metrics;if(!text.trim()){tell('Não consegui entender a fala. Tente novamente.',true);return;}if(commandRef.current(text)){cancelLatency();return;}if(prefsRef.current?.called_only&&!metrics?.wake_confirmed&&!/\b(?:cronos|kronos|chronos)\b/i.test(text)){cancelLatency();tell('A fala foi reconhecida, mas a chamada não foi confirmada. Diga Cronos antes da pergunta.',true);return;}setChatOpen(false);void sendRef.current(text);},[tell]),useCallback(message=>{if(latency.current?.stage==='recognition'){latency.current.status='failed';saveLatency(latency.current);}tell(message,true);},[tell,saveLatency]),Boolean(config?.direct_audio_chat)||config?.transcription_provider==='vosk',busy||analysisBusy||updateBusy||mediaPlaying||voice.isSpeaking||voice.isGenerating||(pageHidden&&panelPrefs?.background_processing===false),panelPrefs,config?.direct_audio_chat?async(audio,metrics)=>{recognition.current=metrics;await sendRef.current('Pergunta por voz',audio,metrics.wake_confirmed);}:undefined,config?.local_voice_interrupt?{active:mediaPlaying||busy,onKeyword:()=>bargeIn.current(),wakeOnly:Boolean(panelPrefs?.called_only)}:undefined,endpoint_ms=>{latency.current={turn_id:crypto.randomUUID(),source:'voice',started:performance.now(),stage:'recognition',armed:false,status:'waiting',voiceExpected:true,chat_ms:0,endpoint_ms};saveLatency(latency.current);return latency.current.turn_id;});
   useEffect(()=>{
     if(!connected)return;
     const report=()=>{void jsonApi('/wake/presence',{listening:microphone.recording,foreground:microphone.recording||microphone.starting||voice.isSpeaking||voice.isGenerating||busy||mediaPlaying||!autoMic.current}).catch(()=>{});};
@@ -232,7 +233,7 @@ export default function App(){
     return()=>{alive=false;controller.abort();};
   },[connected,graphRevision,tell]);
   useEffect(()=>{if(!connected)return;const timer=setInterval(()=>{if(prefsRef.current?.auto_index!==false&&!document.hidden&&!live.current.busy&&!live.current.recording&&!live.current.transcribing)void jsonApi('/memory/sync',{}).then(()=>setGraphRevision(value=>value+1)).catch(()=>{});},60000);return()=>clearInterval(timer);},[connected]);
-  const openAnalysis=(kind:AnalysisKind)=>{restoreWindow('analysis:'+kind);if(autoVoice&&config?.fish_speech_configured)voice.prepare();setAnalyses(previous=>previous.includes(kind)?previous:[...previous,kind]);setEyeOpen(false);setModule(null);setChatOpen(false);};
+  const openAnalysis=(kind:AnalysisKind)=>{restoreWindow('analysis:'+kind);if(autoVoice&&canSpeak)voice.prepare();setAnalyses(previous=>previous.includes(kind)?previous:[...previous,kind]);setEyeOpen(false);setModule(null);setChatOpen(false);};
   const runCommand=(text:string)=>{
     const normalizedCommand=text.trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/^(?:kronos|cronos)[,\s:]+/i,'').replace(/[.!?]+$/,'').toLowerCase().replace(/\s+/g,' ');
     const mainBridge=(window as any).pywebview?.api;
@@ -265,7 +266,7 @@ export default function App(){
     const cards=cardDisplayCommand(text);if(cards!==null){spokenCards.current=cards;setShowSpokenCards(cards);setChatOpen(false);if(cards){if(lastAnswer.current)setDisplayTurn(lastAnswer.current);else if(!displayTurn?.reply)tell('Ainda não há uma resposta para mostrar. Faça uma pergunta e peça a explicação em cards.',true);setModule(null);setEyeOpen(false);setNote(null);}return true;}
     const command=localCommand(text,eyeOpen);if(!command)return false;cancelLatency();
     if(command.type==='presence'){
-      if(connected&&config?.fish_speech_configured){voice.prepare();void voice.speak('Estou na escuta.');}
+      if(connected&&canSpeak){voice.prepare();void voice.speak('Estou na escuta.');}
       else tell('A conversa ainda não está conectada ou a voz não está configurada.',true);
       return true;
     }
@@ -292,7 +293,7 @@ export default function App(){
     if(!microphone.recording){music.current?.pause();window.dispatchEvent(new Event('cronos:listen'));}
     void microphone.toggle();
   };
-  const sendText=async(value:string,source:'text'|'transcription'='text',audio?:Blob)=>{
+  const sendText=async(value:string,source:'text'|'transcription'='text',audio?:Blob,wakeConfirmed=false)=>{
     const text=value.trim();if(!text)return;if(inFlight.current){setDraft(text);tell('Sua pergunta foi reconhecida e está guardada no campo. Aguarde a resposta atual ou pressione Esc antes de enviar.',true);return;}if(!audio&&runCommand(text)){setDraft('');return;}
     if(!connected){tell('A conexão automática ainda não está disponível. Feche e abra o Kronos novamente.',true);return;}
     const pendingHeardContext=interruptedContext.current;
@@ -302,13 +303,13 @@ export default function App(){
     const captured=source==='transcription'&&latency.current?.stage==='recognition'?latency.current:null;
     latency.current={turn_id:captured?.turn_id||crypto.randomUUID(),sequence:captured?.sequence||0,source:source==='transcription'?'voice':'text',started:performance.now(),armed:false,chat_ms:0,...(source==='transcription'?recognition.current:{})};
     const turnLatency=latency.current;
-    turnLatency.status='waiting';turnLatency.voiceExpected=Boolean(autoVoice&&config?.fish_speech_configured);
+    turnLatency.status='waiting';turnLatency.voiceExpected=Boolean(autoVoice&&canSpeak);
     turnLatency.recognitionBeforeSend=audio?0:(turnLatency.recognition_ms||0);
     saveLatency(turnLatency);
     const textArrived=()=>{if(turnLatency.first_text_ms===undefined){turnLatency.first_text_ms=Math.round(performance.now()-turnLatency.started);if(!turnLatency.voiceExpected)turnLatency.status='responding';saveLatency(turnLatency);}};
     expectedStudyTurn.current=turnLatency.turn_id;
     const version=++turnVersion.current,controller=new AbortController();chatAbort.current=controller;
-    let question=text;
+    let question=text,receivedReply='';
     try{
       let previewIntro='';let voiced=false,introText='',replyDelivered=false,voiceAllowed=!audio;let finishSpeech:((text:string)=>void)|null=null;
       const updateSpeechProgress=(reply:string)=>{
@@ -323,31 +324,31 @@ export default function App(){
       };
       const intro=(reply:string)=>{
         if(version!==turnVersion.current||controller.signal.aborted||!voiceAllowed)return;textArrived();previewIntro=reply;if(!audio||question!==text)setDisplayTurn({question,source,reply});if(showStudyText){if(!studyPanelId)studyPanelId=addStudyPanel(question,reply);if(studyPanelId)updateStudyPanel(studyPanelId,question,reply);}
-        if(version!==turnVersion.current||controller.signal.aborted||!voiceAllowed||voiced||!autoVoice||!config?.fish_speech_configured)return;
+        if(version!==turnVersion.current||controller.signal.aborted||!voiceAllowed||voiced||!autoVoice||!canSpeak)return;
         introText=reply;voiced=true;turnLatency.chat_ms=Math.round(performance.now()-turnLatency.started);latency.current=turnLatency;turnLatency.armed=true;saveLatency(turnLatency);const continuation=new Promise<string>(resolve=>{finishSpeech=resolve;});speakTracked(reply,continuation);
       };
       const ready=(reply:string)=>{
         if(version!==turnVersion.current||controller.signal.aborted)return;
-        if(!voiceAllowed||replyDelivered)return;textArrived();replyDelivered=true;if(showStudyText){if(!studyPanelId)studyPanelId=addStudyPanel(question,reply);if(studyPanelId)updateStudyPanel(studyPanelId,question,reply);}
-        if(autoVoice&&config?.fish_speech_configured)updateSpeechProgress(reply);
+        if(!voiceAllowed||replyDelivered)return;textArrived();replyDelivered=true;receivedReply=reply;if(showStudyText){if(!studyPanelId)studyPanelId=addStudyPanel(question,reply);if(studyPanelId)updateStudyPanel(studyPanelId,question,reply);}
+        if(autoVoice&&canSpeak)updateSpeechProgress(reply);
         if(!audio||question!==text)lastAnswer.current={question,source,reply};setDisplayTurn({question,source,reply});if(turnLatency.status!=='failed')setNotice('');
         if(introText){
           if(!reply.startsWith(introText))throw new ApiError('A resposta inicial divergiu da resposta completa.',502);
           const rest=reply.slice(introText.length);
           finishSpeech?.(rest);
         }
-        if(autoVoice&&config?.fish_speech_configured&&!voiced){
+        if(autoVoice&&canSpeak&&!voiced){
           voiced=true;turnLatency.chat_ms=Math.round(performance.now()-turnLatency.started);
           latency.current=turnLatency;turnLatency.armed=true;saveLatency(turnLatency);
           speakTracked(reply);
         }
       };
-      const result=await streamChat({message:text,session_id:session.current,turn_id:turnLatency.turn_id,...(pendingHeardContext?{heard_context:pendingHeardContext}:{})},controller.signal,ready,intro,recognized=>{
+      const result=await streamChat({message:text,session_id:session.current,turn_id:turnLatency.turn_id,wake_confirmed:wakeConfirmed,...(pendingHeardContext?{heard_context:pendingHeardContext}:{})},controller.signal,ready,intro,recognized=>{
         if(version!==turnVersion.current||controller.signal.aborted)return;
         if(audio)microphone.acknowledge();
         // Do not abort here: the backend returns an explicit ignored result so
         // the UI can explain the wake-word preference instead of leaving silence.
-        if(prefsRef.current?.called_only&&!/\b(?:cronos|kronos|chronos)\b/i.test(recognized))return;
+        if(prefsRef.current?.called_only&&!wakeConfirmed&&!/\b(?:cronos|kronos|chronos)\b/i.test(recognized))return;
         if(stremioCommand(recognized)){controller.abort();runCommand(recognized);return;}if(music.current?.handle(recognized)){controller.abort();voice.stop();setChatOpen(false);return;}
         voiceAllowed=true;if(audio)turnLatency.recognition_ms=Math.round(performance.now()-turnLatency.started);
         if(runCommand(recognized)){controller.abort();return;}
@@ -361,10 +362,17 @@ export default function App(){
       if(result.warnings?.length)tell(result.warnings.join('\n'),true);
       else if(result.fallback_used)tell(`A integração principal não respondeu. Esta resposta veio da reserva ${result.provider_used}.`,false);
       else if(turnLatency.status!=='failed')setNotice('');
-      if(autoVoice&&config?.fish_speech_configured){ready(result.reply);}
-      else if(autoVoice)tell('A resposta está escrita, mas a voz não está configurada. Confira a configuração da voz no arquivo .env.',true);
+      if(autoVoice&&canSpeak){ready(result.reply);}
+      else if(autoVoice)tell('A resposta chegou, mas nenhuma voz está disponível. Confira Síntese de voz e a voz em português instalada no Windows.',true);
     }catch(error){
       if(version!==turnVersion.current||controller.signal.aborted)return;
+      // Once a complete answer reached playback, a later metadata/save failure
+      // must not silence it. A mismatching answer is still a hard failure.
+      if(receivedReply&&!/divergiu|não corresponde/.test(error instanceof Error?error.message:'')){
+        lastAnswer.current={question,source,reply:receivedReply};setDisplayTurn(lastAnswer.current);
+        tell('A resposta chegou. Não consegui confirmar o salvamento final desta conversa; a fala continua.',true);
+        return;
+      }
       turnLatency.status='failed';turnLatency.armed=false;saveLatency(turnLatency);controller.abort();voice.stop();
       if(studyPanelId&&!studyPanelsRef.current.find(panel=>panel.id===studyPanelId)?.reply)closeStudyPanel(studyPanelId);
       if(error instanceof ApiError&&error.detail?.tool_results){session.current=error.detail.session_id;setTools(old=>[...old,...error.detail.tool_results]);}
@@ -373,7 +381,7 @@ export default function App(){
       setDraft(audio&&question===text?'':question); // A pergunta permanece disponível; não repetir ações automaticamente.
     }finally{if(version===turnVersion.current){setBusy(false);inFlight.current=false;chatAbort.current=null;}}
   };
-  sendRef.current=(text,audio)=>sendText(text,'transcription',audio);
+  sendRef.current=(text,audio,wakeConfirmed)=>sendText(text,'transcription',audio,wakeConfirmed);
   const send=(event:React.FormEvent)=>{event.preventDefault();void sendText(draft);};
   const approve=async(result:ToolResult,accepted:boolean)=>{
     if(inFlight.current)return;inFlight.current=true;setBusy(true);
@@ -422,8 +430,8 @@ export default function App(){
       {!eyeActive&&!moduleActive&&<button className="reference-screen" aria-label="Ver minha tela" title="Ver minha tela" onClick={()=>screenMonitor.current?.start()}><MonitorUp size={16}/></button>}
     </div>
     <ScreenMonitor ref={screenMonitor} sessionId={()=>session.current} onSession={id=>{session.current=id;}}/>
-    {analyses.map(kind=><WindowSurface key={kind} minimized={minimizedWindows.includes('analysis:'+kind)||eyeActive||moduleActive}><AnalysisPanel key={kind} kind={kind} onMinimize={()=>minimizeWindow('analysis:'+kind)} sessionId={session.current} onClose={()=>setAnalyses(previous=>previous.filter(item=>item!==kind))} onBusy={active=>setAnalysisTasks(previous=>active?[...previous.filter(item=>item!==kind),kind]:previous.filter(item=>item!==kind))} onResult={(reply,result)=>{if(result?.session_id)session.current=result.session_id;lastAnswer.current={question:kind==='screen'?'Captura da tela':kind==='image'?'Análise de imagem':'Análise de arquivo',source:'text',reply};if(autoVoice&&config?.fish_speech_configured){analysisSpeechQueue.current.push(reply);setAnalysisSpeechRevision(value=>value+1);}}}/></WindowSurface>)}
-    {studio&&<WindowSurface minimized={!studioActive}><Suspense fallback={<div className="panel-loading">Abrindo Estúdio de Sites…</div>}><SiteStudio ref={studioHandle} initial={studio} active={studioActive} onWindowChange={setStudioWindow} onMinimize={()=>minimizeWindow('studio')} onClose={()=>setStudio(null)} onSpeak={text=>{if(autoVoice&&config?.fish_speech_configured){analysisSpeechQueue.current.push(text);setAnalysisSpeechRevision(v=>v+1);}}}/></Suspense></WindowSurface>}
+    {analyses.map(kind=><WindowSurface key={kind} minimized={minimizedWindows.includes('analysis:'+kind)||eyeActive||moduleActive}><AnalysisPanel key={kind} kind={kind} onMinimize={()=>minimizeWindow('analysis:'+kind)} sessionId={session.current} onClose={()=>setAnalyses(previous=>previous.filter(item=>item!==kind))} onBusy={active=>setAnalysisTasks(previous=>active?[...previous.filter(item=>item!==kind),kind]:previous.filter(item=>item!==kind))} onResult={(reply,result)=>{if(result?.session_id)session.current=result.session_id;lastAnswer.current={question:kind==='screen'?'Captura da tela':kind==='image'?'Análise de imagem':'Análise de arquivo',source:'text',reply};if(autoVoice&&canSpeak){analysisSpeechQueue.current.push(reply);setAnalysisSpeechRevision(value=>value+1);}}}/></WindowSurface>)}
+    {studio&&<WindowSurface minimized={!studioActive}><Suspense fallback={<div className="panel-loading">Abrindo Estúdio de Sites…</div>}><SiteStudio ref={studioHandle} initial={studio} active={studioActive} onWindowChange={setStudioWindow} onMinimize={()=>minimizeWindow('studio')} onClose={()=>setStudio(null)} onSpeak={text=>{if(autoVoice&&canSpeak){analysisSpeechQueue.current.push(text);setAnalysisSpeechRevision(v=>v+1);}}}/></Suspense></WindowSurface>}
     {studyOpen&&<WindowSurface minimized={!studyActive}><Suspense fallback={<div className="panel-loading">Abrindo Área de Estudos…</div>}><StudyWorkspace active={studyActive} onMinimize={()=>minimizeWindow('study')} onClose={()=>{setStudyOpen(false);setMinimizedWindows(items=>items.filter(item=>item!=='study'));}}/></Suspense></WindowSurface>}
     {stremio&&<WindowSurface minimized={minimizedWindows.includes('stremio')}><Suspense fallback={<div className="panel-loading">Abrindo Stremio…</div>}><StremioPanel key={JSON.stringify(stremio)} initial={stremio} onMinimize={()=>minimizeWindow('stremio')} onPlayback={setFilmPlaying} onClose={()=>setStremio(null)}/></Suspense></WindowSurface>}
     {prospect&&<WindowSurface minimized={minimizedWindows.includes('prospect')}><Suspense fallback={<div className="panel-loading">Abrindo prospecção…</div>}><ProspectPanel key={prospect.city+'|'+prospect.category+'|'+(prospect.report?.id||'')} initial={prospect} onMinimize={()=>minimizeWindow('prospect')} onClose={()=>setProspect(null)} onAsk={text=>{setProspect(null);void sendText(text);}}/></Suspense></WindowSurface>}

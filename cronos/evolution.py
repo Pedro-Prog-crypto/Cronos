@@ -122,83 +122,123 @@ class ResilientProvider:
         self.settings, self.primary = settings, primary
 
     async def reply(self, system, messages):
+        """Hedge a slow request without destroying a still usable answer.
+
+        Only generation is raced. Engine executes tools after the winning result;
+        no losing result can speak, write memory or execute its proposed tools.
+        """
         import asyncio
-        # Never replay raw mic audio to an incompatible API or silently change an explicit council request.
-        from cronos.reply_stream import reply_sink, intro_sink
-        delivered = False
-        first_reply_deadline = None
-        async def attempt(provider, timeout):
-            nonlocal first_reply_deadline
-            async def receive():
-                nonlocal first_reply_deadline
-                async with asyncio.timeout(min(timeout, FIRST_REPLY_TIMEOUT_SECONDS)) as deadline:
-                    first_reply_deadline = deadline
-                    return await provider.reply(system, messages)
-            return await asyncio.wait_for(receive(), timeout=timeout)
-        original_reply, original_intro = reply_sink.get(), intro_sink.get()
-        async def observe_reply(value):
-            nonlocal delivered
-            delivered = True
-            if first_reply_deadline is not None: first_reply_deadline.reschedule(None)
-            if original_reply is not None: await original_reply(value)
-        async def observe_intro(value):
-            nonlocal delivered
-            delivered = True
-            if first_reply_deadline is not None: first_reply_deadline.reschedule(None)
-            if original_intro is not None: await original_intro(value)
-        reply_token = reply_sink.set(observe_reply)
-        intro_token = intro_sink.set(observe_intro)
-        primary_timed_out = False
-        try:
-            timeout = float(self.settings.provider_timeout)
-            return await attempt(self.primary, timeout)
-        except asyncio.TimeoutError:
-            primary_timed_out = True
-            original = ProviderError('A integração principal demorou demais; tentando as reservas configuradas.', 504)
-        except ProviderError as exc:
-            original = exc
-        finally:
-            if reply_token is not None: reply_sink.reset(reply_token)
-            if intro_token is not None: intro_sink.reset(intro_token)
-        if delivered or any(m.get('audio_pcm') is not None or m.get('image') for m in messages):
-            if primary_timed_out:
-                raise ProviderError('A integração principal demorou demais e a resposta já havia começado; não troquei de IA no meio da fala.', 504)
-            raise original
-        policy = Routing.model_validate(read(self.settings)['routing'])
-        if not policy.enabled or not original.retryable:
-            if primary_timed_out:
-                raise ProviderError('A integração principal demorou demais e não há reserva automática ativa.', 504)
-            raise original
         from dataclasses import replace
-        usable = {p['id'] for p in provider_catalog(self.settings) if p['configured']}
+        from cronos.reply_stream import reply_sink, intro_sink
+        from cronos.conversation_transport import conversation_provider
+        from cronos.delivery import mark
+        original_reply, original_intro = reply_sink.get(), intro_sink.get()
+        tasks = {}; winner = None; errors = []; policy_loaded = False
+        reserves = []; next_start = 0.; reserve_deadline = None
+        # All registered conversation adapters encode the shared image format.
+        # Raw Live microphone audio still cannot be replayed to text-only APIs.
+        raw_input = any(m.get('audio_pcm') is not None for m in messages)
         loop = asyncio.get_running_loop()
-        deadline = loop.time() + FALLBACK_TOTAL_TIMEOUT_SECONDS
-        for provider_id in policy.fallbacks:
-            if provider_id == self.settings.provider or provider_id not in usable:
-                continue
-            remaining = deadline - loop.time()
-            if remaining <= 0:
-                break
-            reply_token = reply_sink.set(observe_reply)
-            intro_token = intro_sink.set(observe_intro)
+        progress = asyncio.Event()
+
+        async def receive(provider, provider_id, timeout):
+            route_task = asyncio.current_task()
+            async def publish(value, sink):
+                nonlocal winner
+                # wait_for creates a child task on Python 3.11, but not on
+                # 3.12+. Identify the route, never the SDK's current child.
+                task = route_task
+                if winner is None:
+                    winner = task
+                    for other in tasks:
+                        if other is not task and not other.done(): other.cancel()
+                    progress.set()
+                if winner is task and sink is not None: await sink(value)
+            async def on_reply(value): await publish(value, original_reply)
+            async def on_intro(value): await publish(value, original_intro)
+            a = reply_sink.set(on_reply); b = intro_sink.set(on_intro)
             try:
-                attempt_timeout = min(FALLBACK_ATTEMPT_TIMEOUT_SECONDS, remaining)
-                if provider_id == 'ollama':
-                    attempt_timeout = min(attempt_timeout, 8)
-                from cronos.conversation_transport import conversation_provider
-                result = await attempt(conversation_provider(replace(self.settings, provider=provider_id)), attempt_timeout)
-                return {**result, 'provider_used': provider_id, 'fallback_used': True}
-            except (ProviderError, asyncio.TimeoutError) as exc:
-                if delivered:
-                    if isinstance(exc, ProviderError): raise
-                    raise ProviderError('A resposta da integração de reserva começou, mas foi interrompida. Não troquei de IA no meio da fala.', 504) from None
-                continue
+                mark('answer_route_requested', provider=provider_id)
+                return await asyncio.wait_for(provider.reply(system, messages), timeout)
             finally:
-                if reply_token is not None: reply_sink.reset(reply_token)
-                if intro_token is not None: intro_sink.reset(intro_token)
-        if primary_timed_out:
-            raise ProviderError('A integração principal demorou demais e nenhuma reserva respondeu dentro do prazo.', 504)
-        raise original
+                reply_sink.reset(a); intro_sink.reset(b)
+
+        def start(provider, provider_id, timeout):
+            task = asyncio.create_task(receive(provider, provider_id, timeout))
+            tasks[task] = provider_id
+            return task
+
+        def load_reserves():
+            nonlocal policy_loaded, reserves, reserve_deadline
+            if policy_loaded: return
+            policy_loaded = True
+            if raw_input: return
+            try: policy = Routing.model_validate(read(self.settings)['routing'])
+            except (ProviderError,ValueError):
+                # Broken legacy routing cannot erase a working primary answer.
+                mark('answer_route_failed',provider='routing',error_type='configuration')
+                return
+            if policy.enabled:
+                usable = {p['id'] for p in provider_catalog(self.settings) if p['configured']}
+                reserves = list(dict.fromkeys(p for p in policy.fallbacks if p != self.settings.provider and p in usable))
+            reserve_deadline = loop.time() + FALLBACK_TOTAL_TIMEOUT_SECONDS
+
+        start(self.primary, self.settings.provider, float(self.settings.provider_timeout))
+        next_start = loop.time() + FIRST_REPLY_TIMEOUT_SECONDS
+        try:
+            while tasks:
+                if winner is None and loop.time() >= next_start:
+                    load_reserves()
+                    if reserves and len(tasks) < 2 and loop.time() < reserve_deadline:
+                        provider_id = reserves.pop(0)
+                        timeout = min(FALLBACK_ATTEMPT_TIMEOUT_SECONDS, reserve_deadline - loop.time())
+                        if provider_id == 'ollama': timeout = min(timeout, 8)
+                        try: provider = conversation_provider(replace(self.settings, provider=provider_id))
+                        except ProviderError as exc: errors.append(exc); next_start = loop.time(); continue
+                        start(provider, provider_id, timeout)
+                        next_start = loop.time() + FIRST_REPLY_TIMEOUT_SECONDS
+                # No busy loop when both slots are occupied or reserves exhausted.
+                timeout = max(0., next_start-loop.time()) if winner is None and (not policy_loaded or reserves and len(tasks)<2 and loop.time()<reserve_deadline) else None
+                notification = asyncio.create_task(progress.wait())
+                try:
+                    done, _ = await asyncio.wait([*tasks, notification], timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
+                finally:
+                    notification.cancel()
+                    await asyncio.gather(notification, return_exceptions=True)
+                progress.clear()
+                for task in list(tasks):
+                    if task not in done: continue
+                    provider_id = tasks.pop(task)
+                    try:
+                        result = task.result()
+                    except asyncio.CancelledError:
+                        if winner is task: raise
+                        continue
+                    except (ProviderError, asyncio.TimeoutError) as exc:
+                        error = exc if isinstance(exc, ProviderError) else ProviderError('A integração demorou demais e atingiu seu limite de geração.', 504)
+                        mark('answer_route_failed', provider=provider_id, http_status=error.http_status or error.status)
+                        if winner is task: raise error
+                        if provider_id == self.settings.provider and not error.retryable: raise error
+                        errors.append(error); load_reserves(); next_start = loop.time()
+                        continue
+                    if winner is not None and winner is not task: continue
+                    # Providers validate their result before returning. One result
+                    # leaves this layer; tools and persistence stay with Engine.
+                    return result if provider_id == self.settings.provider else {**result, 'provider_used':provider_id, 'fallback_used':True}
+                while not tasks and reserves and winner is None and loop.time() < reserve_deadline:
+                    provider_id = reserves.pop(0)
+                    timeout = min(FALLBACK_ATTEMPT_TIMEOUT_SECONDS, reserve_deadline-loop.time())
+                    if provider_id == 'ollama': timeout=min(timeout,8)
+                    try: provider = conversation_provider(replace(self.settings, provider=provider_id))
+                    except ProviderError as exc: errors.append(exc); continue
+                    start(provider, provider_id, timeout)
+                    next_start = loop.time() + FIRST_REPLY_TIMEOUT_SECONDS
+            if errors: raise errors[-1]
+            raise ProviderError('Nenhuma integração configurada concluiu a resposta.', 503)
+        finally:
+            for task in tasks:
+                if not task.done(): task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
 
 
 def install_api(app, authenticate):

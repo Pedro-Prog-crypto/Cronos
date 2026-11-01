@@ -127,7 +127,7 @@ class NativeConversation:
         except OSError:pass # The current recording stays available in RAM.
         self.ui.phase('Transcrevendo a pergunta')
         client=self.connection.client
-        speech_queue=queue.Queue(maxsize=2);speaker_error=[];playback_completed=None;voice_source=None;question=None;full_reply=None
+        speech_queue=queue.Queue(maxsize=2);speaker_error=[];playback_completed=None;voice_source=None;question=None;full_reply=None;stage='recognition'
         self.speaker=self.speaker_factory(self.cancel)
         def metric(status):
             data={'turn_id':turn,'source':'voice','chat_ms':round((time.perf_counter()-started)*1000),
@@ -185,7 +185,7 @@ class NativeConversation:
                 try:pending_file.unlink(missing_ok=True)
                 except OSError:pass
                 record({'stage':'control_dispatched','turn_id':turn});metric('completed');return True
-            metric('waiting');self.ui.phase('Preparando a resposta');speaker_thread.start()
+            stage='answer';metric('waiting');self.ui.phase('Preparando a resposta');speaker_thread.start()
             introduced='';delivered=False;completed=False
             from cronos.wake import settings
             body={'message':question,'session_id':self.session,'screen_context':needs_screen(question) and settings()['screen_enabled']}
@@ -222,6 +222,7 @@ class NativeConversation:
             except httpx.HTTPError:
                 if not full_reply:raise
             if not full_reply:raise RuntimeError('A conversa terminou sem resposta completa.')
+            stage='voice'
             enqueue(None)
             while speaker_thread.is_alive() and not self.cancel.wait(.1):pass
             if self.cancel.is_set():metric('cancelled');return False
@@ -232,12 +233,16 @@ class NativeConversation:
             self.pending=None
             record({'stage':'completed','turn_id':turn,'voice':voice_source,'memory_confirmed':completed,'elapsed_ms':round((time.perf_counter()-started)*1000)})
             metric('completed');return True
-        except Exception:
+        except Exception as exc:
             if self.cancel.is_set():metric('cancelled');return False
             metric('failed')
             if full_reply:self.ui.card('Resposta recebida · confira o áudio',full_reply)
-            else:self.ui.card('A pergunta foi preservada','Não consegui concluir a resposta. No indicador do Cronos, escolha “Tentar novamente” para reenviar a mesma gravação.')
-            record({'stage':'failed','turn_id':turn,'question_recognized':bool(question),'answer_received':bool(full_reply)})
+            else:
+                label={'recognition':'reconhecer sua gravação','answer':'obter a resposta da IA','voice':'reproduzir a voz'}[stage]
+                status=exc.response.status_code if isinstance(exc,httpx.HTTPStatusError) else None
+                suffix=f' Código HTTP {status}.' if status else ''
+                self.ui.card('A pergunta foi preservada',f'Não consegui {label}.{suffix} No indicador, escolha “Tentar novamente” para reenviar a gravação. As etapas e tempos estão em Entendimento de linguagem → Entrega da última pergunta.')
+            record({'stage':'failed','failed_stage':stage,'error_type':type(exc).__name__,'http_status':exc.response.status_code if isinstance(exc,httpx.HTTPStatusError) else None,'turn_id':turn,'question_recognized':bool(question),'answer_received':bool(full_reply)})
             return False
         finally:
             if cancel.is_set():record({'stage':'cancelled','turn_id':turn})

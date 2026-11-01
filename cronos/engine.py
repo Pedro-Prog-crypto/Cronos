@@ -63,7 +63,7 @@ class Engine:
         return json.dumps({"truncated_for_context": True, "result_excerpt": data[:budget],
                            "note": "O resultado completo está no registro local. Para arquivos/notas, continue a leitura pelos offsets e peça apenas os trechos necessários."}, ensure_ascii=False)
 
-    async def chat(self, session, message, audio=None, heard_context=None,screen_context=True,page_context=None):
+    async def chat(self, session, message, audio=None, heard_context=None,screen_context=True,page_context=None,wake_confirmed=False):
         if getattr(self,'updating',False):raise ProviderError('Atualização em andamento. Aguarde a verificação antes de enviar uma nova pergunta.')
         self.phase="recall"
         started=time.perf_counter();provider_seconds=0;search_seconds=0;provider_calls=0
@@ -175,7 +175,7 @@ class Engine:
                 from cronos.delivery import mark
                 mark('question_recognized',characters=len(recognized_text));mark('question_received',characters=len(recognized_text))
                 message=recognized_text;image=messages[-1].get('image');messages[-1]={'role':'user','content':message,**({'image':image} if image else {})};audio=None
-                if prefs and prefs.called_only:
+                if prefs and prefs.called_only and not wake_confirmed:
                     import re
                     if not re.search(r'\b(?:cronos|kronos|chronos)\b',message,re.I):
                         return {'session_id':str(session),'reply':'','recognized_text':message,'ignored':True,'topics':[],'notes':[],'tool_results':[],'warnings':[],'timings_ms':{'generation':round(provider_seconds*1000),'provider_calls':provider_calls,'total':round((time.perf_counter()-started)*1000)}}

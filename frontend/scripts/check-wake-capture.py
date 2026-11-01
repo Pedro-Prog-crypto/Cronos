@@ -27,7 +27,8 @@ async def main():
    frames=r.request.post_data_buffer
    with wave.open(io.BytesIO(frames),'rb') as wav:assert (wav.getframerate(),wav.getnchannels())==(16000,1)
    calls.append(await page.evaluate('performance.now()'))
-   events=[{'type':'transcript','text':'Cronos, explique filosofia'},{'type':'result','result':{'reply':'Explicação recebida.','recognized_text':'Cronos, explique filosofia','session_id':'wake-fixture','tool_results':[]}}]
+   assert r.request.headers.get('x-cronos-wake-confirmed')=='1'
+   events=[{'type':'transcript','text':'Explique filosofia'},{'type':'result','result':{'reply':'Explicação recebida.','recognized_text':'Explique filosofia','session_id':'wake-fixture','tool_results':[]}}]
    await r.fulfill(body='\n'.join(json.dumps(e) for e in events)+'\n',content_type='application/x-ndjson')
   await page.route('**/chat/audio/stream*',chat)
   async def asr(r):recognition.append(True);await r.fulfill(json={'text':'Ambiente'})

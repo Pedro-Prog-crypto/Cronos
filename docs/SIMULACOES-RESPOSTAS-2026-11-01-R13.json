@@ -1,0 +1,25 @@
+{
+  "simulations": 10000,
+  "passed": 10000,
+  "unexpected_failures": 0,
+  "scenario_counts": {
+    "slow_answer_without_reserve": 1000,
+    "primary_429_reserve_answers": 1000,
+    "reserve_429_primary_survives": 1000,
+    "reserve_answers_cancels_loser": 1000,
+    "intro_keeps_one_speaker": 1000,
+    "user_cancel_cleans_both": 1000,
+    "auth_denial_is_reported": 1000,
+    "two_asr_fail_local_recovers": 1000,
+    "asr_primary_survives_bad_reserve": 1000,
+    "screen_reserve_single_tool_proposal": 1000
+  },
+  "expected_outcomes": {
+    "answer_returned": 8000,
+    "explicit_cancel_handled": 1000,
+    "auth_denial_reported": 1000
+  },
+  "seconds": 13.891,
+  "errors": [],
+  "scope": "Controlled provider/ASR scheduling, failures, cancellation and single-winner tool proposals. No live paid integrations, physical microphone, Windows speech or image rendering."
+}

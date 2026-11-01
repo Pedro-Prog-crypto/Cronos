@@ -51,7 +51,7 @@ def test_real_check_requires_actual_computed_answer_and_audio(settings):
         data=r.json();assert data['audio_base64'] and data['answer'].startswith('O resultado é ')
         assert Fish.spoken[-1]==data['answer']
         report=client.get('/voice/delivery',headers=AUTH).json()
-        assert [e['stage'] for e in report['turns'][0]['events']]==['question_received','answer_requested','answer_received','voice_requested','voice_received']
+        assert [e['stage'] for e in report['turns'][0]['events']]==['question_received','answer_requested','answer_route_requested','answer_received','voice_requested','voice_received']
 
 
 def test_canned_greeting_never_passes_integration_check(settings):

@@ -65,7 +65,7 @@ class CompatibleProvider:
         spec = self.spec
         key = os.getenv(spec.key_env, "").strip() if spec.key_env else ""
         if spec.key_env and not key:
-            raise ProviderError(f"Configure {spec.key_env} para usar {spec.id}.")
+            raise ProviderError(f"Configure {spec.key_env} para usar {spec.id}.",503,kind='configuration')
         base = checked_url(spec.base_url)
         # Canonical image messages are shared by Studio's vision failover. Convert
         # only at the transport boundary; a text-only model may reject and yield.

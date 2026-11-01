@@ -47,28 +47,26 @@ async def gemini_transcribe(settings, audio, mime_type):
         raise ProviderError('O reconhecimento alternativo não conseguiu transcrever a gravação. O áudio pode ser reenviado pelo botão de tentar novamente.',502) from None
 
 
-async def first_valid_transcription(primary, alternative=None, hedge_after=2):
-    """Start a reserve without discarding a primary that is still recognizing."""
-    tasks=[];errors=[]
-    def start(recognizer):
-        task=asyncio.create_task(recognizer());tasks.append(task);return task
-    def result(task):
-        value=task.result()
-        if not isinstance(value,str) or not value.strip():raise ValueError('empty transcription')
-        return value.strip()
-    first=start(primary)
+async def first_valid_transcription(primary, alternative=None, hedge_after=2, local=None):
+    """Race only the same recorded utterance; never discard a pending recognizer."""
+    import time
+    factories=[f for f in (primary,alternative,local) if f is not None]
+    tasks=[];errors=[];pending=set();index=0;next_start=0.
+    def start():
+        nonlocal index,next_start
+        task=asyncio.create_task(factories[index]());index+=1
+        tasks.append(task);pending.add(task);next_start=time.monotonic()+hedge_after
     try:
-        pending={first}
-        if alternative is not None:
-            done,pending=await asyncio.wait(pending,timeout=hedge_after)
-            if done:
-                try:return result(first)
-                except Exception as exc:errors.append(exc)
-            pending.add(start(alternative))
-        while pending:
-            done,pending=await asyncio.wait(pending,return_when=asyncio.FIRST_COMPLETED)
+        start()
+        while pending or index<len(factories):
+            if index<len(factories) and (not pending or time.monotonic()>=next_start):start()
+            timeout=max(0.,next_start-time.monotonic()) if index<len(factories) else None
+            done,pending=await asyncio.wait(pending,timeout=timeout,return_when=asyncio.FIRST_COMPLETED)
             for task in sorted(done,key=tasks.index):
-                try:return result(task)
+                try:
+                    value=task.result()
+                    if not isinstance(value,str) or not value.strip():raise ValueError('empty transcription')
+                    return value.strip()
                 except Exception as exc:errors.append(exc)
         raise errors[-1] if errors else ProviderError('Não consegui reconhecer a gravação.',502)
     finally:

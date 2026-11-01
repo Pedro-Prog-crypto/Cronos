@@ -2,6 +2,8 @@ import React,{useEffect,useRef,useState} from 'react';
 import {jsonApi} from '../api';
 const labels:Record<string,string>={audio_received:'Áudio chegou ao servidor',recognition_requested:'Pedido de reconhecimento iniciado',recognition_http:'Retorno HTTP do reconhecimento',recognition_response:'Reconhecedor devolveu texto',recognition_error:'Falha do serviço de reconhecimento',question_recognized:'Pergunta reconhecida',question_received:'Pergunta chegou à conversa',answer_requested:'Pedido à IA iniciado',answer_received:'Resposta da IA recebida',voice_requested:'Texto enviado para preparar a voz',voice_received:'Áudio da voz recebido',playback_started:'Reprodução iniciada',failed:'Falha nesta etapa',cancelled:'Pedido interrompido no aplicativo'};
 labels.playback_completed='Reprodução nativa concluída';
+labels.answer_route_requested='Rota da IA iniciada';
+labels.answer_route_failed='Rota da IA indisponível; verificando alternativas';
 export function DeliveryStatus({microphone,voice}:{microphone:any;voice:any}){
  const [data,setData]=useState<any>(null),[error,setError]=useState(''),[loadError,setLoadError]=useState(''),[copied,setCopied]=useState(false),[showReport,setShowReport]=useState(false);
  useEffect(()=>{let live=true;const load=async()=>{try{const value=await jsonApi('/voice/delivery');if(live){setData(value);setLoadError('');}}catch{if(live)setLoadError('Não consegui consultar as etapas de entrega.');}};void load();const timer=setInterval(load,2000);return()=>{live=false;clearInterval(timer);};},[]);

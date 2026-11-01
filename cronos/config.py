@@ -36,6 +36,7 @@ class Settings:
     gemini_transport: str = "live"
     gemini_live_model: str = "models/gemini-3.1-flash-live-preview"
     gemini_live_thinking_budget: int = 0
+    direct_audio_chat: bool = False
 
     def __post_init__(self):
         if self.gemini_transport not in {'live','rest'}:
@@ -59,6 +60,7 @@ class Settings:
             gemini_transport=os.getenv('GEMINI_TRANSPORT','live').strip().lower(),
             gemini_live_model=os.getenv('GEMINI_LIVE_MODEL','models/gemini-3.1-flash-live-preview').strip(),
             gemini_live_thinking_budget=max(-1,min(8192,int(os.getenv('GEMINI_LIVE_THINKING_BUDGET','0')))),
+            direct_audio_chat=os.getenv('CRONOS_DIRECT_AUDIO_CHAT','0').casefold() in {'1','true','yes'},
             fish_key=os.getenv("FISH_API_KEY", ""),
             fish_reference=os.getenv("FISH_REFERENCE_ID", ""),
             fish_model=os.getenv("FISH_MODEL", "").strip().lower(),

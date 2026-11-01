@@ -1,0 +1,125 @@
+{
+  "revision": "answer-recovery-2026-11-01-r13",
+  "generated_at_utc": "2026-11-01T22:27:29.247334+00:00",
+  "python_suite": {
+    "passed": 725,
+    "failures": 0,
+    "errors": 0,
+    "seconds": 92.804,
+    "deprecation_warnings": 9
+  },
+  "reproduced_before_fix": {
+    "valid_answers_cancelled": 2,
+    "failed_before": 2,
+    "passed_after": 2
+  },
+  "controlled_recovery_simulations": {
+    "simulations": 10000,
+    "passed": 10000,
+    "unexpected_failures": 0,
+    "scenario_counts": {
+      "slow_answer_without_reserve": 1000,
+      "primary_429_reserve_answers": 1000,
+      "reserve_429_primary_survives": 1000,
+      "reserve_answers_cancels_loser": 1000,
+      "intro_keeps_one_speaker": 1000,
+      "user_cancel_cleans_both": 1000,
+      "auth_denial_is_reported": 1000,
+      "two_asr_fail_local_recovers": 1000,
+      "asr_primary_survives_bad_reserve": 1000,
+      "screen_reserve_single_tool_proposal": 1000
+    },
+    "expected_outcomes": {
+      "answer_returned": 8000,
+      "explicit_cancel_handled": 1000,
+      "auth_denial_reported": 1000
+    },
+    "seconds": 13.891,
+    "errors": [],
+    "scope": "Controlled provider/ASR scheduling, failures, cancellation and single-winner tool proposals. No live paid integrations, physical microphone, Windows speech or image rendering."
+  },
+  "compiled_browser_conversation": {
+    "checks_passed": 23,
+    "checks": [
+      "compiled App plays first audio before complete provider response",
+      "measured start under five seconds with controlled 150 ms AI / 100 ms TTS fixtures",
+      "timing history is reachable from the stopwatch and records a single turn",
+      "Escape cancels pending server generation and logs cancellation",
+      "failed request stays in history instead of disappearing from measurements",
+      "next question responds after cancellation and failure, without a stale lock",
+      "AudioWorklet manual send includes actual ASR and endpoint delay in the same question timer",
+      "one receipt ID follows actual microphone bytes through recognition, AI, Fish response and playback",
+      "ASR failure is recorded even when no chat request can be sent",
+      "same recording is resent after ASR failure, its actual transcript reaches AI and the answer reaches TTS",
+      "13-second recognition completes and reaches real audio playback instead of being aborted at the old 12-second deadline",
+      "9-second synthesis finishes with audible playback instead of being killed by the former 8-second voice deadline",
+      "TTS failure keeps the open Language panel unchanged, retains the error past final AI metadata, and only opens written cards when requested",
+      "native audio leaves transcription state on handoff, receives its recognized question and speaks before final metadata",
+      "native answer failure preserves the actual recognized question for retry, without redundant ASR or the voice placeholder",
+      "diagnostic button submits a fresh arithmetic question and plays the computed answer using the same backend and TTS path",
+      "diagnostic stays copyable when the embedded browser does not provide clipboard permission",
+      "open-window microphone ASR reaches AI and the identical complete response is read by controlled device voice when online TTS fails; no panel popup or closure",
+      "10-second online synthesis hedge reads the actual answer locally and a late online completion does not restart speech",
+      "hung AudioContext activation is bounded and reads the same response through device speech instead of leaving generating forever",
+      "Escape cancels active device speech without replaying a queued continuation or changing to another voice",
+      "no Fish model and no browser voices: compiled UI plays the actual answer through the Windows WAV fallback contract",
+      "metadata failure after a complete reply preserves answer playback and reports unconfirmed persistence instead of cancelling the voice"
+    ],
+    "first_audio_ms": 293.0,
+    "response_ms": 293.0,
+    "environment": "Chromium + compiled UI + real local FastAPI/HTTP + real SSE parser and WAV playback; external AI and TTS controlled, synthetic microphone, controlled ASR/AI/TTS, no physical Windows microphone/speaker validation"
+  },
+  "compiled_image_wall": {
+    "passed": 12,
+    "scenarios": [
+      "12 decoded unique images despite failures and duplicate pixels",
+      "fullscreen wall moves left, three rows, no transcript",
+      "streaming text does not restart identical media searches",
+      "spoken Plato changes the subject instead of retaining Socrates",
+      "late cancelled search cannot overwrite a newer topic",
+      "empty search is not permanently cached; retry recovers",
+      "all proxy failures report failure and allow working retry",
+      "new page of images is requested while narration continues",
+      "portrait photographs adapt to two rows without forced cropping",
+      "small viewport preserves all photographs and a reachable close button",
+      "closing releases every object URL with no browser errors",
+      "main App sends a study question, plays real WAV and renews images during speech"
+    ],
+    "external_media": "mocked",
+    "browser": "Chromium"
+  },
+  "resident_lifecycle": {
+    "checks_passed": 6,
+    "checks": [
+      "real loopback backend starts without creating a browser or visible WebView",
+      "authenticated assistant state exposes a shared session and separates name activation from opening",
+      "closing and reopening two controlled desktop views keeps the real backend alive",
+      "both desktop views reuse the same non-private WebView profile; no permission auto-grant is installed",
+      "explicit shutdown removes the private endpoint and terminates the resident",
+      "a restarted backend preserves its origin/port and rotates its private access token"
+    ],
+    "environment": "Real Python subprocess + Uvicorn/HTTP lifecycle on Linux, controlled WebView API. Windows microphone/camera permission persistence not physically validated."
+  },
+  "wake_without_repeating_name": {
+    "passed": true,
+    "scope": "PASS: actual voice without a wake word sends no cloud/ASR request; a woken question closes with continuous noise in 1362 ms after speech stops; exactly one request, microphone stays open, and a fresh phrase needs a new wake word. Keyword/provider responses mocked."
+  },
+  "typescript": "passed",
+  "frontend_build": "passed",
+  "network_validation": {
+    "live_gemini_fish_tested": false,
+    "reason": "Current managed policy restricts external destinations; Gemini/Fish are not allowlisted and no provider credentials are bound to this environment. No policy bypass attempted."
+  },
+  "physical_windows_validation": {
+    "microphone": false,
+    "speakers": false,
+    "sapi_voice": false,
+    "permissions": false
+  },
+  "notes": [
+    "Controlled simulations include expected authentication denials and explicit cancellations. They are not 10,000 successful calls to real cloud accounts.",
+    "Actual Chromium WAV playback and real local HTTP backend were exercised; AI/ASR/TTS were controlled.",
+    "Windows SAPI process payload, WAV output contract and child termination were verified with process fixtures. No physical Windows SAPI execution occurred.",
+    "No universal zero-error or fixed-latency guarantee."
+  ]
+}
