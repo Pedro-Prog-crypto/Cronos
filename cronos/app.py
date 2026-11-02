@@ -2,6 +2,7 @@ import asyncio
 import json
 import re
 import secrets
+import httpx
 from pathlib import Path
 from contextlib import asynccontextmanager
 from contextlib import suppress
@@ -146,11 +147,20 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         recognition_task=asyncio.create_task(warm_recognition())
         update_task=asyncio.create_task(app.state.updater.maintain())
         eye_task=asyncio.create_task(app.state.eye.maintain())
+        async def brain_presence():
+            while True:
+                if settings.privacy_mode == 'online' and app.state.engine.brain.configured():
+                    try: await app.state.engine.brain.heartbeat()
+                    except (OSError, ValueError, ProviderError, httpx.HTTPError): pass
+                await asyncio.sleep(20)
+        brain_task=asyncio.create_task(brain_presence())
         try:
             yield
         finally:
             if app.state.engine.memory_refresh is not None:
                 await asyncio.gather(app.state.engine.memory_refresh, return_exceptions=True)
+            brain_task.cancel()
+            with suppress(asyncio.CancelledError):await brain_task
             await app.state.live_screen.close()
             if app.state.studio is not None: await app.state.studio.close()
             update_task.cancel()
@@ -266,6 +276,8 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
             configured = bool(settings.gemini_key) if settings.provider == 'gemini' else settings.provider == 'ollama'
             warning = str(exc)
         return {"provider": current.provider, "gemini_configured": bool(settings.gemini_key),
+                "brain_cloud_configured": app.state.engine.brain.configured(),
+                "brain_cloud_active": app.state.engine.brain.configured() and current.privacy_mode == 'online',
                 "provider_model": next((item['model'] for item in provider_catalog(current) if item['id'] == current.provider), None) if warning is None else None,
                 "provider_configured": configured, "configuration_warning": warning,
                 "privacy_mode": settings.privacy_mode,
@@ -276,7 +288,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 # available. Native Live audio bypasses Fish/Vosk and cannot
                 # use the normal text-provider failover after recognition.
                 "native_voice_available":__import__('sys').platform=='win32',
-                "direct_audio_chat":current.direct_audio_chat and current.privacy_mode=="online" and current.provider=="gemini" and current.gemini_transport=="live" and not (
+                "direct_audio_chat":not (app.state.engine.brain.configured() and current.privacy_mode == 'online') and current.direct_audio_chat and current.privacy_mode=="online" and current.provider=="gemini" and current.gemini_transport=="live" and not (
                     current.transcription_provider == "vosk" or
                     current.transcription_provider == "fish" and bool(current.fish_key) and current.privacy_mode == "online"
                 ),
@@ -307,7 +319,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 raise HTTPException(exc.status, str(exc)) from exc
             except (OSError, ValueError):
                 raise HTTPException(500, "Não foi possível ler ou salvar personalidade/memória.")
-        request.app.state.features.record("language", "passed", "Uma conversa foi processada e salva. Não certifica precisão de todas as respostas.")
+        request.app.state.features.record("language", "passed", "Uma conversa foi processada. O histórico fica no Brain Cloud quando essa rota é usada; não certifica precisão da resposta.")
         return result
 
     async def conversation_stream(session,message,request,audio=None,audio_fallback=None,heard_context=None,screen_context=True,page_context=None,wake_confirmed=False):
@@ -368,7 +380,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                                 finally:request.app.state.engine.phase='idle'
                         if not result.get('ignored') and ((spoken is not None and spoken!=result['reply']) or (intro_text is not None and not result['reply'].startswith(intro_text))):
                             raise ProviderError('A resposta transmitida não corresponde ao resultado final.',502)
-                        request.app.state.features.record('language','passed','Conversa processada e salva.')
+                        request.app.state.features.record('language','passed','Conversa processada; a rota Brain Cloud guarda o histórico remoto.')
                         await queue.put({'type':'result','result':result})
                     except TimeoutError:
                         await queue.put({'type':'error','status':504,'detail':{'message':'Não consegui iniciar a resposta dentro do prazo de recuperação. Sua pergunta foi preservada; tente novamente sem repetir.'}})

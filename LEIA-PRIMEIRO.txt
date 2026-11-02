@@ -56,3 +56,12 @@ Ha recuperacao local de reconhecimento WAV e voz de reserva do Windows em portug
 O pacote conserva imagens, memoria e separacao entre chamar e abrir a janela.
 Encerre o assistente antigo antes de usar esta pasta.
 Detalhes e limites reais: docs\RESPOSTAS-2026-11-01-R13.md
+
+REVISAO DE 02/11/2026 — BRAIN CLOUD E CAPTURA DE VOZ (R14)
+No Brain Cloud, abra Integracao, prepare a conexao e baixe cronos-desktop.json.
+Nesta pasta, execute CONECTAR-BRAIN-CLOUD.bat e escolha o JSON. A conexao fica
+no vault privado e continua disponivel quando atualizar o codigo do Cronos.
+Com o Brain configurado e disponivel, conversas de raciocinio seguem para ele;
+voz e interface ficam no Cronos. Acoes do computador usam o motor local.
+O envio manual do microfone espera som captado antes de habilitar. Detalhes e limites:
+docs\BRAIN-CLOUD-INTEGRACAO.md

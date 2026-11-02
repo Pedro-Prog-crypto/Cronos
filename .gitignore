@@ -3,6 +3,7 @@ __pycache__/
 .pytest_cache/
 .env
 vault/
+cronos-desktop.json
 *.egg-info/
 config/providers.json
 config/evolution.json

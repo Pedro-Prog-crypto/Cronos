@@ -110,6 +110,17 @@ class Memory:
                                                 (str(session), max(0, limit))).fetchall()))
         return [dict(row) for row in rows]
 
+    def record_brain_dialogue(self, session: UUID, message: str, reply: str) -> None:
+        """Cache a Brain turn for the desktop UI and local device-action context.
+
+        Brain Cloud owns the durable reasoning history and semantic memory;
+        this mirror does not create Obsidian notes or knowledge topics.
+        """
+        stamp = datetime.now(timezone.utc).isoformat()
+        with self.connect() as db:
+            db.executemany("INSERT INTO turns(session,role,content,created) VALUES(?,?,?,?)",
+                           [(str(session), 'user', message, stamp), (str(session), 'assistant', reply, stamp)])
+
     def _markdown_files(self):
         for directory, folders, filenames in os.walk(self.vault, followlinks=False):
             folders[:] = [f for f in folders if not f.startswith(".") and not (Path(directory)==self.vault and f=='Conversas')]

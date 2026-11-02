@@ -25,6 +25,8 @@ class Engine:
         self.settings, self.memory, self.registry, self.provider = settings, memory, registry, provider
         self.screen_observations = {}
         self.memory_refresh = None
+        from cronos.brain_cloud import BrainCloud
+        self.brain = BrainCloud(settings.vault)
 
     async def recall(self, message):
         # Pick up newly copied notes, but never wait for an entire large vault
@@ -65,6 +67,41 @@ class Engine:
 
     async def chat(self, session, message, audio=None, heard_context=None,screen_context=True,page_context=None,wake_confirmed=False):
         if getattr(self,'updating',False):raise ProviderError('Atualização em andamento. Aguarde a verificação antes de enviar uma nova pergunta.')
+        # Brain Cloud owns ordinary reasoning and future memory when paired.
+        # Device actions, local screen/audio transports and factual searches that
+        # need desktop tools retain the existing local engine.
+        brain_warning = None
+        if (self.provider is None and audio is None and self.settings.privacy_mode == 'online'
+                and self.brain.configured() and not page_context and not heard_context):
+            from cronos.brain_cloud import local_action
+            from cronos.study_intent import requests_exhaustive_lookup
+            live_screen = getattr(self, 'live_screen', None)
+            if (not local_action(message) and not requests_exhaustive_lookup(message)
+                    and not (screen_context and live_screen and live_screen.active(session))
+                    and len(message) <= 8000):
+                try:
+                    started = time.perf_counter()
+                    self.phase = 'brain'
+                    answer = await self.brain.chat(session, message)
+                    reply = conversation_text(answer['text'])
+                    if not reply: raise ProviderError('Brain Cloud devolveu uma resposta sem texto falável.', 502)
+                    from cronos.reply_stream import deliver
+                    from cronos.delivery import mark
+                    mark('answer_received', provider='brain-cloud', characters=len(reply))
+                    await deliver(reply)
+                    warnings = answer.get('warnings') if isinstance(answer.get('warnings'), list) else []
+                    try:
+                        await asyncio.to_thread(self.memory.record_brain_dialogue, session, message, reply)
+                    except (OSError, ValueError, sqlite3.Error):
+                        warnings.append('A resposta foi recebida do Brain, mas o histórico local da interface não foi atualizado.')
+                    timings = {'generation': round((time.perf_counter()-started)*1000), 'provider_calls': 1,
+                               'total': round((time.perf_counter()-started)*1000)}
+                    save_timings(timings)
+                    return {'session_id':str(session), 'reply':reply, 'topics':[], 'notes':[],
+                            'tool_results':[], 'warnings':warnings,
+                            'provider_used':'brain-cloud', 'fallback_used':False, 'timings_ms':timings}
+                except ProviderError as exc:
+                    brain_warning = 'Brain Cloud indisponível; resposta tentada com as integrações locais. ' + str(exc)
         self.phase="recall"
         started=time.perf_counter();provider_seconds=0;search_seconds=0;provider_calls=0
         news_query=current_news_query(message)
@@ -244,6 +281,8 @@ class Engine:
         timings={'recall':round((recall_done-started)*1000),'generation':round(provider_seconds*1000),'search':round(search_seconds*1000),'provider_calls':provider_calls,'memory_write':round((finished-write_started)*1000),'total':round((finished-started)*1000)}
         save_timings(timings)
         return {"session_id": str(session), "reply": final["reply"], "topics": [t["title"] for t in final["topics"]],
-                "notes": notes, "tool_results": results, "warnings": list(self.memory.warnings),
+                "notes": notes, "tool_results": results, "warnings": [*self.memory.warnings, *([brain_warning] if brain_warning else [])],
                 "provider_used":final.get("provider_used", self.settings.provider),
-                "fallback_used":final.get("fallback_used", False), "timings_ms":timings,**({"recognized_text":recognized_text} if recognized_text is not None else {})}
+                "fallback_used":final.get("fallback_used", False) or brain_warning is not None,
+                "timings_ms":timings,**({'brain_warning':brain_warning} if brain_warning else {}),
+                **({"recognized_text":recognized_text} if recognized_text is not None else {})}
