@@ -172,6 +172,25 @@ class Memory:
             rows = db.execute("SELECT id,title,created FROM personal_goals WHERE status='active' ORDER BY id DESC LIMIT 8").fetchall()
         return [dict(row) for row in rows]
 
+    def conversation_context(self, *, brief=False, proactive=True):
+        """Read one consistent memory snapshot without four SQLite opens per turn."""
+        now = datetime.now(SAO_PAULO)
+        today = now.date()
+        with self.connect() as db:
+            preferences = [] if brief else [dict(row) for row in db.execute(
+                'SELECT kind,content FROM procedural_preferences ORDER BY updated DESC LIMIT 5')]
+            goals = [] if brief else [dict(row) for row in db.execute(
+                "SELECT id,title,created FROM personal_goals WHERE status='active' ORDER BY id DESC LIMIT 8")]
+            events = [dict(row) for row in db.execute(
+                "SELECT id,title,kind,due_date,last_nudge FROM temporal_events "
+                "WHERE status='active' AND due_date BETWEEN ? AND ? ORDER BY due_date,id LIMIT 20",
+                (today.isoformat(), (today + timedelta(days=21)).isoformat()))]
+        commitments = [{**row, 'days_left': (date.fromisoformat(row['due_date'])-today).days}
+                       for row in events]
+        nudge = next((event for event in commitments if event['days_left'] <= 14 and
+                      (not event['last_nudge'] or (now-datetime.fromisoformat(event['last_nudge'])).total_seconds() >= 48*3600)), None) if proactive else None
+        return preferences, commitments, goals, nudge
+
     def set_goal_status(self, ident, status):
         if status not in {'completed', 'cancelled'}:
             raise ValueError('Estado inválido.')

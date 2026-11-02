@@ -16,6 +16,8 @@ from cronos.temporal_memory import plain
 
 from cronos.providers import ProviderError, make_provider
 
+NEWS_PREFETCH_TIMEOUT_SECONDS = 8
+
 
 class TurnError(ProviderError):
     def __init__(self, message, session, results,status=503):
@@ -78,11 +80,9 @@ class Engine:
         from cronos.study_intent import is_study_request
         explanation = audio is None and is_study_request(message)
         cognitive = plan_for(message, set(self.registry.tools)) if audio is None else None
-        preferences = await asyncio.to_thread(self.memory.procedural_context)
-        commitments = await asyncio.to_thread(self.memory.upcoming_events, 21)
-        goals = await asyncio.to_thread(self.memory.active_goals)
-        nudge = (await asyncio.to_thread(self.memory.due_suggestion)
-                 if not prefs or prefs.proactive_suggestions else None)
+        preferences, commitments, goals, nudge = await asyncio.to_thread(
+            self.memory.conversation_context, brief=greeting,
+            proactive=not prefs or prefs.proactive_suggestions)
         personality = self.settings.personality.read_text(encoding="utf-8")
         recall = '' if audio is not None or social_or_control(message) or prefetch_news else await self.recall(message)
         recall_done=time.perf_counter()
@@ -178,7 +178,11 @@ class Engine:
         if prefetch_news:
             self.phase='tools';search_started=time.perf_counter()
             arguments={'query':news_query,'limit':6}
-            outcome=await self.registry.execute('web_news',arguments,session)
+            try:
+                outcome=await asyncio.wait_for(self.registry.execute('web_news',arguments,session),timeout=NEWS_PREFETCH_TIMEOUT_SECONDS)
+            except TimeoutError:
+                outcome={'name':'web_news','status':'failed',
+                         'error':'A busca de notícias não respondeu em oito segundos. Não tenho manchetes verificadas para afirmar agora.'}
             search_seconds=time.perf_counter()-search_started
             results.append(outcome);self.memory.log_tool(session,outcome)
             used.add(json.dumps({'name':'web_news','arguments':arguments},sort_keys=True,ensure_ascii=False))

@@ -310,9 +310,10 @@ export default function App(){
     const textArrived=()=>{if(turnLatency.first_text_ms===undefined){turnLatency.first_text_ms=Math.round(performance.now()-turnLatency.started);if(!turnLatency.voiceExpected)turnLatency.status='responding';saveLatency(turnLatency);}};
     expectedStudyTurn.current=turnLatency.turn_id;
     const version=++turnVersion.current,controller=new AbortController();chatAbort.current=controller;
-    let question=text,receivedReply='';
+    let question=text,receivedReply='',previewIntro='';
+    const continuationState:{finish?:((text:string)=>void)}={};
     try{
-      let previewIntro='';let voiced=false,introText='',replyDelivered=false,voiceAllowed=!audio;let finishSpeech:((text:string)=>void)|null=null;
+      let voiced=false,introText='',replyDelivered=false,voiceAllowed=!audio;
       const updateSpeechProgress=(reply:string)=>{
         const current=speechProgress.current;
         if(current&&current.turnId===turnLatency.turn_id){current.question=question;current.fullReply=reply;return;}
@@ -326,7 +327,7 @@ export default function App(){
       const intro=(reply:string)=>{
         if(version!==turnVersion.current||controller.signal.aborted||!voiceAllowed)return;textArrived();previewIntro=reply;if(!audio||question!==text)setDisplayTurn({question,source,reply});if(showStudyText){if(!studyPanelId)studyPanelId=addStudyPanel(question,reply);if(studyPanelId)updateStudyPanel(studyPanelId,question,reply);}
         if(version!==turnVersion.current||controller.signal.aborted||!voiceAllowed||voiced||!autoVoice||!canSpeak)return;
-        introText=reply;voiced=true;turnLatency.chat_ms=Math.round(performance.now()-turnLatency.started);latency.current=turnLatency;turnLatency.armed=true;saveLatency(turnLatency);const continuation=new Promise<string>(resolve=>{finishSpeech=resolve;});speakTracked(reply,continuation);
+        introText=reply;voiced=true;turnLatency.chat_ms=Math.round(performance.now()-turnLatency.started);latency.current=turnLatency;turnLatency.armed=true;saveLatency(turnLatency);const continuation=new Promise<string>(resolve=>{continuationState.finish=resolve;});speakTracked(reply,continuation);
       };
       const ready=(reply:string)=>{
         if(version!==turnVersion.current||controller.signal.aborted)return;
@@ -336,7 +337,7 @@ export default function App(){
         if(introText){
           if(!reply.startsWith(introText))throw new ApiError('A resposta inicial divergiu da resposta completa.',502);
           const rest=reply.slice(introText.length);
-          finishSpeech?.(rest);
+          continuationState.finish?.(rest);
         }
         if(autoVoice&&canSpeak&&!voiced){
           voiced=true;turnLatency.chat_ms=Math.round(performance.now()-turnLatency.started);
@@ -374,7 +375,18 @@ export default function App(){
         tell('A resposta chegou. Não consegui confirmar o salvamento final desta conversa; a fala continua.',true);
         return;
       }
-      turnLatency.status='failed';turnLatency.armed=false;saveLatency(turnLatency);controller.abort();voice.stop();
+      turnLatency.status='failed';turnLatency.armed=false;saveLatency(turnLatency);controller.abort();
+      // An already spoken introduction remains useful even if the provider
+      // disconnects before completing the answer. Let that phrase finish.
+      if(previewIntro&&!receivedReply){
+        continuationState.finish?.('');
+        lastAnswer.current={question,source,reply:previewIntro};
+        setDisplayTurn(lastAnswer.current);
+        setDraft(question===text&&audio?'':question);
+        tell('A resposta começou, mas a integração parou antes de concluí-la. A parte recebida continua na tela; tente novamente para completar.',true);
+        return;
+      }
+      voice.stop();
       if(studyPanelId&&!studyPanelsRef.current.find(panel=>panel.id===studyPanelId)?.reply)closeStudyPanel(studyPanelId);
       if(error instanceof ApiError&&error.detail?.tool_results){session.current=error.detail.session_id;setTools(old=>[...old,...error.detail.tool_results]);}
       const retryHelp=audio&&question===text?'Use Reenviar gravação para tentar a mesma fala novamente.':'Sua mensagem ficou guardada no campo para o senhor tentar novamente sem repetir.';

@@ -21,7 +21,7 @@ def social_or_control(text):
     if greeting_only(text):return True
     text=normalized(text)
     if not text:return True
-    phrase=r'(?:oi|ola|ei|bom dia|boa tarde|boa noite|obrigad[oa]|valeu|ok|beleza|tchau|ate mais|tudo bem|sim|nao|na escuta|esta na escuta|voce esta na escuta|esta ai|ta ai|voce esta ai|voce ta ai|esta me ouvindo|ta me ouvindo|voce esta me ouvindo|voce ta me ouvindo|consegue me ouvir|me ouve|teste|testando|teste de (?:voz|audio|microfone))'
+    phrase=r'(?:oi|ola|ei|bom dia|boa tarde|boa noite|obrigad[oa]|valeu|ok|beleza|tchau|ate mais|tudo bem|sim|nao|na escuta|esta na escuta|voce esta na escuta|esta ai|ta ai|voce esta ai|voce ta ai|esta me ouvindo|ta me ouvindo|voce esta me ouvindo|voce ta me ouvindo|esta me escutando|ta me escutando|voce esta me escutando|voce ta me escutando|consegue me ouvir|me ouve|teste|testando|teste de (?:voz|audio|microfone))'
     if re.fullmatch(phrase+r'(?: '+phrase+r')*',text):return True
     if re.fullmatch(r'(?:tocar|toque|colocar|coloque|reproduzir|reproduza) (?:a |uma |umas )?(?:musicas?|frequencia|tom) .+',text):return True
     if re.fullmatch(r'(?:pausar|pause|continuar|continue|retomar|retome|parar|pare|desligar|fechar|pular) (?:a |o )?(?:musica|som|player|frequencia)',text) or text=='proxima musica':return True

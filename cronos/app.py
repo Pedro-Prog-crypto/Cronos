@@ -60,9 +60,9 @@ class ApprovalInput(BaseModel):
     accepted: bool
 
 
-VOICE_REQUEST_TIMEOUT_SECONDS = 30
-TRANSCRIPTION_TIMEOUT_SECONDS = 30
-TRANSCRIPTION_TOTAL_TIMEOUT_SECONDS = 40
+VOICE_REQUEST_TIMEOUT_SECONDS = 12
+TRANSCRIPTION_TIMEOUT_SECONDS = 14
+TRANSCRIPTION_TOTAL_TIMEOUT_SECONDS = 20
 # Recovery ceiling, not the latency target. Each route has its own timeout;
 # a reserve is hedged after eight seconds without cancelling a valid primary.
 CONVERSATION_FIRST_REPLY_TIMEOUT_SECONDS = 120
@@ -687,9 +687,24 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 from cronos.wake import verify_model
                 verify_model();local_ready=True
             except (OSError,ValueError):pass
+        async def cloud_recognition():
+            return await first_valid_transcription(primary,alternative if current.gemini_key.strip() else None,
+                                                   local=local if local_ready else None)
+        async def local_quick_check():
+            from cronos.memory_policy import normalized
+            text=await local()
+            if normalized(text) not in {'na escuta','esta na escuta','esta me ouvindo','ta me ouvindo',
+                                        'esta me escutando','ta me escutando','voce esta me ouvindo',
+                                        'voce ta me ouvindo','voce esta me escutando','voce ta me escutando',
+                                        'consegue me ouvir','me ouve','oi','ola','tudo bem','bom dia','boa tarde','boa noite'}:
+                raise ValueError('A escuta local não identificou uma saudação ou teste de microfone.')
+            return text
+        local_prepared=local_ready and local_recognizer.model is not None
         try:
             async with asyncio.timeout(TRANSCRIPTION_TOTAL_TIMEOUT_SECONDS):
-                return await first_valid_transcription(primary,alternative if current.gemini_key.strip() else None,local=local if local_ready else None)
+                if local_prepared:
+                    return await first_valid_transcription(local_quick_check,cloud_recognition,hedge_after=.2)
+                return await cloud_recognition()
         except TimeoutError:
             raise HTTPException(504,'O reconhecimento continua indisponível. Sua gravação pode ser reenviada sem repetir a fala.') from None
         except HTTPException:raise

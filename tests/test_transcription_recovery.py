@@ -14,6 +14,23 @@ from test_backend import settings,AUTH
 from test_audio_conversation import wav
 
 
+def test_prepared_local_recognizer_handles_microphone_check_without_cloud(settings, monkeypatch):
+    class PreparedRecognizer:
+        model=object()
+        def prepare(self):pass
+        def transcribe(self,audio):return 'Cronos, está me escutando?'
+    monkeypatch.setattr('cronos.recognition.LocalRecognizer',PreparedRecognizer)
+    monkeypatch.setattr('cronos.wake.verify_model',lambda: settings.vault)
+    class Fish:
+        def __init__(self):self.asr=self
+        async def __aenter__(self):return self
+        async def __aexit__(self,*args):pass
+        async def transcribe(self,**kwargs):raise AssertionError('A fast local microphone check needs no network ASR')
+    with TestClient(create_app(replace(settings,fish_key='fixture'),fish_factory=Fish)) as client:
+        result=client.post('/voice/transcribe',headers={**AUTH,'Content-Type':'audio/wav'},content=wav())
+    assert result.status_code==200 and result.json()['text']=='Cronos, está me escutando?'
+
+
 @pytest.mark.parametrize('failure',['exception','empty'])
 def test_same_audio_uses_configured_gemini_when_fish_cannot_transcribe(settings,monkeypatch,failure):
     original=httpx.AsyncClient;requests=[];recordings=[]

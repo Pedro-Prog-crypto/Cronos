@@ -6,6 +6,7 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 from cronos.app import create_app
+from cronos import engine as engine_module
 from cronos.news import current_news_query
 from cronos.tools import Tool,Query
 from test_backend import settings,AUTH
@@ -41,6 +42,21 @@ def test_daily_news_searches_before_one_model_call_and_keeps_tool_history(settin
         assert r.json()['timings_ms']['provider_calls']==1
         assert r.json()['timings_ms']['search']>=0
         assert client.app.state.memory.tool_history(r.json()['session_id'])[0]['name']=='web_news'
+
+
+def test_slow_news_search_has_bounded_wait_and_no_fabricated_headlines(settings,monkeypatch):
+    monkeypatch.setattr(engine_module,'NEWS_PREFETCH_TIMEOUT_SECONDS',.02)
+    class Provider:
+        async def reply(self,system,messages):
+            assert 'não respondeu' in messages[-1]['content'].lower()
+            return {'reply':'Não consegui verificar as manchetes de hoje.','topics':[],'tool_calls':[]}
+    async def slow_search(*args):
+        await asyncio.sleep(60)
+    with TestClient(create_app(settings,Provider())) as client:
+        monkeypatch.setattr(client.app.state.registry,'execute',slow_search)
+        response=client.post('/chat',headers=AUTH,json={'message':'Notícias do dia'})
+    assert response.status_code==200
+    assert response.json()['tool_results'][0]['status']=='failed'
 
 
 def test_search_failure_is_supplied_to_model_without_inventing_results(settings):

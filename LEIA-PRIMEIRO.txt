@@ -74,3 +74,13 @@ metas e compromissos sem datas ou codigos nos rotulos. A busca na web fica dispo
 quando o assunto exige atualizacao, sem precisar dizer "pesquise" em toda pergunta.
 Avisos automaticos exigem que o Cronos esteja em execucao; esta versao nao instala
 um servidor na nuvem nem adiciona contas ou cobranças.
+
+REVISAO DE 02/11/2026 — MICROFONE E RESPOSTAS (R17)
+O envio manual da fala transmite somente a frase captada, sem acumular silencio
+da sala. Testes curtos de escuta podem usar o reconhecedor local ja preparado.
+Transcricao, noticias e voz online tem espera limitada; se a voz falhar depois
+que o texto chegar, a resposta escrita permanece. Uma fala ja iniciada nao e
+cortada apenas porque a integracao parou antes de concluir o restante.
+Se a rede ou as integracoes estiverem indisponiveis, o Cronos mostra a etapa
+que falhou e conserva a gravacao para nova tentativa. A velocidade final ainda
+depende do microfone, da rede e dos provedores configurados.

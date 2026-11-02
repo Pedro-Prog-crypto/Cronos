@@ -17,7 +17,7 @@ export function ResponseClock({turn,onDetails}:{turn:any;onDetails:()=>void}) {
   const elapsed=waiting?Math.max(0,now-turn.started)+offset:(turn.elapsed_ms||0)+offset;
   const failed=turn.status==='failed',cancelled=turn.status==='cancelled';
   const measured=turn.response_ms??(turn.first_text_ms===undefined?undefined:turn.first_text_ms+offset);
-  const label=failed?'Resposta interrompida':cancelled?'Interrompido pelo senhor':waiting?(turn.stage==='recognition'?'Transcrevendo':turn.first_text_ms===undefined?'Preparando resposta':'Preparando voz'):turn.response_ms!==undefined?'Voz começou em':'Texto chegou em';
+  const label=failed?(turn.first_text_ms!==undefined?'Texto chegou; voz falhou':turn.stage==='recognition'?'Fala não reconhecida':'Resposta não concluída'):cancelled?'Interrompido pelo senhor':waiting?(turn.stage==='recognition'?'Transcrevendo':turn.first_text_ms===undefined?'Preparando resposta':'Preparando voz'):turn.response_ms!==undefined?'Voz começou em':'Texto chegou em';
   return <button className="response-clock" onClick={onDetails} aria-label="Ver tempos das respostas" title="Meta: começar a responder em até 25 segundos. Clique para ver o histórico medido.">
     <span>{label}</span><b>{seconds(failed||cancelled||waiting?elapsed:measured??elapsed)}</b>
   </button>;

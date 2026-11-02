@@ -26,8 +26,8 @@ async def gemini_transcribe(settings, audio, mime_type):
              'generationConfig':{'responseMimeType':'application/json','maxOutputTokens':4096,
                  **({'thinkingConfig':{'thinkingBudget':0}} if model.startswith('gemini-2.5-flash') else {})}}
     try:
-        async with asyncio.timeout(30):
-            async with httpx.AsyncClient(timeout=httpx.Timeout(30,connect=5)) as client:
+        async with asyncio.timeout(16):
+            async with httpx.AsyncClient(timeout=httpx.Timeout(16,connect=4)) as client:
                 from cronos.delivery import mark
                 mark('recognition_requested',provider='gemini',bytes=len(audio))
                 response=await client.post(f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent',

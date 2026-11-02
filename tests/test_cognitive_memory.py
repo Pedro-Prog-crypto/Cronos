@@ -47,6 +47,21 @@ def test_personal_preferences_survive_restart_and_newer_correction_wins(tmp_path
     assert stored[0]['content'] == 'Não quero que você faça respostas curtas.'
 
 
+def test_conversation_memory_reads_one_snapshot_and_preserves_due_event(tmp_path, monkeypatch):
+    memory=Memory(tmp_path / 'vault')
+    memory.record(uuid4(), 'Minha prova de física é daqui a dois dias.', 'Vamos revisar.', [])
+    original=memory.connect
+    opened=[]
+    def counted():
+        opened.append(1)
+        return original()
+    monkeypatch.setattr(memory,'connect',counted)
+    preferences,events,goals,nudge=memory.conversation_context(brief=True)
+    assert len(opened)==1
+    assert preferences==goals==[]
+    assert events and nudge and nudge['id']==events[0]['id']
+
+
 def test_temporal_parser_rejects_imaginary_and_invalid_dates():
     today = datetime(2026, 11, 2, 10, tzinfo=SAO_PAULO)
     assert explicit_event('Minha prova acontecerá daqui a três semanas.', today)['due_date'] == '2026-11-23'
