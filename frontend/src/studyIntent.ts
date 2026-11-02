@@ -1,8 +1,14 @@
 const normalize=(text:string)=>text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
 const cleanTitle=(text:string)=>text.replace(/^\s*#{1,3}\s*/,'').replace(/\*\*/g,'').replace(/\s*[—–:]\s*.*$/,'').replace(/^(?:a ideia central|contexto|resumo|explicacao|explicação|introducao|introdução|conclusao|conclusão|o que voce precisa saber)\s*[:—-]?\s*/i,'').replace(/^(?:a|o|as|os)\s+/i,'').trim();
+export function asksToReplayImages(text:string){
+ const value=normalize(text).replace(/^(?:cronos|kronos|chronos)[,\s:-]*/,'').replace(/[.!?]+$/,'').trim();
+ return /^(?:(?:me )?(?:mostre|mostra|mostrar|exiba|exibe|abra|abre|abrir|volte|volta)\s+)?(?:as |o |a |aquelas |essas )?(?:imagens|fotos|fotografias|apresentacao visual|mural de imagens)\s+(?:novamente|de novo|outra vez)(?:\s+por favor)?$/.test(value)
+  || /^(?:repita|repetir|reabra|reabrir)\s+(?:as |o |a |aquelas |essas )?(?:imagens|fotos|apresentacao visual|mural de imagens)(?:\s+por favor)?$/.test(value);
+}
 export function isStudyQuestion(text:string){
  const value=normalize(text);
  return /\b(?:explique|explica|me ensine|ensine|me ajuda a entender|ajude a entender|quero entender|estude|resuma|resumo|compare|qual a diferenca|o que (?:e|foi|significa|causou|aconteceu)|como funciona|como (?:foi|aconteceu|surgiu|se desenvolve)|por que|quem (?:foi|e|era|vai ganhar|voce acha)|o que acha de|qual a sua opiniao|qual sua opiniao|me conte sobre|me fala sobre|me fale sobre|fale sobre|me conta sobre|analise|analisa|quais foram as causas|me explique|me explica|todas? as? obras|lista completa)\b/.test(value)
+  || /\b(?:mostre|mostra|mostrar|exiba|exibe|quero ver|me envie|mande)\s+(?:as |umas? )?(?:imagens|fotos|fotografias)\s+(?:de|do|da|sobre)\s+\S/.test(value)
   || /\b(?:como|por que|porque)\b.{0,80}\b(?:ele|ela|isso|aconteceu|funciona|mudou|comecou|terminou|influenciou|causou)\b/.test(value)
   || /\b(?:historia|filosofia|biologia|matematica|fisica|quimica|geografia|portugues|literatura|sociologia|prova|vestibular|enem|pais|guerra mundial|revolucao|filosofo|equacao|teorema|celula|mitocondria|fotossintese|primeira guerra|segunda guerra)\b/.test(value);
 }
@@ -18,6 +24,8 @@ export function isExplicitTextDisplay(text:string){
 }
 
 export function studyPanelTitle(question:string,reply=''){
+ const imageSubject=question.match(/\b(?:imagens?|fotos?|fotografias)\s+(?:de|do|da|sobre)\s+([^?!.,;\n]+)/i)?.[1]?.replace(/\s+(?:novamente|de novo|outra vez)\s*$/i,'').trim();
+ if(imageSubject)return cleanTitle(imageSubject).slice(0,54);
  const isGeneric=(value:string)=>!value||/^(?:ideia central|explicacao|contexto|introducao|conclusao|resumo|resposta)$/i.test(normalize(value));
  const heading=reply.match(/^\s*#{1,3}\s+(.+)$/m)?.[1];
  const meaningfulHeading=heading&&cleanTitle(heading);

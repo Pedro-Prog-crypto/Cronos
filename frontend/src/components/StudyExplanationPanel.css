@@ -30,15 +30,18 @@
 /* Full-screen narrated visual wall: no topic header, chapter controls, transcript, or orb. */
 .study-cinema{position:fixed;z-index:250;inset:0;overflow:hidden;isolation:isolate;background:#020711;color:#f4f8ff;font-family:'Space Grotesk','Plus Jakarta Sans',sans-serif}
 .study-camera-wall{position:absolute;inset:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));gap:5px;padding:5px;background:#020711}
-.study-camera-tile{position:relative;min-width:0;min-height:0;display:grid;grid-template-rows:minmax(0,1fr) 28px;margin:0;overflow:hidden;background:radial-gradient(ellipse at center,#10243a,#030912 78%);border:1px solid #19415a;box-shadow:inset 0 0 20px #0008}
+.study-camera-tile{position:relative;min-width:0;min-height:0;display:grid;grid-template-rows:minmax(0,1fr) 19px;margin:0;overflow:hidden;background:radial-gradient(ellipse at center,#10243a,#030912 78%);border:1px solid #19415a;box-shadow:inset 0 0 20px #0008}
 .study-camera-tile img{display:block;width:100%;height:100%;min-height:0;object-fit:contain;object-position:center;background:#030912;animation:study-camera-arrive .5s ease both}
-.study-camera-tile figcaption{z-index:1;display:flex;align-items:center;gap:9px;min-width:0;padding:0 10px;color:#b8d7e8;background:#061521;border-top:1px solid #1d526a;font:600 10px 'Space Grotesk',sans-serif}
-.study-camera-tile figcaption span{color:#5bdcff;font:700 12px Rajdhani,sans-serif}
+.study-camera-tile.has-image img{animation:study-camera-arrive .45s ease both,study-camera-drift 16s ease-in-out .45s infinite alternate}
+.study-camera-subtitle{position:absolute;z-index:5;left:50%;bottom:12px;transform:translateX(-50%);max-width:min(64vw,680px);overflow:hidden;padding:5px 10px;color:#e5f4ff;background:#03101bd9;border:1px solid #55bfe566;border-radius:3px;box-shadow:0 3px 14px #0009;font:500 clamp(10px,.8vw,12px)/1.3 'Space Grotesk',sans-serif;text-align:center;text-overflow:ellipsis;white-space:nowrap;pointer-events:none}
+.study-camera-tile figcaption{z-index:1;display:flex;align-items:center;gap:6px;min-width:0;padding:0 7px;color:#b8d7e8;background:#061521;border-top:1px solid #1d526a;font:500 9px 'Space Grotesk',sans-serif}
+.study-camera-tile figcaption span{color:#5bdcff;font:700 10px Rajdhani,sans-serif}
 .study-camera-tile figcaption b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
 .study-camera-pending{display:grid;place-items:center;color:#79a6bb;font:700 11px Rajdhani,sans-serif;letter-spacing:.13em}
 @keyframes study-camera-arrive{from{opacity:.25;transform:scale(.98)}to{opacity:1;transform:scale(1)}}
+@keyframes study-camera-drift{from{transform:scale(1.01) translate3d(-.4%,0,0)}to{transform:scale(1.04) translate3d(.4%,0,0)}}
 @media(max-width:700px){.study-camera-wall{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr));gap:3px;padding:3px}.study-camera-tile{grid-template-rows:minmax(0,1fr) 22px}.study-camera-tile figcaption{font-size:8px}}
-@media(prefers-reduced-motion:reduce){.study-camera-tile img{animation:none}}
+@media(prefers-reduced-motion:reduce){.study-camera-tile img,.study-camera-tile.has-image img{animation:none}}
 .study-film-stage{position:absolute;inset:0;display:grid;grid-template-rows:repeat(4,minmax(0,1fr));gap:2px;overflow:hidden;background:#020711}
 .study-film-row{position:relative;min-width:0;min-height:0;overflow:hidden;mask-image:linear-gradient(90deg,transparent 0,#000 2%,#000 98%,transparent 100%)}
 .study-film-track{position:absolute;left:0;top:0;bottom:0;display:flex;align-items:center;gap:3px;width:max-content;height:100%;animation:study-film-traverse var(--film-duration,52s) linear infinite;animation-play-state:paused;will-change:transform}

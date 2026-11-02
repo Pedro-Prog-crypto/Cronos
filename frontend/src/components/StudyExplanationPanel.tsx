@@ -9,7 +9,7 @@ type StoryImage={title:string;url:string;proxy_url:string;source_url:string;lice
 type StoryMedia={images:StoryImage[]};
 const PHOTO_WALL_TARGET=18;
 const PHOTO_WALL_DEADLINE_MS=9000;
-export type StudyPanelItem={id:string;title:string;reply:string;slot:number;locked:boolean;minimized:boolean;createdAt:number;position?:{left:number;top:number};spokenChunk?:string;spokenChunkIndex?:number;references?:Array<{title:string;url:string;excerpt?:string}>};
+export type StudyPanelItem={id:string;title:string;reply:string;slot:number;locked:boolean;minimized:boolean;createdAt:number;revision?:number;position?:{left:number;top:number};spokenChunk?:string;spokenChunkIndex?:number;references?:Array<{title:string;url:string;excerpt?:string}>};
 async function decodeImage(image:HTMLImageElement,signal:AbortSignal){
  if(signal.aborted)throw new DOMException('Imagem interrompida.','AbortError');
  await new Promise<void>((resolve,reject)=>{
@@ -18,9 +18,10 @@ async function decodeImage(image:HTMLImageElement,signal:AbortSignal){
   image.decode().then(resolve,reject).finally(()=>signal.removeEventListener('abort',cancel));
  });
 }
-type Props={panels:StudyPanelItem[];activeId?:string|null;speaking:boolean;generating?:boolean;onClose:(id:string)=>void};
+type MediaState={topic:string;status:'loading'|'ready'|'failed';loaded_images:number;image_titles:string[]};
+type Props={panels:StudyPanelItem[];activeId?:string|null;speaking:boolean;generating?:boolean;onMediaState?:(state:MediaState)=>void;onClose:(id:string)=>void};
 
-function StudyStory({panel,onClose,speaking}:{panel:StudyPanelItem;onClose:()=>void;speaking:boolean}){
+function StudyStory({panel,onClose,speaking,onMediaState}:{panel:StudyPanelItem;onClose:()=>void;speaking:boolean;onMediaState?:(state:MediaState)=>void}){
  const slides=useMemo(()=>visualSlides(panel.reply,panel.title),[panel.reply,panel.title]);
  const active=spokenSlideIndex(slides,panel.spokenChunk||'',0);
  const [mediaSlide,setMediaSlide]=useState(active);
@@ -34,15 +35,17 @@ function StudyStory({panel,onClose,speaking}:{panel:StudyPanelItem;onClose:()=>v
  const imagePool=useRef<StoryImage[]>([]),sourcePool=useRef<Record<string,string>>({}),previousQuery=useRef('');
  const visibleImages=images.filter(image=>Boolean(imageSources[image.proxy_url]));
  const [wallStep,setWallStep]=useState(0);
- const wallImages=visibleImages.length<=6?visibleImages:Array.from({length:6},(_,index)=>visibleImages[Math.min(wallStep,visibleImages.length-6)+index]);
- useEffect(()=>{if(!speaking||visibleImages.length<=6||wallStep>=visibleImages.length-6)return;
-  const timer=window.setTimeout(()=>setWallStep(step=>step+1),4700);return()=>window.clearTimeout(timer);
- },[speaking,visibleImages.length,wallStep]);
- useEffect(()=>{
-  if(!speaking||visibleImages.length>=6)return;
-  const timer=window.setInterval(()=>setRetry(value=>value+1),25000);
+ const wallImages=Array.from({length:Math.min(6,visibleImages.length)},(_,index)=>visibleImages[(wallStep+index)%visibleImages.length]);
+ useEffect(()=>{if(visibleImages.length<2)return;
+  const timer=window.setInterval(()=>setWallStep(step=>(step+1)%visibleImages.length),4200);
   return()=>window.clearInterval(timer);
- },[speaking,visibleImages.length]);
+ },[visibleImages.length]);
+ useEffect(()=>{onMediaState?.({topic:panel.title,status:visibleImages.length?'ready':loadState,loaded_images:visibleImages.length,image_titles:wallImages.map(image=>image.title.slice(0,100))});},[onMediaState,panel.title,loadState,visibleImages.length,wallStep]);
+ useEffect(()=>{
+  if(visibleImages.length>=6||retry>=3)return;
+  const timer=window.setTimeout(()=>setRetry(value=>value+1),12000);
+  return()=>window.clearTimeout(timer);
+ },[visibleImages.length,retry]);
  useEffect(()=>()=>{assets.current.forEach(asset=>URL.revokeObjectURL(asset.url));assets.current.clear();},[]);
  useEffect(()=>{
   let disposed=false;
@@ -139,13 +142,14 @@ function StudyStory({panel,onClose,speaking}:{panel:StudyPanelItem;onClose:()=>v
   {(loadState==='loading'&&!images.length||photosLoading&&!visibleImages.length)&&<div className="study-cinema-status"><i/><span>BUSCANDO IMAGENS PARA A EXPLICAÇÃO</span></div>}
   {showFallback&&<div className="study-cinema-fallback"><span>{failure||'As imagens desta busca não carregaram.'}</span><button type="button" onClick={()=>setRetry(value=>value+1)}><RotateCw size={15}/> TENTAR OUTRAS IMAGENS</button><div><a href={`https://commons.wikimedia.org/wiki/Special:MediaSearch?type=image&search=${encodeURIComponent(collectionQuery)}`} target="_blank" rel="noreferrer">WIKIMEDIA <ExternalLink size={12}/></a><a href={`https://openverse.org/search/image?q=${encodeURIComponent(collectionQuery)}`} target="_blank" rel="noreferrer">OPENVERSE <ExternalLink size={12}/></a></div></div>}
   {visibleImages.length>0&&<a className="study-cinema-credit" href={visibleImages[0].source_url} target="_blank" rel="noreferrer" aria-label="Abrir a fonte das imagens" title="Abrir a fonte das imagens"><ExternalLink size={14}/></a>}
+  {speaking&&panel.spokenChunk?.trim()&&<div className="study-camera-subtitle" aria-label="Legenda breve da fala atual">{panel.spokenChunk.trim().slice(0,160)}</div>}
   <button className="study-cinema-close" type="button" onClick={onClose} aria-label="Fechar apresentação" title="Fechar"><X size={20}/></button>
  </div>;
 }
 
-export function StudyExplanationPanel({panels,activeId,onClose,speaking=false}:Props){
+export function StudyExplanationPanel({panels,activeId,onClose,onMediaState,speaking=false}:Props){
  const ordered=panels.slice().sort((a,b)=>a.createdAt-b.createdAt);
  const active=activeId?ordered.find(panel=>panel.id===activeId&&!panel.minimized):undefined;
  if(!active)return null;
- return <StudyStory key={active.id} panel={active} speaking={speaking} onClose={()=>onClose(active.id)}/>;
+ return <StudyStory key={`${active.id}-${active.revision||0}`} panel={active} speaking={speaking} onMediaState={onMediaState} onClose={()=>onClose(active.id)}/>;
 }

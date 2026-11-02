@@ -32,12 +32,26 @@ from cronos.control import install_routes
 from cronos.panels import PanelState, install_panels
 
 
+class VisualContext(BaseModel):
+    topic: str = Field(max_length=100)
+    status: Literal['loading','ready','failed']
+    loaded_images: int = Field(ge=0, le=24)
+    image_titles: list[str] = Field(default_factory=list, max_length=6)
+    visible: bool = False
+
+    @field_validator('image_titles')
+    @classmethod
+    def shorten_titles(cls,values):
+        return [value[:100] for value in values]
+
+
 class ChatInput(BaseModel):
     message: str = Field(min_length=1, max_length=16000)
     session_id: UUID | None = None
     heard_context: str | None = Field(default=None, max_length=10000)
     screen_context: bool = True
     page_context: str | None = Field(default=None,max_length=16000)
+    visual_context: VisualContext | None = None
 
 
 class SpeechInput(BaseModel):
@@ -77,11 +91,12 @@ async def voice_deadline(operation, seconds):
         raise HTTPException(504, 'O serviço de voz não respondeu a tempo.') from None
 
 
-async def chat_until_disconnect(engine,session,message,request,screen_context=True,page_context=None):
+async def chat_until_disconnect(engine,session,message,request,screen_context=True,page_context=None,visual_context=None):
     if await request.is_disconnected():raise HTTPException(499,'Conversa interrompida.')
     options={}
     if not screen_context:options['screen_context']=False
     if page_context:options['page_context']=page_context
+    if visual_context:options['visual_context']=visual_context.model_dump()
     task=asyncio.create_task(engine.chat(session,message,**options))
     async def watch():
         while not task.done():
@@ -309,7 +324,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         # Uma instância/worker: protege ordem das conversas e arquivos compartilhados.
         async with request.app.state.lock:
             try:
-                result = await chat_until_disconnect(request.app.state.engine,session,body.message,request,screen_context=body.screen_context,page_context=body.page_context)
+                result = await chat_until_disconnect(request.app.state.engine,session,body.message,request,screen_context=body.screen_context,page_context=body.page_context,visual_context=body.visual_context)
             except TurnError as exc:
                 raise HTTPException(exc.status, {"message": str(exc), "session_id": str(exc.session), "tool_results": exc.results}) from exc
             except ProviderError as exc:
@@ -319,7 +334,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         request.app.state.features.record("language", "passed", "Uma conversa foi processada e salva. Não certifica precisão de todas as respostas.")
         return result
 
-    async def conversation_stream(session,message,request,audio=None,audio_fallback=None,heard_context=None,screen_context=True,page_context=None,wake_confirmed=False):
+    async def conversation_stream(session,message,request,audio=None,audio_fallback=None,heard_context=None,screen_context=True,page_context=None,visual_context=None,wake_confirmed=False):
         from cronos.reply_stream import reply_sink,intro_sink,transcript_sink
         async def events():
             panels=request.app.state.panels;panels.active+=1
@@ -361,6 +376,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                                         options={'audio':audio,**({'wake_confirmed':True} if wake_confirmed else {})} if audio is not None else {}
                                         if not screen_context:options['screen_context']=False
                                         if page_context:options['page_context']=page_context
+                                        if visual_context:options['visual_context']=visual_context.model_dump()
                                         if heard_context:options['heard_context']=heard_context
                                         result=await request.app.state.engine.chat(session,message,**options)
                                     except ProviderError as exc:
@@ -372,7 +388,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                                         if panels.preferences.called_only and not wake_confirmed and not re.search(r'\b(?:cronos|kronos|chronos)\b',recognized,re.I):
                                             result={'session_id':str(session),'reply':'','recognized_text':recognized,'ignored':True,'topics':[],'notes':[],'tool_results':[],'warnings':[],'timings_ms':{}}
                                         else:
-                                            result=await request.app.state.engine.chat(session,recognized,**({'heard_context':heard_context} if heard_context else {}))
+                                            result=await request.app.state.engine.chat(session,recognized,**({'heard_context':heard_context} if heard_context else {}),**({'visual_context':visual_context.model_dump()} if visual_context else {}))
                                             result['recognized_text']=recognized
                                 finally:request.app.state.engine.phase='idle'
                         if not result.get('ignored') and ((spoken is not None and spoken!=result['reply']) or (intro_text is not None and not result['reply'].startswith(intro_text))):
@@ -406,7 +422,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
     @app.post("/chat/stream", dependencies=[Depends(authenticate)])
     async def stream_chat(body: ChatInput, request: Request):
         if not body.message.strip():raise HTTPException(422,"A mensagem não pode ser vazia.")
-        return await conversation_stream(body.session_id or uuid4(),body.message,request,heard_context=body.heard_context,screen_context=body.screen_context,page_context=body.page_context)
+        return await conversation_stream(body.session_id or uuid4(),body.message,request,heard_context=body.heard_context,screen_context=body.screen_context,page_context=body.page_context,visual_context=body.visual_context)
 
     @app.post('/chat/audio/stream',dependencies=[Depends(authenticate)])
     async def stream_audio(request: Request,session_id: UUID | None = None):
@@ -427,7 +443,11 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         except ValueError as exc:raise HTTPException(422,str(exc)) from None
         from urllib.parse import unquote
         heard_context=unquote(request.headers.get('X-Cronos-Heard-Context','')[:30000])[:10000] or None
-        return await conversation_stream(session_id or uuid4(),'Pergunta falada',request,pcm,audio_fallback=audio_wav,heard_context=heard_context,wake_confirmed=request.headers.get('X-Cronos-Wake-Confirmed')=='1')
+        visual_context=None
+        if raw_visual:=request.headers.get('X-Cronos-Visual-Context','')[:4000]:
+            try:visual_context=VisualContext.model_validate_json(unquote(raw_visual))
+            except ValueError:pass
+        return await conversation_stream(session_id or uuid4(),'Pergunta falada',request,pcm,audio_fallback=audio_wav,heard_context=heard_context,visual_context=visual_context,wake_confirmed=request.headers.get('X-Cronos-Wake-Confirmed')=='1')
 
     @app.get("/conversations/latest", dependencies=[Depends(authenticate)])
     async def latest_conversation(request: Request):

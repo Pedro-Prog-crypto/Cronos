@@ -98,3 +98,13 @@ uma vez por inicializacao, sem bloquear cada pergunta falada. No modo online,
 se o reconhecedor local escolhido ficar preso carregando, o Cronos pode usar
 Fish ou Gemini ja configurados para transcrever a mesma gravacao. No modo local,
 o audio permanece no computador. A captação do microfone nao foi alterada.
+
+REVISAO DE 02/11/2026 — APRESENTACAO VISUAL CONTINUADA (R20)
+"Mostre as imagens novamente" reabre a ultima apresentacao sem pedir a IA para
+adivinhar o comando da tela. Pedidos novos de fotos de um assunto tambem abrem
+o mural. A conversa recebe o estado real do mural (carregando, carregado ou
+falha) e os titulos das imagens exibidas, evitando afirmar que uma imagem
+apareceu quando nao carregou. Titulos da fonte nao sao analise visual.
+Imagens disponiveis alternam de posicao enquanto o mural estiver aberto; quando
+chegam menos de seis, a busca tenta obter outras. Uma legenda curta de uma linha
+acompanha a fala na parte inferior, sem cobrir a apresentacao.

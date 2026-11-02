@@ -49,8 +49,9 @@ if(!getToken())void fetch('/connection',{headers:{Accept:'application/json'}}).t
 export async function streamChat(body:unknown,signal:AbortSignal,onReply:(reply:string)=>void,onIntro?:(reply:string)=>void,onTranscript?:(text:string)=>void,audio?:Blob){
   const session=(body as any)?.session_id;
   const heardContext=(body as any)?.heard_context;
+  const visualContext=(body as any)?.visual_context;
   const path=audio?'/chat/audio/stream'+(session?'?session_id='+encodeURIComponent(session):''):'/chat/stream';
-  const response=await api(path,{method:'POST',headers:{'Content-Type':audio?'audio/wav':'application/json',...((body as any)?.turn_id?{'X-Cronos-Turn':(body as any).turn_id}:{}),...(audio&&heardContext?{'X-Cronos-Heard-Context':encodeURIComponent(String(heardContext))}:{}),...(audio&&(body as any)?.wake_confirmed?{'X-Cronos-Wake-Confirmed':'1'}:{})},body:audio||JSON.stringify(body),signal});
+  const response=await api(path,{method:'POST',headers:{'Content-Type':audio?'audio/wav':'application/json',...((body as any)?.turn_id?{'X-Cronos-Turn':(body as any).turn_id}:{}),...(audio&&heardContext?{'X-Cronos-Heard-Context':encodeURIComponent(String(heardContext))}:{}),...(audio&&visualContext?{'X-Cronos-Visual-Context':encodeURIComponent(JSON.stringify(visualContext))}:{}),...(audio&&(body as any)?.wake_confirmed?{'X-Cronos-Wake-Confirmed':'1'}:{})},body:audio||JSON.stringify(body),signal});
   const reader=response.body?.getReader();
   let buffer='',result:any=null;
   const event=(line:string)=>{

@@ -16,7 +16,7 @@ import {AnswerCards,HolographicCard,MovableCardFrame} from './components/Hologra
 import {localCommand} from './commands';
 import {cardRequest,cardDisplayCommand} from './cardRequests';
 import {cardPositionCommand,CardLayout} from './cardLayout';
-import {isExplicitTextDisplay,isStudyQuestion,studyPanelTitle} from './studyIntent';
+import {asksToReplayImages,isExplicitTextDisplay,isStudyQuestion,studyPanelTitle} from './studyIntent';
 import {stremioCommand,StremioRequest} from './stremioCommands';
 const StremioPanel=lazy(()=>import('./components/StremioPanel'));
 import {prospectCommand} from './prospectCommands';
@@ -84,6 +84,9 @@ export default function App(){
   const [focusedStudyPanel,setFocusedStudyPanel]=useState<string|null>(null);
   const [studyPanels,setStudyPanels]=useState<StudyPanelItem[]>([]);
   const studyPanelsRef=useRef<StudyPanelItem[]>([]);
+  const lastVisualAnswer=useRef<{question:string;reply:string}|null>(null);
+  const visualState=useRef<{topic:string;status:'loading'|'ready'|'failed';loaded_images:number;image_titles:string[]}|null>(null);
+  const rememberVisualState=useCallback((state:{topic:string;status:'loading'|'ready'|'failed';loaded_images:number;image_titles:string[]})=>{visualState.current=state;},[]);
   const activeStudyPanel=useRef<string|null>(null),expectedStudyTurn=useRef<string|null>(null);
   const changeStudyPanels=(update:(items:StudyPanelItem[])=>StudyPanelItem[])=>{const next=update(studyPanelsRef.current);studyPanelsRef.current=next;setStudyPanels(next);};
   const addStudyPanel=(question:string,reply='')=>{
@@ -104,18 +107,19 @@ export default function App(){
     changeStudyPanels(items=>[...items,item].sort((a,b)=>a.slot-b.slot));
     return id;
   };
-  const updateStudyPanel=(id:string,question:string,reply:string)=>changeStudyPanels(items=>items.map(panel=>panel.id===id?{...panel,title:studyPanelTitle(question,reply),reply}:panel));
+  const updateStudyPanel=(id:string,question:string,reply:string)=>{if(reply.trim())lastVisualAnswer.current={question,reply};changeStudyPanels(items=>items.map(panel=>panel.id===id?{...panel,title:studyPanelTitle(question,reply),reply}:panel));};
   const focusStudyPanel=(id:string|null)=>{activeStudyPanel.current=id;setFocusedStudyPanel(id);};
   const closeStudyPanel=(id:string)=>{const remaining=studyPanelsRef.current.filter(panel=>panel.id!==id&&!panel.minimized);if(activeStudyPanel.current===id)focusStudyPanel(remaining.at(-1)?.id||null);changeStudyPanels(items=>items.filter(panel=>panel.id!==id));};
   const minimizeStudyPanel=(id:string)=>{const remaining=studyPanelsRef.current.filter(panel=>panel.id!==id&&!panel.minimized);if(activeStudyPanel.current===id)focusStudyPanel(remaining.at(-1)?.id||null);changeStudyPanels(items=>items.map(panel=>panel.id===id?{...panel,minimized:true}:panel));};
   const restoreStudyPanel=(id:string)=>{
     const current=studyPanelsRef.current;
-    const target=current.find(panel=>panel.id===id);if(!target)return;
+    const target=current.find(panel=>panel.id===id);if(!target)return false;
+    if(!target.minimized){focusStudyPanel(id);return true;}
     const visible=current.filter(panel=>!panel.minimized);
     let slot=target.slot;
     if(visible.length>=3){
       const replaceable=visible.filter(panel=>!panel.locked&&panel.id!==id).sort((a,b)=>a.createdAt-b.createdAt)[0];
-      if(!replaceable){tell('Os três painéis visíveis estão fixados. Minimize ou desafixe um para restaurar este.',true);return;}
+      if(!replaceable){tell('Os três painéis visíveis estão fixados. Minimize ou desafixe um para restaurar este.',true);return false;}
       slot=replaceable.slot;
       changeStudyPanels(items=>items.map(panel=>panel.id===replaceable.id?{...panel,minimized:true}:panel));
     }else if(visible.some(panel=>panel.slot===slot)){
@@ -123,6 +127,7 @@ export default function App(){
     }
     changeStudyPanels(items=>items.map(panel=>panel.id===id?{...panel,slot,minimized:false}:panel));
     focusStudyPanel(id);
+    return true;
   };
   const [prospect,setProspect]=useState<{city:string;category:string;report?:any}|null>(null);
   const [minimizedWindows,setMinimizedWindows]=useState<string[]>([]);
@@ -238,6 +243,16 @@ export default function App(){
   const runCommand=(text:string)=>{
     const normalizedCommand=text.trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/^(?:kronos|cronos)[,\s:]+/i,'').replace(/[.!?]+$/,'').toLowerCase().replace(/\s+/g,' ');
     const mainBridge=(window as any).pywebview?.api;
+    if(asksToReplayImages(text)){
+      const previous=studyPanelsRef.current.filter(panel=>panel.reply.trim()).sort((a,b)=>b.createdAt-a.createdAt)[0];
+      let replayed=false;
+      if(previous){replayed=restoreStudyPanel(previous.id);if(replayed)changeStudyPanels(items=>items.map(panel=>panel.id===previous.id?{...panel,spokenChunk:'',revision:(panel.revision||0)+1}:panel));}
+      else if(lastVisualAnswer.current){const prior=lastVisualAnswer.current,id=addStudyPanel(prior.question,prior.reply);replayed=Boolean(id&&!studyPanelsRef.current.find(panel=>panel.id===id)?.minimized);}
+      else tell('Ainda não há imagens de uma explicação anterior para mostrar novamente.',true);
+      if(replayed&&autoVoice&&canSpeak){voice.stop();voice.prepare();void voice.speak('Mostrando as imagens novamente.');}
+      setChatOpen(false);setModule(null);setEyeOpen(false);setNote(null);
+      return true;
+    }
     if(/^(?:abrir|abre|abra|mostrar|mostre|quero abrir) (?:o |a janela do )?(?:cronos|kronos|chronos)$/.test(normalizedCommand)){
       if(mainBridge?.show_main)void mainBridge.show_main().catch(()=>tell('Não consegui restaurar a janela.',true));else window.focus();
       return true;
@@ -297,6 +312,7 @@ export default function App(){
   const sendText=async(value:string,source:'text'|'transcription'='text',audio?:Blob,wakeConfirmed=false)=>{
     const text=value.trim();if(!text)return;if(inFlight.current){setDraft(text);tell('Sua pergunta foi reconhecida e está guardada no campo. Aguarde a resposta atual ou pressione Esc antes de enviar.',true);return;}if(!audio&&runCommand(text)){setDraft('');return;}
     if(!connected){tell('A conexão automática ainda não está disponível. Feche e abra o Kronos novamente.',true);return;}
+    const previousVisualState=visualState.current?{...visualState.current,visible:Boolean(focusedStudyPanel&&!chatOpen&&!moduleActive&&!eyeActive&&!studyActive&&!studioActive)}:undefined;
     const pendingHeardContext=interruptedContext.current;
     let showStudyText=isStudyQuestion(text)&&!isExplicitTextDisplay(text);if(!showStudyText)focusStudyPanel(null);let studyPanelId:string|null=showStudyText?addStudyPanel(text):null;
     applyCardRequest(text,source==='text');if(!audio)setDisplayTurn({question:text,source,reply:''});setChatOpen(false);
@@ -345,7 +361,7 @@ export default function App(){
           speakTracked(reply);
         }
       };
-      const result=await streamChat({message:text,session_id:session.current,turn_id:turnLatency.turn_id,wake_confirmed:wakeConfirmed,...(pendingHeardContext?{heard_context:pendingHeardContext}:{})},controller.signal,ready,intro,recognized=>{
+      const result=await streamChat({message:text,session_id:session.current,turn_id:turnLatency.turn_id,wake_confirmed:wakeConfirmed,...(pendingHeardContext?{heard_context:pendingHeardContext}:{}),...(previousVisualState?{visual_context:previousVisualState}:{})},controller.signal,ready,intro,recognized=>{
         if(version!==turnVersion.current||controller.signal.aborted)return;
         if(audio)microphone.acknowledge();
         // Do not abort here: the backend returns an explicit ignored result so
@@ -451,7 +467,7 @@ export default function App(){
     <MusicPlayer ref={music} onWindowChange={setMusicWindow} onPlayback={setMusicPlaying} onTalk={async()=>{voice.stop();microphone.cancelCapture();await microphone.start();}} local={config?.privacy_mode==='local'} onError={message=>tell(message,true)}/>
     {notice&&error&&<div className="scene-notice" role="status"><span>{notice}</span>{displayTurn?.reply&&<button onClick={()=>{setShowSpokenCards(true);setModule(null);setChatOpen(false);focusStudyPanel(null);}}>Ler resposta</button>}<button aria-label="Fechar aviso" onClick={()=>{setNotice('');setError(false);}}><X size={16}/></button></div>}
     {note&&<WindowSurface minimized={minimizedWindows.includes('note')}><section className="note-window" aria-label="Nota Obsidian"><MinimizeWindow label="nota" onClick={()=>minimizeWindow('note')}/><button onClick={()=>setNote(null)} aria-label="Fechar nota"><X size={18}/></button><pre>{note.content}</pre></section></WindowSurface>}
-    {studyPanels.length>0&&!chatOpen&&!moduleActive&&!eyeActive&&!studyActive&&!studioActive&&<StudyExplanationPanel panels={studyPanels} activeId={focusedStudyPanel} speaking={voice.isSpeaking||voice.isGenerating} onClose={closeStudyPanel}/>}
+    {studyPanels.length>0&&!chatOpen&&!moduleActive&&!eyeActive&&!studyActive&&!studioActive&&<StudyExplanationPanel panels={studyPanels} activeId={focusedStudyPanel} speaking={voice.isSpeaking||voice.isGenerating} onMediaState={rememberVisualState} onClose={closeStudyPanel}/>}
     {displayTurn?.reply&&showSpokenCards&&!chatOpen&&!module&&!eyeOpen&&<AnswerCards reply={displayTurn.reply} layout={cardLayout}/>}
     {displayTurn&&displayTurn.source==='text'&&showSpokenCards&&!chatOpen&&!module&&!eyeOpen&&<MovableCardFrame className="spoken-question"><HolographicCard title="PERGUNTA" variant="ribbon" movable><p className="holo-text">{displayTurn.question}</p></HolographicCard></MovableCardFrame>}
     {chatOpen&&<WindowSurface minimized={minimizedWindows.includes('chat')}><section className="card-composer" aria-label="Escrever para Kronos"><HolographicCard title="PERGUNTA" variant="layered">
