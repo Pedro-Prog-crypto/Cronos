@@ -170,8 +170,10 @@ class Engine:
             system+='\nA pergunta atual está no áudio enviado, não no marcador textual. Compreenda a fala em português brasileiro e responda à pergunta real. Transcreva apenas a fala atual: nunca complete o que não ouviu com frases do histórico ou resumos. Ruídos, televisão e trechos incertos não autorizam inventar intenção, valores ou dados pessoais. Se não estiver claro, peça esclarecimento. Não afirme que o senhor falou espanhol ou outro idioma por hipótese.'
         results, used = [], set()
         from cronos.conversation_transport import conversation_provider
+        from cronos.council import CouncilProvider, council_ids
         route_settings = self.settings
-        if self.provider is None and explanation:
+        council_active = self.provider is None and audio is None and len(council_ids(self.settings)) > 1
+        if self.provider is None and explanation and not council_active:
             from cronos.evolution import explanation_providers
             routes = explanation_providers(self.settings)
             if routes:
@@ -180,8 +182,8 @@ class Engine:
                 route_settings = replace(self.settings, provider=chosen,
                                          gemini_transport='rest' if chosen == 'gemini' else self.settings.gemini_transport,
                                          output_tokens=max(2400, self.settings.output_tokens or 0))
-        provider = self.provider or conversation_provider(route_settings)
-        if self.provider is None and audio is None:
+        provider = self.provider or (CouncilProvider(route_settings) if council_active else conversation_provider(route_settings))
+        if self.provider is None and audio is None and not council_active:
             from cronos.evolution import ResilientProvider
             provider = ResilientProvider(route_settings, provider, all_configured=explanation)
         final = None
@@ -212,7 +214,7 @@ class Engine:
                     from cronos.delivery import mark
                     mark('answer_requested',provider=route_settings.provider,**({'bytes':len(audio)} if audio is not None else {'characters':len(messages[-1].get('content',''))}))
                     result = await provider.reply(system, messages)
-                provider_seconds+=time.perf_counter()-generation_started;provider_calls+=1
+                provider_seconds+=time.perf_counter()-generation_started;provider_calls+=result.get('provider_calls',1)
             except ProviderError as exc:
                 from cronos.delivery import mark
                 mark('failed',provider=self.settings.provider,http_status=exc.http_status or exc.status,error_type=type(exc.__cause__).__name__ if exc.__cause__ else (exc.kind or 'answer'))
@@ -275,7 +277,7 @@ class Engine:
                 generation_started=time.perf_counter()
                 with request_scope('conversation',turn):
                     final = await provider.reply(system + "\nNão solicite mais ferramentas; relate os resultados existentes e limitações.", messages)
-                provider_seconds+=time.perf_counter()-generation_started;provider_calls+=1
+                provider_seconds+=time.perf_counter()-generation_started;provider_calls+=final.get('provider_calls',1)
             except ProviderError as exc:
                 raise TurnError(str(exc), session, results,exc.status) from exc
             if final.get("tool_calls"):
@@ -298,4 +300,6 @@ class Engine:
         return {"session_id": str(session), "reply": final["reply"], "topics": [t["title"] for t in final["topics"]],
                 "notes": notes, "tool_results": results, "warnings": list(self.memory.warnings),
                 "provider_used":final.get("provider_used", route_settings.provider),
-                "fallback_used":final.get("fallback_used", False), "timings_ms":timings,**({"recognized_text":recognized_text} if recognized_text is not None else {})}
+                "fallback_used":final.get("fallback_used", False), "timings_ms":timings,
+                **({"council":final['council']} if final.get('council') else {}),
+                **({"recognized_text":recognized_text} if recognized_text is not None else {})}

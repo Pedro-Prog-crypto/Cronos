@@ -285,13 +285,19 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         current = app.state.engine.settings
         warning = None
         try:
-            configured = next((p['configured'] for p in provider_catalog(current) if p['id'] == current.provider), False)
+            catalog = provider_catalog(current)
+            configured = next((p['configured'] for p in catalog if p['id'] == current.provider), False)
+            from cronos.council import council_ids
+            council_providers = council_ids(current)
         except ProviderError as exc:
             configured = bool(settings.gemini_key) if settings.provider == 'gemini' else settings.provider == 'ollama'
+            council_providers = []
             warning = str(exc)
         return {"provider": current.provider, "gemini_configured": bool(settings.gemini_key),
                 "provider_model": next((item['model'] for item in provider_catalog(current) if item['id'] == current.provider), None) if warning is None else None,
                 "provider_configured": configured, "configuration_warning": warning,
+                "council_enabled": len(council_providers)>1,
+                "council_providers": council_providers,
                 "privacy_mode": settings.privacy_mode,
                 "fish_configured": bool(settings.fish_key) and settings.privacy_mode == 'online',
                 "transcription_provider": settings.transcription_provider,
@@ -300,7 +306,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 # available. Native Live audio bypasses Fish/Vosk and cannot
                 # use the normal text-provider failover after recognition.
                 "native_voice_available":__import__('sys').platform=='win32',
-                "direct_audio_chat":current.direct_audio_chat and current.privacy_mode=="online" and current.provider=="gemini" and current.gemini_transport=="live" and not (
+                "direct_audio_chat":current.direct_audio_chat and len(council_providers)<=1 and current.privacy_mode=="online" and current.provider=="gemini" and current.gemini_transport=="live" and not (
                     current.transcription_provider == "vosk" or
                     current.transcription_provider == "fish" and bool(current.fish_key) and current.privacy_mode == "online"
                 ),

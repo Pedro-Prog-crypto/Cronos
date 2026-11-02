@@ -108,3 +108,15 @@ apareceu quando nao carregou. Titulos da fonte nao sao analise visual.
 Imagens disponiveis alternam de posicao enquanto o mural estiver aberto; quando
 chegam menos de seis, a busca tenta obter outras. Uma legenda curta de uma linha
 acompanha a fala na parte inferior, sem cobrir a apresentacao.
+
+REVISAO DE 02/11/2026 — CONSELHO DE IAs (R21)
+Para perguntas enviadas como texto, o Cronos consulta em paralelo as IAs de
+conversa configuradas e disponiveis. Cada uma produz uma analise interna; apenas
+as analises recebidas entram na sintese de uma resposta final unica. Rascunhos
+nao sao falados nem executam ferramentas. O resultado informa quais integracoes
+foram tentadas, quais contribuiram e quais falharam. A voz do Cronos continua
+separada desse raciocinio. Quando houver mais de uma IA disponivel, a pergunta
+falada e transcrita antes de entrar no conselho; o audio direto Gemini Live
+fica reservado para quando nao houver conselho. Cada integracao pode consumir
+creditos e a sintese final acrescenta uma chamada. Integracoes lentas recebem
+um prazo curto, sem segurar indefinidamente a resposta.

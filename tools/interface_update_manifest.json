@@ -1,8 +1,8 @@
 {
-  "revision": "visual-replay-and-motion-2026-11-02-r20",
+  "revision": "ai-council-2026-11-02-r21",
   "files": {
     "cronos/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "cronos/app.py": "d4669ac7154756dc3baaaab64219f5e42bd21cae89a38176b48a6db17e9ac71e",
+    "cronos/app.py": "4da75eb434780ae0ca03afdc3f313f7e0477ea9ff9aaa964136a2bbed8573186",
     "cronos/background_conversation.py": "1a103fcb93742c6b4971478dbf4c1cf761bbf011c12adcfb740e25f53b633907",
     "cronos/background_listener.py": "6b6a239a1ace981413feca2b0d37743d4b122f69ed9513795fb03ceacc8062ad",
     "cronos/browser.py": "d11821ff8c7fdd2599f6c31d7aa9a7d75d8b091e2fea220dc6c5900843319ff2",
@@ -12,6 +12,7 @@
     "cronos/control.py": "2034c8c4fc25cb9b50345570e9d630aa6980478f6243deae4da52a2fc7cec7aa",
     "cronos/conversation_metrics.py": "21bfa6eec780dce0639f0c89aacb97a13498495370ac6aaf5b277dda1f7b92ff",
     "cronos/conversation_transport.py": "79dc6b0e4ff36771018e87cc9e15c1fc10e1baafd173714e221ea1cd91ded702",
+    "cronos/council.py": "4ee41a1717aa2d0b68753ee39b326bc41bf9fab7ebbf2834bc00282ba0954b61",
     "cronos/delivery.py": "2a74daddfecebca39b66d250b8ea6744c1dd786d958805ad638126d990039701",
     "cronos/desktop.py": "cf7a317ec22f71e9945cd64b5502ee04f9aa9168ca0cea4958d81845a66c010c",
     "cronos/desktop_overlay.py": "7893686da3c6e6bc65588d05fbd72a4c8068d1753847acfd801fa6f6b23d1a20",
@@ -20,7 +21,7 @@
     "cronos/device_voice.py": "4abb16bea900224d15171b343a53ee90579167ff68863cad20154e8ab7cc8c1d",
     "cronos/diagnostics.py": "e63ee173374b4512cd1d3d5f87d35e66061ab0ab16b0722d876bb9fb0ccd4aa9",
     "cronos/documents.py": "090994d41402871460161a886831ce6e5482df2843ccdaf746ca50172f52dd22",
-    "cronos/engine.py": "44898bde42ce80a75302765a3a7000e376cd9dcc8ea2baf9a5a99b6fbf5b3c66",
+    "cronos/engine.py": "4d4121c8353b1324fcabc8331e8d680ce0d3951b4ef4398ecfdda207b2fe82dd",
     "cronos/evolution.py": "e9e216d66c35a813ca109e32bb659be3cb1f6ec6e81363be63d8135c062c31d5",
     "cronos/eye-server/runtime/eccodes/build/eccodes/eccodes.js": "2bdf3de1d2e9126c4e88bc421bf9309ae459f9bd4f024d81fdc1df9dd4bb1510",
     "cronos/eye-server/runtime/eccodes/build/eccodes/index.js": "6d7d3090a9f19a963e7d59605e7277a33b56ff8488032b043fe9a174c8d72178",
@@ -352,7 +353,7 @@
     "cronos/providers.py": "176e3a438b9f4f6a4ceb5e436065a16977448940912bd3f198ca504d6370c66f",
     "cronos/recognition.py": "16656e9b1ee9657f14f943e9e4de2800b9f5625ee467a7a39ae50e5436a8c2da",
     "cronos/reply_stream.py": "a179348b72bb4b463a0d5b6cc1abfbc6335a486ba7b3c6cc6f766dc2fcc34b49",
-    "cronos/resident.py": "09a2a437fd8b3727686b853aeff920dd7afe5f3d1064cae9e46284d73f06b345",
+    "cronos/resident.py": "e0c3918323b5c69179b5b9f91fe182632c82636413f82d2ca3a81133dc189bf6",
     "cronos/security.py": "e13917164d117ac0943bd82a303051b6b6b5e4f6248274a4b91f4042e265f8e6",
     "cronos/spoken_text.py": "a1de32bf5d2a2796e712e670aec53f2a60972daff7a833b3cb289e6d9a038b0b",
     "cronos/static/app.js": "c898cc8ddcfc92c42eec4c06ec5de4ba42cac4366680c771bdb936c9292debac",
@@ -987,7 +988,7 @@
     "cronos/vision.py": "734168b101b36905b162be395f6f6a4066fec5de02219da6451c433215f4deae",
     "cronos/voice_diagnostic.py": "ff680c231b84b0906a47c2906a8ab4158379c29fd0b0aeaa9563c1bdb3dc6755",
     "cronos/voice_interrupt.py": "885e2c2189572a24a4d60f2017a6f609ffe23e80def112cf378581f36f56f616",
-    "cronos/wake.py": "a956551c6d03bfa62b6e4352efc60d5ce4adbff3bf72f446472997079729271a",
+    "cronos/wake.py": "ec1cecf2e0c8dcdf369664cf5ba8329243b1601167cf6a0c99fe9c6df1a8f4ff",
     "cronos/windows_agent.py": "be1dca0cf40f0d19722c550779b7f8c42e6ee9bf74ea6e50d55900f1f830075a",
     "cronos/windows_system.py": "c9818118ff63bc102d9b15d4b455b0dc7da2e1f1b17a1708cdb2b17df0515241"
   }
