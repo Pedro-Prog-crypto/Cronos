@@ -137,3 +137,22 @@ def test_vault_drop_merges_notes_without_overwriting_and_indexes_new_notes(tmp_p
     assert repeated["added"] == 0
     assert repeated["unchanged"] == 2
     assert repeated["renamed"] == 0
+
+
+def test_vault_drop_imports_recent_conversations_once(tmp_path: Path) -> None:
+    from uuid import uuid4
+    from cronos.storage import Memory
+    source = tmp_path / 'Dados-Para-Importar' / 'vault'
+    target = tmp_path / 'Cronos' / 'vault'
+    old = Memory(source)
+    session = uuid4()
+    old.record(session, 'Pergunta recente', 'Resposta recente', [])
+    active = Memory(target)
+    active.record(uuid4(), 'Conversa atual', 'Continua aqui', [])
+    first = merge_vault(source.parent, target)
+    second = merge_vault(source.parent, target)
+    restored = Memory(target)
+    assert first['imported_turns'] == 2
+    assert second['imported_turns'] == 0
+    assert [item['content'] for item in restored.history(session)] == ['Pergunta recente', 'Resposta recente']
+    assert restored.stats()['messages'] == 4

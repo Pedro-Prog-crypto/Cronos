@@ -71,22 +71,18 @@ async def exercise(base, harness):
                         slot=0,locked=False,minimized=False,createdAt=1,**extra)
         async def render(value, speaking=False):
             await page.evaluate('value=>window.renderWall(value.panel,value.speaking)',{'panel':value,'speaking':speaking})
-        photos=page.locator('.study-film-lane-set:not([aria-hidden="true"]) img')
+        photos=page.locator('.study-camera-tile img')
         await render(panel())
-        await page.wait_for_function('document.querySelectorAll(".study-film-lane-set:not([aria-hidden=true]) img").length===12')
-        assert await photos.count()==12
+        await page.wait_for_function('document.querySelectorAll(".study-camera-tile img").length===6')
+        assert await photos.count()==6
         assert await photos.evaluate_all('(items)=>items.every(img=>img.complete&&img.naturalWidth===360)')
-        assert await photos.evaluate_all('(items)=>new Set(items.map(img=>img.src)).size')==12
-        passed.append('12 decoded unique images despite failures and duplicate pixels')
-        before=await page.locator('.study-film-lane-track').first.evaluate('(el)=>getComputedStyle(el).transform')
-        await page.wait_for_timeout(350)
-        after=await page.locator('.study-film-lane-track').first.evaluate('(el)=>getComputedStyle(el).transform')
-        assert before!=after and after!='none'
-        bounds=await page.locator('.study-film-wall').bounding_box()
+        assert await photos.evaluate_all('(items)=>new Set(items.map(img=>img.src)).size')==6
+        passed.append('six decoded unique images despite source failures and duplicate pixels')
+        bounds=await page.locator('.study-camera-wall').bounding_box()
         assert bounds['width']==1366 and bounds['height']==768
-        assert await page.locator('.study-film-lane').count()==3
-        assert await page.locator('.study-cinema').inner_text()==''
-        passed.append('fullscreen wall moves left, three rows, no transcript')
+        assert await page.locator('.study-camera-tile').count()==6
+        assert await photos.evaluate_all('(items)=>items.every(img=>getComputedStyle(img).objectFit==="contain")')
+        passed.append('fullscreen six-camera wall preserves image proportions')
         count=len(searches)
         value=panel(); value['reply']+=' Uma nova frase chegou pela resposta em andamento.'
         await render(value); await page.wait_for_timeout(200)
@@ -95,45 +91,45 @@ async def exercise(base, harness):
         value=panel('Filósofos'); value['reply']='Sócrates investigou a ética e influenciou profundamente a filosofia. Platão fundou a Academia e escreveu diálogos sobre conhecimento.'
         value['spokenChunk']='Platão fundou a Academia e escreveu diálogos sobre conhecimento.'
         await render(value)
-        await page.wait_for_function('document.querySelector(".study-film-tile img")?.alt.startsWith("Plato")')
+        await page.wait_for_function('document.querySelector(".study-camera-tile img")?.alt.startsWith("Plato")')
         assert ('Plato','0') in searches
         passed.append('spoken Plato changes the subject instead of retaining Socrates')
         await render(panel('SlowTopic')); await page.wait_for_timeout(80)
         await render(panel('NewTopic'))
-        await page.wait_for_function('document.querySelector(".study-film-tile img")?.alt.startsWith("NewTopic")')
+        await page.wait_for_function('document.querySelector(".study-camera-tile img")?.alt.startsWith("NewTopic")')
         await page.wait_for_timeout(800)
         assert (await photos.first.get_attribute('alt')).startswith('NewTopic')
         passed.append('late cancelled search cannot overwrite a newer topic')
         mode['value']='empty'; await render(panel('EmptyTopic'))
         await page.get_by_role('button',name='TENTAR OUTRAS IMAGENS').wait_for()
         mode['value']='normal'; await page.get_by_role('button',name='TENTAR OUTRAS IMAGENS').click()
-        await page.wait_for_function('document.querySelectorAll(".study-film-lane-set:not([aria-hidden=true]) img").length===12')
+        await page.wait_for_function('document.querySelectorAll(".study-camera-tile img").length===6')
         assert ('EmptyTopic','1') in searches
         passed.append('empty search is not permanently cached; retry recovers')
         mode['value']='broken'; await render(panel('BrokenTopic'))
         await page.get_by_role('button',name='TENTAR OUTRAS IMAGENS').wait_for()
         mode['value']='normal'; await page.get_by_role('button',name='TENTAR OUTRAS IMAGENS').click()
-        await page.wait_for_function('document.querySelectorAll(".study-film-lane-set:not([aria-hidden=true]) img").length===12')
+        await page.wait_for_function('document.querySelectorAll(".study-camera-tile img").length===6')
         passed.append('all proxy failures report failure and allow working retry')
         await page.clock.install()
         await render(panel('RefreshTopic'),speaking=True)
-        await page.wait_for_function('document.querySelector(".study-film-tile img")?.alt.startsWith("RefreshTopic")')
+        await page.wait_for_function('document.querySelector(".study-camera-tile img")?.alt.startsWith("RefreshTopic")')
         count=len(searches)
-        await page.clock.fast_forward(30001)
-        await page.wait_for_function('document.querySelectorAll(".study-film-lane-set:not([aria-hidden=true]) img").length===12')
+        original=await photos.first.get_attribute('alt')
+        await page.clock.fast_forward(4701)
+        await page.wait_for_function('document.querySelector(".study-camera-tile img")?.alt!=="'+original+'"')
         await page.wait_for_timeout(100)
-        assert len(searches)>count
-        passed.append('new page of images is requested while narration continues')
+        assert len(searches)==count
+        passed.append('one frame changes during narration without another network search')
         await render(panel('PortraitTopic'))
-        await page.wait_for_function('document.querySelectorAll(".study-film-lane-set:not([aria-hidden=true]) img").length===12 && document.querySelector(".study-film-tile img")?.alt.startsWith("PortraitTopic")')
-        assert await page.locator('.study-film-lane').count()==2
+        await page.wait_for_function('document.querySelectorAll(".study-camera-tile img").length===6 && document.querySelector(".study-camera-tile img")?.alt.startsWith("PortraitTopic")')
         assert await photos.evaluate_all('(items)=>items.every(img=>img.naturalWidth===240&&getComputedStyle(img).objectFit==="contain")')
-        passed.append('portrait photographs adapt to two rows without forced cropping')
+        passed.append('portrait photographs remain uncropped')
         await page.set_viewport_size({'width':390,'height':844})
-        await page.wait_for_function('document.querySelectorAll(".study-film-lane").length===4')
+        await page.wait_for_function('document.querySelectorAll(".study-camera-tile").length===6')
         close=await page.get_by_role('button',name='Fechar apresentação').bounding_box()
         assert 0<=close['x'] and close['x']+close['width']<=390
-        assert await photos.count()==12
+        assert await photos.count()==6
         passed.append('small viewport preserves all photographs and a reachable close button')
         await page.screenshot(path='/tmp/cronos-review-wall.png')
         await page.get_by_role('button',name='Fechar apresentação').click()
@@ -177,16 +173,13 @@ async def exercise(base, harness):
         await full.locator('#chat-input').fill('Explique detalhadamente quem foi Sócrates')
         await full.get_by_role('button',name='Enviar mensagem',exact=True).click()
         await full.wait_for_function('document.querySelector(".reference-mic.speaking")!==null')
-        await full.wait_for_function('document.querySelectorAll(".study-film-lane-set:not([aria-hidden=true]) img").length===12')
-        count=len(searches)
-        await full.clock.fast_forward(30001)
-        for _ in range(30):
-            if len(searches)>count:break
-            await asyncio.sleep(.05)
-        assert len(searches)>count, 'Main App did not connect voice state to periodic image renewal'
+        await full.wait_for_function('document.querySelectorAll(".study-camera-tile img").length===6')
+        original=await full.locator('.study-camera-tile img').first.get_attribute('alt')
+        await full.clock.fast_forward(4701)
+        await full.wait_for_function('document.querySelector(".study-camera-tile img")?.alt!=="'+original+'"')
         assert not full_errors, full_errors
         await full.close()
-        passed.append('main App sends a study question, plays real WAV and renews images during speech')
+        passed.append('main App sends a study question, plays WAV and changes visual frame during speech')
         await browser.close()
     return passed
 

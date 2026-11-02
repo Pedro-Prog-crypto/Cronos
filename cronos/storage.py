@@ -54,6 +54,8 @@ class Memory:
                 CREATE TABLE IF NOT EXISTS exports (id INTEGER PRIMARY KEY, path TEXT NOT NULL, marker TEXT NOT NULL UNIQUE,
                     header TEXT NOT NULL, body TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0);
                 CREATE TABLE IF NOT EXISTS imports (path TEXT PRIMARY KEY);
+                CREATE TABLE IF NOT EXISTS imported_turns (source TEXT NOT NULL, source_id INTEGER NOT NULL,
+                    PRIMARY KEY(source, source_id));
                 CREATE TABLE IF NOT EXISTS tool_events (id INTEGER PRIMARY KEY, session TEXT NOT NULL,
                     payload TEXT NOT NULL, created TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS notes (path TEXT PRIMARY KEY, title TEXT NOT NULL, fingerprint TEXT NOT NULL);
@@ -110,16 +112,11 @@ class Memory:
                                                 (str(session), max(0, limit))).fetchall()))
         return [dict(row) for row in rows]
 
-    def record_brain_dialogue(self, session: UUID, message: str, reply: str) -> None:
-        """Cache a Brain turn for the desktop UI and local device-action context.
-
-        Brain Cloud owns the durable reasoning history and semantic memory;
-        this mirror does not create Obsidian notes or knowledge topics.
-        """
-        stamp = datetime.now(timezone.utc).isoformat()
+    def latest_session(self):
+        """Resume the most recent durable conversation after restarting the UI."""
         with self.connect() as db:
-            db.executemany("INSERT INTO turns(session,role,content,created) VALUES(?,?,?,?)",
-                           [(str(session), 'user', message, stamp), (str(session), 'assistant', reply, stamp)])
+            row = db.execute("SELECT session FROM turns WHERE role='assistant' ORDER BY id DESC LIMIT 1").fetchone()
+        return UUID(row['session']) if row else None
 
     def _markdown_files(self):
         for directory, folders, filenames in os.walk(self.vault, followlinks=False):

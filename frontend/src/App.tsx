@@ -161,6 +161,7 @@ export default function App(){
   useEffect(()=>{
     if(!connected||!config)return;
     let alive=true;
+    void jsonApi('/conversations/latest').then(value=>{if(alive&&!live.current.busy&&value.session_id)session.current=value.session_id;}).catch(()=>{});
     void jsonApi('/assistant/state').then(value=>{
       if(!alive||!value.native_available)return;
       if(!session.current)session.current=value.session_id;

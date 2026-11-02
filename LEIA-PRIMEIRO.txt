@@ -10,8 +10,8 @@ PRIMEIRA INSTALACAO
 3. Para importar dados, copie a pasta antiga completa para Dados-Para-Importar e
    execute IMPORTAR-DADOS-PARA-CRONOS.bat. Com .env e vault, ele importa integracoes,
    memorias e personalidade, guardando os dados atuais em .cronos-migracao-backups.
-   Se copiar somente um vault, ele mescla notas e anexos sem sobrescrever arquivos;
-   o banco SQLite antigo fica preservado na origem e nao e mesclado. A origem e mantida.
+   Se copiar somente um vault, ele mescla notas, anexos e conversas sem sobrescrever
+   os arquivos atuais; a origem e mantida. Outros bancos SQLite nao sao mesclados.
    Notas Markdown no vault sao indexadas automaticamente. Chaves e vault privado nunca
    vao para o GitHub.
 4. Execute ABRIR-CRONOS.bat. Na primeira vez ele instala as dependencias nesta pasta;
@@ -57,11 +57,10 @@ O pacote conserva imagens, memoria e separacao entre chamar e abrir a janela.
 Encerre o assistente antigo antes de usar esta pasta.
 Detalhes e limites reais: docs\RESPOSTAS-2026-11-01-R13.md
 
-REVISAO DE 02/11/2026 — BRAIN CLOUD E CAPTURA DE VOZ (R14)
-No Brain Cloud, abra Integracao, prepare a conexao e baixe cronos-desktop.json.
-Nesta pasta, execute CONECTAR-BRAIN-CLOUD.bat e escolha o JSON. A conexao fica
-no vault privado e continua disponivel quando atualizar o codigo do Cronos.
-Com o Brain configurado e disponivel, conversas de raciocinio seguem para ele;
-voz e interface ficam no Cronos. Acoes do computador usam o motor local.
-O envio manual do microfone espera som captado antes de habilitar. Detalhes e limites:
-docs\BRAIN-CLOUD-INTEGRACAO.md
+REVISAO DE 02/11/2026 — CEREBRO INTEGRADO (R15)
+O Brain Cloud separado foi retirado. Explicacoes de texto distribuem as chamadas
+entre integracoes realmente configuradas e tentam outra em caso de falha.
+O mural usa seis quadros proporcionais e troca fotos durante a fala.
+A ultima conversa volta ao reabrir. IMPORTAR-DADOS-PARA-CRONOS.bat agora mescla
+tambem as mensagens do banco antigo sem repetir importacoes da mesma origem.
+Detalhes e limites para a proxima etapa: docs\IDEIA-CENTRAL-CEREBRO-CRONOS.md

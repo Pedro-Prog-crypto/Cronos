@@ -19,6 +19,18 @@ def test_storage_does_not_trim_large_history(tmp_path):
     assert history[-1]["content"] == "resposta " * 1500
 
 
+def test_latest_conversation_survives_restart(tmp_path):
+    vault = tmp_path / "vault"
+    memory = Memory(vault)
+    assert memory.latest_session() is None
+    previous, current = uuid4(), uuid4()
+    memory.record(previous, "Conversa antiga", "Resposta antiga", [])
+    memory.record(current, "Conversa nova", "Resposta nova", [])
+    restored = Memory(vault)
+    assert restored.latest_session() == current
+    assert restored.history(current)[-1]["content"] == "Resposta nova"
+
+
 def test_recall_indexes_manual_content_and_updates(tmp_path):
     memory = Memory(tmp_path / "vault")
     manual = memory.vault / "Estudos"

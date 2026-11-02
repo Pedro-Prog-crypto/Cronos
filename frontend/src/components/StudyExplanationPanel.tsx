@@ -1,14 +1,14 @@
-import React,{useEffect,useMemo,useRef,useState} from 'react';
+import {useEffect,useMemo,useRef,useState} from 'react';
 import {ExternalLink,RotateCw,X} from 'lucide-react';
 import {api} from '../api';
 import {spokenSlideIndex,visualSlides} from '../visualSlides';
-import {isNearDuplicateHash,normalizedImageUrl,partitionWallImages} from '../studyImageDedupe';
+import {isNearDuplicateHash,normalizedImageUrl} from '../studyImageDedupe';
 import './StudyExplanationPanel.css';
 
 type StoryImage={title:string;url:string;proxy_url:string;source_url:string;license:string;artist:string;provider?:string;kind?:'image';aspect?:number};
 type StoryMedia={images:StoryImage[]};
-const PHOTO_WALL_TARGET=12;
-const PHOTO_WALL_DEADLINE_MS=6500;
+const PHOTO_WALL_TARGET=18;
+const PHOTO_WALL_DEADLINE_MS=9000;
 export type StudyPanelItem={id:string;title:string;reply:string;slot:number;locked:boolean;minimized:boolean;createdAt:number;position?:{left:number;top:number};spokenChunk?:string;spokenChunkIndex?:number;references?:Array<{title:string;url:string;excerpt?:string}>};
 async function decodeImage(image:HTMLImageElement,signal:AbortSignal){
  if(signal.aborted)throw new DOMException('Imagem interrompida.','AbortError');
@@ -31,39 +31,41 @@ function StudyStory({panel,onClose,speaking}:{panel:StudyPanelItem;onClose:()=>v
  const [photosLoading,setPhotosLoading]=useState(false),[retry,setRetry]=useState(0),[failure,setFailure]=useState('');
  const assets=useRef(new Map<string,{url:string;hash:string;aspect:number}>());
  const mediaCache=useRef(new Map<string,{media:StoryMedia;expires:number}>());
+ const imagePool=useRef<StoryImage[]>([]),sourcePool=useRef<Record<string,string>>({}),previousQuery=useRef('');
  const visibleImages=images.filter(image=>Boolean(imageSources[image.proxy_url]));
- const [screenAspect,setScreenAspect]=useState(()=>window.innerWidth/Math.max(1,window.innerHeight));
- useEffect(()=>{const resize=()=>setScreenAspect(window.innerWidth/Math.max(1,window.innerHeight));window.addEventListener('resize',resize);return()=>window.removeEventListener('resize',resize);},[]);
- const wallRows=useMemo(()=>{
-  const totalAspect=visibleImages.reduce((sum,item)=>sum+(item.aspect||1.5),0);
-  const rows=Math.max(1,Math.min(4,Math.round(Math.sqrt(totalAspect/screenAspect))));
-  return partitionWallImages(visibleImages,0,rows);
- },[visibleImages,screenAspect]);
+ const [wallStep,setWallStep]=useState(0);
+ const wallImages=visibleImages.length<=6?visibleImages:Array.from({length:6},(_,index)=>visibleImages[Math.min(wallStep,visibleImages.length-6)+index]);
+ useEffect(()=>{if(!speaking||visibleImages.length<=6||wallStep>=visibleImages.length-6)return;
+  const timer=window.setTimeout(()=>setWallStep(step=>step+1),4700);return()=>window.clearTimeout(timer);
+ },[speaking,visibleImages.length,wallStep]);
  useEffect(()=>{
-  if(!speaking)return;
-  const timer=window.setInterval(()=>setRetry(value=>value+1),30000);
+  if(!speaking||visibleImages.length>=6)return;
+  const timer=window.setInterval(()=>setRetry(value=>value+1),25000);
   return()=>window.clearInterval(timer);
- },[speaking]);
+ },[speaking,visibleImages.length]);
  useEffect(()=>()=>{assets.current.forEach(asset=>URL.revokeObjectURL(asset.url));assets.current.clear();},[]);
  useEffect(()=>{
   let disposed=false;
   const controller=new AbortController();
   let timer=window.setTimeout(()=>controller.abort(),7500);
   const key=`${collectionQuery.toLocaleLowerCase('pt-BR')}|${retry}`;
+  const preserve=previousQuery.current===collectionQuery;
+  if(!preserve){imagePool.current=[];sourcePool.current={};setImages([]);setImageSources({});setWallStep(0);}
+  previousQuery.current=collectionQuery;
   setLoadState('loading');setFailure('');
   const run=async()=>{
    const cached=mediaCache.current.get(key);
    let candidates:StoryImage[];
    if(cached&&cached.expires>Date.now())candidates=cached.media.images;
    else{
-    const response=await api(`/studies/images?query=${encodeURIComponent(collectionQuery)}&limit=18&attempt=${retry%21}`,{signal:controller.signal});
+    const response=await api(`/studies/images?query=${encodeURIComponent(collectionQuery)}&limit=24&attempt=${retry%21}`,{signal:controller.signal});
     const data=await response.json();
     const urls=new Set<string>();
     candidates=(data.images||[]).filter((item:StoryImage)=>{
      const identity=normalizedImageUrl(item.url);
      if(!/^https:\/\//i.test(item.url)||!/^\/studies\/media\/[A-Za-z0-9_-]+$/.test(item.proxy_url)||!/^https?:\/\//i.test(item.source_url)||urls.has(identity))return false;
      urls.add(identity);return true;
-    }).slice(0,18);
+    }).slice(0,24);
     // Failures and empty searches are retried on a later visit, never cached for 20 minutes.
     if(candidates.length){
      if(mediaCache.current.size>=12)mediaCache.current.delete(mediaCache.current.keys().next().value!);
@@ -76,9 +78,11 @@ function StudyStory({panel,onClose,speaking}:{panel:StudyPanelItem;onClose:()=>v
    candidates=[...candidates].sort((left,right)=>Number(assets.current.has(normalizedImageUrl(left.url)))-Number(assets.current.has(normalizedImageUrl(right.url))));
    window.clearTimeout(timer);timer=window.setTimeout(()=>controller.abort(),PHOTO_WALL_DEADLINE_MS);
    setPhotosLoading(true);
-   let next=0;const accepted:StoryImage[]=[],sources:Record<string,string>={},hashes:string[]=[];
+   let next=0;const accepted:StoryImage[]=preserve?[...imagePool.current]:[],sources:Record<string,string>=preserve?{...sourcePool.current}:{},hashes:string[]=accepted.map(item=>assets.current.get(normalizedImageUrl(item.url))?.hash||'').filter(Boolean);
+   const known=new Set(accepted.map(item=>normalizedImageUrl(item.url)));
    const worker=async()=>{while(next<candidates.length&&accepted.length<PHOTO_WALL_TARGET&&!controller.signal.aborted&&!disposed){
     const candidate=candidates[next++],identity=normalizedImageUrl(candidate.url);
+    if(known.has(identity))continue;
     let temporary:string|undefined;
     try{
      let asset=assets.current.get(identity);
@@ -103,14 +107,16 @@ function StudyStory({panel,onClose,speaking}:{panel:StudyPanelItem;onClose:()=>v
      if(disposed||controller.signal.aborted||accepted.length>=PHOTO_WALL_TARGET)return;
      if(asset.hash&&isNearDuplicateHash(asset.hash,hashes,3))continue;
      if(asset.hash)hashes.push(asset.hash);
+     known.add(identity);
      accepted.push({...candidate,aspect:asset.aspect});sources[candidate.proxy_url]=asset.url;
+     imagePool.current=[...accepted];sourcePool.current={...sources};
      setImages([...accepted]);setImageSources({...sources});setLoadState('ready');
     }catch{/* Try another candidate within the same total deadline. */}
     finally{if(temporary)URL.revokeObjectURL(temporary);}
    }};
    await Promise.all(Array.from({length:Math.min(6,candidates.length)},worker));
    if(disposed)return;
-   if(!accepted.length){setImages([]);setImageSources({});throw new Error('As fontes retornaram imagens, mas os arquivos não carregaram.');}
+   if(!accepted.length)throw new Error('As fontes retornaram imagens, mas os arquivos não carregaram.');
    // Bound memory while preserving every image still displayed.
    const used=new Set(Object.values(sources));
    for(const [identity,asset] of assets.current){
@@ -118,22 +124,17 @@ function StudyStory({panel,onClose,speaking}:{panel:StudyPanelItem;onClose:()=>v
     if(!used.has(asset.url)){URL.revokeObjectURL(asset.url);assets.current.delete(identity);}
    }
   };
-  void run().catch(error=>{if(!disposed){setImages([]);setImageSources({});setLoadState('failed');setFailure(error instanceof Error&&error.name!=='AbortError'?error.message:'A fonte de imagens demorou a responder. Tente novamente.');}})
+  void run().catch(error=>{if(!disposed){setLoadState('failed');setFailure(error instanceof Error&&error.name!=='AbortError'&&error.message!=='Failed to fetch'?error.message:'Não consegui acessar as imagens agora. Tente novamente.');}})
    .finally(()=>{window.clearTimeout(timer);if(!disposed)setPhotosLoading(false);});
   return()=>{disposed=true;window.clearTimeout(timer);controller.abort();};
  },[collectionQuery,retry]);
  const showFallback=loadState==='failed'&&!visibleImages.length;
  return <div className="study-cinema" aria-label={`Imagens relacionadas a ${panel.title}`}>
-  <div className="study-film-wall" style={{gridTemplateRows:`repeat(${Math.max(1,wallRows.length)},minmax(0,1fr))`}} aria-label="Faixas de imagens relacionadas, movendo-se da direita para a esquerda">
-   {wallRows.map((row,rowIndex)=><div className={`study-film-lane lane-${rowIndex+1}`} key={rowIndex}>
-    <div className="study-film-lane-track" style={{'--lane-duration':`${Math.max(22,row.length*3.3)}s`,'--lane-tile-width':`max(16.6667vw, calc(100vw / ${row.length}))`} as React.CSSProperties}>
-     {[0,1].map(copy=><div className="study-film-lane-set" key={copy} aria-hidden={copy===1}>
-      {row.map((image,index)=><figure className="study-film-tile" key={`${copy}-${image.proxy_url}`} style={{width:`calc(100vw * ${(image.aspect||1.5)/row.reduce((sum,item)=>sum+(item.aspect||1.5),0)})`}}>
-       <img src={imageSources[image.proxy_url]} alt={copy===0?image.title:''} decoding="async" onError={()=>setImageSources(previous=>{const next={...previous};delete next[image.proxy_url];return next;})}/>
-      </figure>)}
-     </div>)}
-    </div>
-   </div>)}
+  <div className="study-camera-wall" aria-label="Mural com seis quadros de imagens relacionadas à explicação">
+   {Array.from({length:6},(_,index)=>{const image=wallImages[index];return <figure className={`study-camera-tile ${image?'has-image':'is-pending'}`} key={image?.proxy_url||`pending-${index}`}>
+    {image?<img src={imageSources[image.proxy_url]} alt={image.title} decoding="async" onError={()=>setImageSources(previous=>{const next={...previous};delete next[image.proxy_url];return next;})}/>:<div className="study-camera-pending">{photosLoading||loadState==='loading'?'Buscando referência':'Imagem indisponível'}</div>}
+    <figcaption><span>{String(index+1).padStart(2,'0')}</span><b>{image?.title||'REFERÊNCIA VISUAL'}</b></figcaption>
+   </figure>;})}
   </div>
   {(loadState==='loading'&&!images.length||photosLoading&&!visibleImages.length)&&<div className="study-cinema-status"><i/><span>BUSCANDO IMAGENS PARA A EXPLICAÇÃO</span></div>}
   {showFallback&&<div className="study-cinema-fallback"><span>{failure||'As imagens desta busca não carregaram.'}</span><button type="button" onClick={()=>setRetry(value=>value+1)}><RotateCw size={15}/> TENTAR OUTRAS IMAGENS</button><div><a href={`https://commons.wikimedia.org/wiki/Special:MediaSearch?type=image&search=${encodeURIComponent(collectionQuery)}`} target="_blank" rel="noreferrer">WIKIMEDIA <ExternalLink size={12}/></a><a href={`https://openverse.org/search/image?q=${encodeURIComponent(collectionQuery)}`} target="_blank" rel="noreferrer">OPENVERSE <ExternalLink size={12}/></a></div></div>}

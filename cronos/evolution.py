@@ -117,9 +117,22 @@ def checkup(settings):
             'discovery': 'Use integrations_models para modelos anunciados pela API; novidades de outros provedores exigem pesquisa em fontes oficiais. Não há catálogo universal garantido.'}
 
 
+def explanation_providers(settings):
+    """Rotate real configured text providers; keep local Ollama as the last option.
+
+    One model answers each successful turn. Calling every paid API for every
+    sentence would multiply both latency and usage without improving the voice.
+    """
+    available = [item for item in provider_catalog(settings) if item['configured']]
+    return [item['id'] for item in available if item['id'] not in {'gemini', 'ollama'}] + [
+        item['id'] for item in available if item['id'] in {'gemini', 'ollama'}
+    ]
+
+
 class ResilientProvider:
-    def __init__(self, settings, primary):
+    def __init__(self, settings, primary, *, all_configured=False):
         self.settings, self.primary = settings, primary
+        self.all_configured = all_configured
 
     async def reply(self, system, messages):
         """Hedge a slow request without destroying a still usable answer.
@@ -173,6 +186,11 @@ class ResilientProvider:
             if policy_loaded: return
             policy_loaded = True
             if raw_input: return
+            if self.all_configured:
+                reserves = [provider_id for provider_id in explanation_providers(self.settings)
+                            if provider_id != self.settings.provider]
+                reserve_deadline = loop.time() + FALLBACK_TOTAL_TIMEOUT_SECONDS
+                return
             try: policy = Routing.model_validate(read(self.settings)['routing'])
             except (ProviderError,ValueError):
                 # Broken legacy routing cannot erase a working primary answer.
@@ -193,7 +211,8 @@ class ResilientProvider:
                         provider_id = reserves.pop(0)
                         timeout = min(FALLBACK_ATTEMPT_TIMEOUT_SECONDS, reserve_deadline - loop.time())
                         if provider_id == 'ollama': timeout = min(timeout, 8)
-                        try: provider = conversation_provider(replace(self.settings, provider=provider_id))
+                        try: provider = conversation_provider(replace(self.settings, provider=provider_id,
+                                             gemini_transport='rest' if self.all_configured and provider_id=='gemini' else self.settings.gemini_transport))
                         except ProviderError as exc: errors.append(exc); next_start = loop.time(); continue
                         start(provider, provider_id, timeout)
                         next_start = loop.time() + FIRST_REPLY_TIMEOUT_SECONDS
@@ -218,7 +237,7 @@ class ResilientProvider:
                         error = exc if isinstance(exc, ProviderError) else ProviderError('A integração demorou demais e atingiu seu limite de geração.', 504)
                         mark('answer_route_failed', provider=provider_id, http_status=error.http_status or error.status)
                         if winner is task: raise error
-                        if provider_id == self.settings.provider and not error.retryable: raise error
+                        if provider_id == self.settings.provider and not error.retryable and not self.all_configured: raise error
                         errors.append(error); load_reserves(); next_start = loop.time()
                         continue
                     if winner is not None and winner is not task: continue
@@ -229,7 +248,8 @@ class ResilientProvider:
                     provider_id = reserves.pop(0)
                     timeout = min(FALLBACK_ATTEMPT_TIMEOUT_SECONDS, reserve_deadline-loop.time())
                     if provider_id == 'ollama': timeout=min(timeout,8)
-                    try: provider = conversation_provider(replace(self.settings, provider=provider_id))
+                    try: provider = conversation_provider(replace(self.settings, provider=provider_id,
+                                         gemini_transport='rest' if self.all_configured and provider_id=='gemini' else self.settings.gemini_transport))
                     except ProviderError as exc: errors.append(exc); continue
                     start(provider, provider_id, timeout)
                     next_start = loop.time() + FIRST_REPLY_TIMEOUT_SECONDS

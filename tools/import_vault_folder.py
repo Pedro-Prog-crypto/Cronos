@@ -6,7 +6,10 @@ import hashlib
 import os
 from pathlib import Path
 import shutil
+import sqlite3
 import tempfile
+from urllib.parse import quote
+from uuid import UUID
 
 from cronos.storage import Memory
 
@@ -41,6 +44,35 @@ def _vault_root(source: Path) -> Path:
     if nested.is_dir():
         return nested.resolve(strict=True)
     return source
+
+
+def _merge_conversations(source: Path, memory: Memory) -> int:
+    old = source / '.cronos' / 'memory.sqlite3'
+    if not old.is_file():
+        return 0
+    source_key = hashlib.sha256(str(old.resolve()).encode()).hexdigest()
+    uri = 'file:' + quote(old.as_posix(), safe='/') + '?mode=ro'
+    copied = 0
+    with sqlite3.connect(uri, uri=True, timeout=15) as previous:
+        columns = {row[1] for row in previous.execute('PRAGMA table_info(turns)')}
+        if not {'id', 'session', 'role', 'content', 'created'} <= columns:
+            return 0
+        rows = previous.execute('SELECT id,session,role,content,created FROM turns ORDER BY id')
+        with memory.connect() as current:
+            for old_id, session, role, content, created in rows:
+                try:
+                    UUID(session)
+                except (TypeError, ValueError):
+                    continue
+                if role not in {'user', 'assistant'} or not isinstance(content, str) or not isinstance(created, str):
+                    continue
+                inserted = current.execute('INSERT OR IGNORE INTO imported_turns(source,source_id) VALUES(?,?)',
+                                           (source_key, old_id)).rowcount
+                if inserted:
+                    current.execute('INSERT INTO turns(session,role,content,created) VALUES(?,?,?,?)',
+                                    (session, role, content, created))
+                    copied += 1
+    return copied
 
 
 def merge_vault(source: Path, target: Path) -> dict[str, int | bool]:
@@ -105,9 +137,11 @@ def merge_vault(source: Path, target: Path) -> dict[str, int | bool]:
                 temporary_name.unlink(missing_ok=True)
 
     memory = Memory(target)
+    imported_turns = _merge_conversations(source, memory)
     memory.sync_notes()
     return {"added": added, "unchanged": unchanged, "renamed": renamed,
-            "indexed_notes": memory.stats()["indexed_notes"], "sqlite_skipped": skipped_sqlite}
+            "indexed_notes": memory.stats()["indexed_notes"], "sqlite_skipped": skipped_sqlite,
+            "imported_turns": imported_turns}
 
 
 def main() -> int:
@@ -122,8 +156,9 @@ def main() -> int:
         return 1
     print(f"Memorias mescladas: {report['added']} arquivos novos; {report['renamed']} conflitos preservados com outro nome.")
     print(f"Notas indexadas: {report['indexed_notes']}; arquivos ja existentes: {report['unchanged']}.")
-    if report["sqlite_skipped"]:
-        print("Banco de dados SQLite antigo preservado na origem, mas nao mesclado. Para migrar historico e integracoes, use MIGRAR-DADOS-DA-VERSAO-ANTIGA.bat.")
+    print(f"Mensagens antigas importadas: {report['imported_turns']}. A origem continua preservada.")
+    if report["sqlite_skipped"] and not report['imported_turns']:
+        print("Outros bancos SQLite nao foram importados. Para integracoes, use MIGRAR-DADOS-DA-VERSAO-ANTIGA.bat.")
     print("A origem foi mantida. O Cronos ja pode buscar as notas Markdown importadas.")
     return 0
 
