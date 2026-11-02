@@ -175,9 +175,9 @@ class Engine:
         from cronos.conversation_transport import conversation_provider
         from cronos.council import CouncilProvider, council_ids
         route_settings = self.settings
-        available_ids = council_ids(self.settings) if self.provider is None else []
+        available_ids = council_ids(self.settings) if self.provider is None and not presence else []
         council_active = self.provider is None and audio is None and not greeting and not presence and len(available_ids) > 1
-        if self.provider is None and self.settings.provider == 'ollama' and 'ollama' not in available_ids and available_ids:
+        if self.provider is None and not presence and self.settings.provider == 'ollama' and 'ollama' not in available_ids and available_ids:
             chosen = available_ids[0]
             route_settings = replace(self.settings, provider=chosen,
                                      gemini_transport='rest' if chosen == 'gemini' else self.settings.gemini_transport)
