@@ -1,5 +1,5 @@
 import {useEffect,useMemo,useRef,useState} from 'react';
-import {ExternalLink,RotateCw,X} from 'lucide-react';
+import {ExternalLink,Minus,RotateCw,X} from 'lucide-react';
 import {api} from '../api';
 import {spokenSlideIndex,visualSlides} from '../visualSlides';
 import {isNearDuplicateHash,normalizedImageUrl} from '../studyImageDedupe';
@@ -9,7 +9,7 @@ type StoryImage={title:string;url:string;proxy_url:string;source_url:string;lice
 type StoryMedia={images:StoryImage[]};
 const PHOTO_WALL_TARGET=30;
 const PHOTO_WALL_DEADLINE_MS=9000;
-export type StudyPanelItem={id:string;title:string;reply:string;slot:number;locked:boolean;minimized:boolean;createdAt:number;revision?:number;position?:{left:number;top:number};spokenChunk?:string;spokenChunkIndex?:number;references?:Array<{title:string;url:string;excerpt?:string}>};
+export type StudyPanelItem={id:string;title:string;reply:string;mode:'text'|'visual';started:boolean;slot:number;locked:boolean;minimized:boolean;createdAt:number;revision?:number;position?:{left:number;top:number};spokenChunk?:string;spokenChunkIndex?:number;references?:Array<{title:string;url:string;excerpt?:string}>};
 async function decodeImage(image:HTMLImageElement,signal:AbortSignal){
  if(signal.aborted)throw new DOMException('Imagem interrompida.','AbortError');
  await new Promise<void>((resolve,reject)=>{
@@ -19,7 +19,29 @@ async function decodeImage(image:HTMLImageElement,signal:AbortSignal){
  });
 }
 type MediaState={topic:string;status:'loading'|'ready'|'failed';loaded_images:number;image_titles:string[]};
-type Props={panels:StudyPanelItem[];activeId?:string|null;speaking:boolean;generating?:boolean;onMediaState?:(state:MediaState)=>void;onClose:(id:string)=>void};
+type Props={panels:StudyPanelItem[];activeId?:string|null;speaking:boolean;generating?:boolean;onMediaState?:(state:MediaState)=>void;onClose:(id:string)=>void;onMinimize?:(id:string)=>void};
+
+function WrittenExplanation({panel,onClose,onMinimize}:{panel:StudyPanelItem;onClose:()=>void;onMinimize?:()=>void}){
+ const blocks:Array<{kind:'heading'|'paragraph';text:string}>=[];
+ let newParagraph=true;
+ for(const line of panel.reply.replace(/\r/g,'').split('\n')){
+  const heading=line.match(/^\s*#{1,3}\s+(.+)$/);
+  if(heading){blocks.push({kind:'heading',text:heading[1].trim()});newParagraph=true;continue;}
+  if(!line.trim()){newParagraph=true;continue;}
+  const previous=blocks.at(-1);
+  if(!newParagraph&&previous?.kind==='paragraph'&&!/^\s*[-*]\s+/.test(line))previous.text+='\n'+line.trim();
+  else blocks.push({kind:'paragraph',text:line.trim()});
+  newParagraph=false;
+ }
+ return <aside className="study-written-panel" aria-label={`Explicação escrita: ${panel.title}`}>
+  <header><div><small>CRONOS · EXPLICAÇÃO</small><h2>{panel.title}</h2></div><nav aria-label="Controles da explicação">{onMinimize&&<button type="button" aria-label="Minimizar explicação" onClick={onMinimize}><Minus size={16}/></button>}<button type="button" aria-label="Fechar explicação" onClick={onClose}><X size={18}/></button></nav></header>
+  <div className="study-written-body">{blocks.map((block,index)=>{
+   if(block.kind==='heading')return <h3 key={index}>{block.text.replace(/\*\*/g,'')}</h3>;
+   return <p key={index}>{block.text.replace(/\*\*/g,'').replace(/^[-*]\s+/gm,'• ')}</p>;
+  })}</div>
+  {Boolean(panel.references?.length)&&<footer><small>FONTES CONSULTADAS</small>{panel.references!.map(reference=><a key={reference.url} href={reference.url} target="_blank" rel="noreferrer">{reference.title}<ExternalLink size={12}/></a>)}</footer>}
+ </aside>;
+}
 
 function StudyStory({panel,onClose,speaking,onMediaState}:{panel:StudyPanelItem;onClose:()=>void;speaking:boolean;onMediaState?:(state:MediaState)=>void}){
  const slides=useMemo(()=>visualSlides(panel.reply,panel.title),[panel.reply,panel.title]);
@@ -150,9 +172,10 @@ function StudyStory({panel,onClose,speaking,onMediaState}:{panel:StudyPanelItem;
  </div>;
 }
 
-export function StudyExplanationPanel({panels,activeId,onClose,onMediaState,speaking=false}:Props){
+export function StudyExplanationPanel({panels,activeId,onClose,onMinimize,onMediaState,speaking=false}:Props){
  const ordered=panels.slice().sort((a,b)=>a.createdAt-b.createdAt);
  const active=activeId?ordered.find(panel=>panel.id===activeId&&!panel.minimized):undefined;
- if(!active)return null;
+ if(!active||!active.started||!active.reply.trim())return null;
+ if(active.mode==='text')return <WrittenExplanation panel={active} onClose={()=>onClose(active.id)} onMinimize={onMinimize?()=>onMinimize(active.id):undefined}/>;
  return <StudyStory key={`${active.id}-${active.revision||0}`} panel={active} speaking={speaking} onMediaState={onMediaState} onClose={()=>onClose(active.id)}/>;
 }

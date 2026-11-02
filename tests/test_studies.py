@@ -97,6 +97,7 @@ def test_study_intent_prefers_deep_explanation_and_allows_requested_complete_web
 
 def test_visual_explanation_intent_covers_people_processes_and_events_without_grabbing_small_talk():
     assert is_study_request('Quem foi Sócrates?')
+    assert is_study_request('Quem você considera uma das pessoas mais importantes da história?')
     assert is_study_request('Como funciona um avião a jato?')
     assert is_study_request('O que aconteceu na crise de 1929?')
     assert is_study_request('Me conta sobre as ideias políticas de Darcy Ribeiro.')

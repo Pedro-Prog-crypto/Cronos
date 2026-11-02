@@ -7,10 +7,24 @@ export function asksToReplayImages(text:string){
 }
 export function isStudyQuestion(text:string){
  const value=normalize(text);
- return /\b(?:explique|explica|me ensine|ensine|me ajuda a entender|ajude a entender|quero entender|estude|resuma|resumo|compare|qual a diferenca|o que (?:e|foi|significa|causou|aconteceu)|como funciona|como (?:foi|aconteceu|surgiu|se desenvolve)|por que|quem (?:foi|e|era|vai ganhar|voce acha)|o que acha de|qual a sua opiniao|qual sua opiniao|me conte sobre|me fala sobre|me fale sobre|fale sobre|me conta sobre|analise|analisa|quais foram as causas|me explique|me explica|todas? as? obras|lista completa)\b/.test(value)
+ return /\b(?:explique|explica|me ensine|ensine|me ajuda a entender|ajude a entender|quero entender|estude|resuma|resumo|compare|qual a diferenca|o que (?:e|foi|significa|causou|aconteceu)|como funciona|como (?:foi|aconteceu|surgiu|se desenvolve)|por que|quem (?:foi|e|era|vai ganhar|voce acha|voce considera)|o que acha de|qual a sua opiniao|qual sua opiniao|me conte sobre|me fala sobre|me fale sobre|fale sobre|me conta sobre|analise|analisa|quais foram as causas|me explique|me explica|todas? as? obras|lista completa|pessoas? mais importantes?)\b/.test(value)
   || /\b(?:mostre|mostra|mostrar|exiba|exibe|quero ver|me envie|mande)\s+(?:as |umas? )?(?:imagens|fotos|fotografias)\s+(?:de|do|da|sobre)\s+\S/.test(value)
   || /\b(?:como|por que|porque)\b.{0,80}\b(?:ele|ela|isso|aconteceu|funciona|mudou|comecou|terminou|influenciou|causou)\b/.test(value)
   || /\b(?:historia|filosofia|biologia|matematica|fisica|quimica|geografia|portugues|literatura|sociologia|prova|vestibular|enem|pais|guerra mundial|revolucao|filosofo|equacao|teorema|celula|mitocondria|fotossintese|primeira guerra|segunda guerra)\b/.test(value);
+}
+
+export function isVisualRequest(text:string){
+ const value=normalize(text);
+ if(/\b(?:sem imagens|sem fotos|so texto|somente texto|por escrito|de forma escrita|apenas texto|nao (?:mostre|mostrar|exiba|exibir|quero imagens|quero fotos))\b/.test(value))return false;
+ return /\b(?:mostre|mostra|mostrar|exiba|exibe|quero ver|coloque|poe|busque|procure)\b.{0,100}\b(?:imagens?|fotos?|fotografias|mural visual)\b/.test(value)
+  || /\b(?:explique|explica|apresente|apresenta|mostre|mostra)\b.{0,100}\b(?:com imagens|com fotos|visualmente|de forma visual|apresentacao visual|apresentacao imersiva)\b/.test(value)
+  || /\b(?:apresentacao visual|apresentacao imersiva|mural de imagens)\s+(?:sobre|de|do|da)\b/.test(value);
+}
+
+export function explanationMode(text:string):'visual'|'text'|null{
+ if(isVisualRequest(text))return 'visual';
+ if(isStudyQuestion(text)||isExplicitTextDisplay(text))return 'text';
+ return null;
 }
 
 // A request to put a written passage on the ordinary answer surface is not an
@@ -24,6 +38,7 @@ export function isExplicitTextDisplay(text:string){
 }
 
 export function studyPanelTitle(question:string,reply=''){
+ if(/pessoas? mais importantes? da hist[oó]ria/i.test(question))return 'Pessoas importantes da história';
  const imageSubject=question.match(/\b(?:imagens?|fotos?|fotografias)\s+(?:de|do|da|sobre)\s+([^?!.,;\n]+)/i)?.[1]?.replace(/\s+(?:novamente|de novo|outra vez)\s*$/i,'').trim();
  if(imageSubject)return cleanTitle(imageSubject).slice(0,54);
  const isGeneric=(value:string)=>!value||/^(?:ideia central|explicacao|contexto|introducao|conclusao|resumo|resposta)$/i.test(normalize(value));

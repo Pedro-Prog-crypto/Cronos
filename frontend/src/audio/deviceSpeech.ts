@@ -1,7 +1,7 @@
 /** Device speech is a fallback for the actual answer, never a canned reply. */
 export async function findDeviceVoice(signal:AbortSignal):Promise<SpeechSynthesisVoice|null>{
  const synth=globalThis.speechSynthesis;if(!synth||signal.aborted)return null;
- const choose=()=>{try{return synth.getVoices().filter(v=>v.localService&&/^pt(?:-|$)/i.test(v.lang)).sort((a,b)=>Number(/^pt-BR$/i.test(b.lang))-Number(/^pt-BR$/i.test(a.lang)))[0]||null;}catch{return null;}};
+ const choose=()=>{try{return synth.getVoices().filter(v=>/^pt(?:-|$)/i.test(v.lang)).sort((a,b)=>Number(b.localService)-Number(a.localService)||Number(/^pt-BR$/i.test(b.lang))-Number(/^pt-BR$/i.test(a.lang)))[0]||null;}catch{return null;}};
  const ready=choose();if(ready)return ready;
  return new Promise(resolve=>{
   let timer:ReturnType<typeof setTimeout>;

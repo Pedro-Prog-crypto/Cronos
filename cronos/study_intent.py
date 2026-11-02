@@ -16,8 +16,8 @@ def is_study_request(text: str) -> bool:
         r"\b(?:explique|explica|me ensine|ensine|me ajuda a entender|ajude a entender|"
         r"quero entender|estude|resuma|resumo|compare|qual a diferenca|todas? as? obras|lista completa|"
         r"o que (?:e|foi|significa|causou|aconteceu)|como funciona|como (?:foi|aconteceu|surgiu)|"
-        r"por que|por qual motivo|quem (?:foi|e|era|vai ganhar|voce acha)|o que acha de|qual a sua opiniao|qual sua opiniao|me conte sobre|me conta sobre|"
-        r"me fale|fale sobre|me explica|me explique|analise|analisa|quais foram as causas)\b",
+        r"por que|por qual motivo|quem (?:foi|e|era|vai ganhar|voce acha|voce considera)|o que acha de|qual a sua opiniao|qual sua opiniao|me conte sobre|me conta sobre|"
+        r"me fale|fale sobre|me explica|me explique|analise|analisa|quais foram as causas|pessoas? mais importantes?)\b",
         value,
     )
     school_topic = re.search(

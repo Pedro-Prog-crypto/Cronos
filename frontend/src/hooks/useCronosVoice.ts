@@ -79,7 +79,7 @@ export function useCronosVoice({preferences,remoteEnabled=true,nativeEnabled=fal
         const speed=prefs.current?.voice_speed,started=performance.now();
         let error:unknown;
         for(let attempt=0;callbacks.current.remoteEnabled&&attempt<2;attempt++){
-          try{return await withRequestDeadline(remote.signal,Math.max(1,40000-(performance.now()-started)),async signal=>{const response=await api(pcm?'/voice/pcm':'/voice/speech',{method:'POST',headers:{'Content-Type':'application/json',...(turn_id?{'X-Cronos-Turn':turn_id}:{})},body:JSON.stringify({text:part,...(speed!==undefined?{speed}:{})}),signal});return {response:pcm?response:null,blob:pcm?null:await response.blob(),error:null,speed,voiceSource:'fish' as const,elapsed:performance.now()-started};});}
+          try{return await withRequestDeadline(remote.signal,Math.max(1,40000-(performance.now()-started)),async signal=>{const response=await api(pcm?'/voice/pcm':'/voice/speech',{method:'POST',headers:{'Content-Type':'application/json',...(turn_id?{'X-Cronos-Turn':turn_id}:{})},body:JSON.stringify({text:part,...(speed!==undefined?{speed}:{})}),signal});return {response:pcm?response:null,blob:pcm?null:await response.blob(),deviceText:null,error:null,speed,voiceSource:'fish' as const,elapsed:performance.now()-started};});}
           catch(caught){error=caught;if(controller.signal.aborted||attempt===1||performance.now()-started>=39500||!(caught instanceof ApiError)||![429,502,503,504].includes(caught.status))break;await new Promise(resolve=>setTimeout(resolve,250*(attempt+1)));}
         }
         if(callbacks.current.nativeEnabled&&!controller.signal.aborted){
@@ -88,10 +88,13 @@ export function useCronosVoice({preferences,remoteEnabled=true,nativeEnabled=fal
               const response=await api('/voice/device',{method:'POST',headers:{'Content-Type':'application/json',...(turn_id?{'X-Cronos-Turn':turn_id}:{})},body:JSON.stringify({text:part,speed:speed??1}),signal});return response.blob();
             });
             callbacks.current.onWarning?.('A voz online está indisponível. Lendo a mesma resposta com a voz do Windows.');
-            return {response:null,blob,error:null,speed,voiceSource:'device' as const,elapsed:performance.now()-started};
+            return {response:null,blob,deviceText:null,error:null,speed,voiceSource:'device' as const,elapsed:performance.now()-started};
           }catch(localError){error=localError;}
         }
-        return {response:null,blob:null,error:error||new Error('A voz online não está configurada.'),speed,voiceSource:'fish' as const,elapsed:performance.now()-started};
+        if(!controller.signal.aborted&&await deviceVoice){
+          return {response:null,blob:null,deviceText:part,error:null,speed,voiceSource:'device' as const,elapsed:performance.now()-started};
+        }
+        return {response:null,blob:null,deviceText:null,error:error||new Error('A voz online não está configurada.'),speed,voiceSource:'fish' as const,elapsed:performance.now()-started};
       };
       // Start the next synthesis as soon as the final reply arrives, while
       // the introduction is still playing. Keep one playback/cancellation session.
@@ -112,7 +115,15 @@ export function useCronosVoice({preferences,remoteEnabled=true,nativeEnabled=fal
         const received=await next;if(current!==generation.current)return;
         if(received.error)throw received.error;
         if(index+1<chunks.length)next=fetchChunk(chunks[index+1]);
-        if(received.response){
+        if(received.deviceText){
+          const selected=await deviceVoice;
+          if(!selected)throw new Error('Nenhuma voz em português foi encontrada no dispositivo.');
+          callbacks.current.onWarning?.('A síntese online deste trecho falhou. Continuando a mesma resposta com a voz do dispositivo.');
+          await speakDeviceText(received.deviceText,selected,controller.signal,{volume:prefs.current?.voice_volume??1,rate:prefs.current?.voice_speed??1,onStart:part=>{
+            if(!started){started=true;callbacks.current.onSpeechStart?.({turn_id,speech_request_ms:Math.round(received.elapsed),playback_ms:0,voice_source:'device'});}
+            setIsGenerating(false);setIsSpeaking(true);callbacks.current.onSpeechChunk?.(part,index,turn_id);
+          }});
+        }else if(received.response){
           await configureOutput();
           cancelAnimationFrame(frame.current);audio.current=null;renderedSpeed.current=received.speed??1;
           await playPCM(received.response,context.current,controller.signal,{
