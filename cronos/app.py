@@ -63,6 +63,7 @@ class ApprovalInput(BaseModel):
 VOICE_REQUEST_TIMEOUT_SECONDS = 30
 TRANSCRIPTION_TIMEOUT_SECONDS = 30
 TRANSCRIPTION_TOTAL_TIMEOUT_SECONDS = 40
+ASR_HEDGE_SECONDS = 2
 # Recovery ceiling, not the latency target. Each route has its own timeout;
 # a reserve is hedged after eight seconds without cancelling a valid primary.
 CONVERSATION_FIRST_REPLY_TIMEOUT_SECONDS = 120
@@ -144,7 +145,11 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         task = asyncio.create_task(app.state.monitor.run())
         windows_task = asyncio.create_task(app.state.windows.watch())
         async def warm_recognition():
-            if settings.transcription_provider!='vosk' and not app.state.panels.preferences.called_only:return
+            # A full model integrity check hashes every file. Run it once in a
+            # worker at startup, never on the HTTP event loop for each utterance.
+            if settings.transcription_provider!='vosk' and not app.state.panels.preferences.called_only:
+                from cronos.wake import root, MODEL_NAME, model_present
+                if not model_present(root()/MODEL_NAME):return
             try:await asyncio.to_thread(local_recognizer.prepare)
             except ValueError:pass # The transcription endpoint reports configuration errors on use.
         recognition_task=asyncio.create_task(warm_recognition())
@@ -665,7 +670,12 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
             except ValueError as exc:
                 delivery.mark('recognition_error',provider='vosk',error_type='unrecognized')
                 raise HTTPException(503,str(exc)) from None
-        if current.transcription_provider=='vosk' or current.privacy_mode!='online':return await local()
+        if current.privacy_mode!='online':
+            try:
+                async with asyncio.timeout(TRANSCRIPTION_TOTAL_TIMEOUT_SECONDS):
+                    return await local()
+            except TimeoutError:
+                raise HTTPException(504,'O reconhecimento local demorou demais. A gravação pode ser reenviada sem repetir a fala.') from None
         async def primary():
             delivery.mark('recognition_requested',provider='fish',bytes=len(audio))
             try:
@@ -679,31 +689,24 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 delivery.mark('recognition_error',provider='fish',error_type=type(exc).__name__,http_status=getattr(exc,'status_code',getattr(exc,'status',0)) or 0)
                 raise
         async def alternative():return await gemini_transcribe(current,audio,mime_type)
-        # Use the already installed Portuguese model only for WAV input. Do not
-        # download anything or convert arbitrary containers inside recognition.
-        local_ready=False
+        # The prepared recognizer was fully verified in a background worker.
+        # Calling verify_model here would synchronously hash the entire model
+        # for every question and could block Fish, Gemini and the UI for a minute.
+        local_ready = False
         if mime_type.split(';',1)[0] in {'audio/wav','audio/x-wav'}:
-            try:
-                from cronos.wake import verify_model
-                verify_model();local_ready=True
-            except (OSError,ValueError):pass
+            from cronos.wake import root, MODEL_NAME, model_present
+            local_ready = local_recognizer.model is not None or model_present(root()/MODEL_NAME)
         async def cloud_recognition():
             return await first_valid_transcription(primary,alternative if current.gemini_key.strip() else None,
+                                                   hedge_after=ASR_HEDGE_SECONDS,
                                                    local=local if local_ready else None)
-        async def local_quick_check():
-            from cronos.memory_policy import normalized
-            text=await local()
-            if normalized(text) not in {'na escuta','esta na escuta','esta me ouvindo','ta me ouvindo',
-                                        'esta me escutando','ta me escutando','voce esta me ouvindo',
-                                        'voce ta me ouvindo','voce esta me escutando','voce ta me escutando',
-                                        'consegue me ouvir','me ouve','oi','ola','tudo bem','bom dia','boa tarde','boa noite'}:
-                raise ValueError('A escuta local não identificou uma saudação ou teste de microfone.')
-            return text
-        local_prepared=local_ready and local_recognizer.model is not None
         try:
             async with asyncio.timeout(TRANSCRIPTION_TOTAL_TIMEOUT_SECONDS):
-                if local_prepared:
-                    return await first_valid_transcription(local_quick_check,cloud_recognition,hedge_after=.2)
+                if current.transcription_provider=='vosk':
+                    reserve = primary if current.fish_key.strip() else alternative if current.gemini_key.strip() else None
+                    second_reserve = alternative if current.fish_key.strip() and current.gemini_key.strip() else None
+                    return await first_valid_transcription(local,reserve,hedge_after=ASR_HEDGE_SECONDS,
+                                                           local=second_reserve)
                 return await cloud_recognition()
         except TimeoutError:
             raise HTTPException(504,'O reconhecimento continua indisponível. Sua gravação pode ser reenviada sem repetir a fala.') from None

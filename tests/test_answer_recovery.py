@@ -78,6 +78,8 @@ def test_local_asr_recovers_same_recording_when_both_cloud_recognizers_fail(sett
     from cronos.recognition import LocalRecognizer
     import cronos.transcription as transcription
     monkeypatch.setattr('cronos.wake.verify_model',lambda:tmp_path)
+    monkeypatch.setattr('cronos.wake.model_present',lambda path:True)
+    monkeypatch.setattr(LocalRecognizer,'prepare',lambda self:None)
     audio=recording();calls=[]
     def local(self,value):
         assert value==audio;calls.append('local')

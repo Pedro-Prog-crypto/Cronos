@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import json
+import threading
 from dataclasses import replace
 
 import httpx
@@ -26,9 +27,85 @@ def test_prepared_local_recognizer_handles_microphone_check_without_cloud(settin
         async def __aenter__(self):return self
         async def __aexit__(self,*args):pass
         async def transcribe(self,**kwargs):raise AssertionError('A fast local microphone check needs no network ASR')
-    with TestClient(create_app(replace(settings,fish_key='fixture'),fish_factory=Fish)) as client:
+    with TestClient(create_app(replace(settings,fish_key='fixture',transcription_provider='vosk'),fish_factory=Fish)) as client:
         result=client.post('/voice/transcribe',headers={**AUTH,'Content-Type':'audio/wav'},content=wav())
     assert result.status_code==200 and result.json()['text']=='Cronos, está me escutando?'
+
+
+def test_slow_model_preparation_does_not_block_cloud_transcription(settings, monkeypatch):
+    started, release = threading.Event(), threading.Event()
+    class SlowRecognizer:
+        model=None
+        def prepare(self):
+            started.set()
+            assert release.wait(3)
+        def transcribe(self, audio):
+            raise AssertionError('The local model is still preparing')
+    class Fish:
+        def __init__(self):self.asr=self
+        async def __aenter__(self):return self
+        async def __aexit__(self,*args):pass
+        async def transcribe(self,**kwargs):
+            return type('Result',(),{'text':'Pergunta realmente falada.'})()
+    monkeypatch.setattr('cronos.recognition.LocalRecognizer',SlowRecognizer)
+    monkeypatch.setattr('cronos.wake.model_present',lambda path:True)
+    def forbidden_verify():
+        raise AssertionError('Model files must not be hashed inside the HTTP request')
+    monkeypatch.setattr('cronos.wake.verify_model',forbidden_verify)
+    try:
+        with TestClient(create_app(replace(settings,fish_key='fixture'),fish_factory=Fish)) as client:
+            assert started.wait(2)
+            response=client.post('/voice/transcribe',headers={**AUTH,'Content-Type':'audio/wav'},content=wav())
+            assert response.status_code==200 and response.json()['text']=='Pergunta realmente falada.'
+            release.set()
+    finally:
+        release.set()
+
+
+def test_online_vosk_uses_configured_fish_when_local_model_is_still_loading(settings, monkeypatch):
+    import importlib
+    app_module=importlib.import_module('cronos.app')
+    monkeypatch.setattr(app_module,'ASR_HEDGE_SECONDS',.02)
+    release=threading.Event()
+    class SlowRecognizer:
+        model=None
+        def prepare(self):pass
+        def transcribe(self,audio):
+            release.wait(2)
+            raise ValueError('Local model unavailable')
+    class Fish:
+        def __init__(self):self.asr=self
+        async def __aenter__(self):return self
+        async def __aexit__(self,*args):pass
+        async def transcribe(self,**kwargs):return type('Result',(),{'text':'Quem foi Sócrates?'})()
+    monkeypatch.setattr('cronos.recognition.LocalRecognizer',SlowRecognizer)
+    try:
+        with TestClient(create_app(replace(settings,transcription_provider='vosk',fish_key='fixture'),fish_factory=Fish)) as client:
+            response=client.post('/voice/transcribe',headers={**AUTH,'Content-Type':'audio/wav'},content=wav())
+            assert response.status_code==200 and response.json()['text']=='Quem foi Sócrates?'
+    finally:release.set()
+
+
+def test_local_privacy_returns_a_bounded_error_without_sending_audio_online(settings, monkeypatch):
+    import importlib
+    app_module=importlib.import_module('cronos.app')
+    monkeypatch.setattr(app_module,'TRANSCRIPTION_TOTAL_TIMEOUT_SECONDS',.02)
+    release=threading.Event()
+    class SlowRecognizer:
+        model=None
+        def prepare(self):pass
+        def transcribe(self,audio):
+            release.wait(2)
+            return 'Late local transcript'
+    def forbidden_fish():
+        raise AssertionError('Private mode must not construct a cloud recognizer')
+    monkeypatch.setattr('cronos.recognition.LocalRecognizer',SlowRecognizer)
+    try:
+        with TestClient(create_app(replace(settings,privacy_mode='local',transcription_provider='vosk',fish_key='fixture'),
+                                   fish_factory=forbidden_fish)) as client:
+            response=client.post('/voice/transcribe',headers={**AUTH,'Content-Type':'audio/wav'},content=wav())
+            assert response.status_code==504
+    finally:release.set()
 
 
 @pytest.mark.parametrize('failure',['exception','empty'])

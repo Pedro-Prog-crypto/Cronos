@@ -1,8 +1,8 @@
 {
-  "revision": "microphone-recovery-2026-11-02-r18",
+  "revision": "transcription-unblocked-2026-11-02-r19",
   "files": {
     "cronos/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "cronos/app.py": "26a6a956aa82816304c2b7fe94b63b3defd83d555485f3cde5db6c663eb581ca",
+    "cronos/app.py": "fea38f3a17f48ec82d5f25765d31629d46ec7d90ecf92bdc89d7059ed4f163b3",
     "cronos/background_conversation.py": "1a103fcb93742c6b4971478dbf4c1cf761bbf011c12adcfb740e25f53b633907",
     "cronos/background_listener.py": "6b6a239a1ace981413feca2b0d37743d4b122f69ed9513795fb03ceacc8062ad",
     "cronos/browser.py": "d11821ff8c7fdd2599f6c31d7aa9a7d75d8b091e2fea220dc6c5900843319ff2",
@@ -352,7 +352,7 @@
     "cronos/providers.py": "176e3a438b9f4f6a4ceb5e436065a16977448940912bd3f198ca504d6370c66f",
     "cronos/recognition.py": "16656e9b1ee9657f14f943e9e4de2800b9f5625ee467a7a39ae50e5436a8c2da",
     "cronos/reply_stream.py": "a179348b72bb4b463a0d5b6cc1abfbc6335a486ba7b3c6cc6f766dc2fcc34b49",
-    "cronos/resident.py": "e859d2b81272ef6bc6fdf02b5460841ff3946a8ebf9e255803163ab65903a71f",
+    "cronos/resident.py": "ab181d299526db93ac8dfb6c75e31f15a4799b9c567bcfde1e8f0f4b56a1dc19",
     "cronos/security.py": "e13917164d117ac0943bd82a303051b6b6b5e4f6248274a4b91f4042e265f8e6",
     "cronos/spoken_text.py": "a1de32bf5d2a2796e712e670aec53f2a60972daff7a833b3cb289e6d9a038b0b",
     "cronos/static/app.js": "c898cc8ddcfc92c42eec4c06ec5de4ba42cac4366680c771bdb936c9292debac",
@@ -987,7 +987,7 @@
     "cronos/vision.py": "734168b101b36905b162be395f6f6a4066fec5de02219da6451c433215f4deae",
     "cronos/voice_diagnostic.py": "ff680c231b84b0906a47c2906a8ab4158379c29fd0b0aeaa9563c1bdb3dc6755",
     "cronos/voice_interrupt.py": "885e2c2189572a24a4d60f2017a6f609ffe23e80def112cf378581f36f56f616",
-    "cronos/wake.py": "2473c95ef50363e0d711a66ecbc2d9a66eeec00f662213cd8cd6e811d2e4b193",
+    "cronos/wake.py": "c3c77ac3e0d5ad0a61828bad731bd010300f0770cb18edb1f763556b1630be05",
     "cronos/windows_agent.py": "be1dca0cf40f0d19722c550779b7f8c42e6ee9bf74ea6e50d55900f1f830075a",
     "cronos/windows_system.py": "c9818118ff63bc102d9b15d4b455b0dc7da2e1f1b17a1708cdb2b17df0515241"
   }
