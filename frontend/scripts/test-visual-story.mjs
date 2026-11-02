@@ -44,5 +44,9 @@ assert(philosophers.length===3,'a multi-philosopher answer should produce one im
 assert(/socrates/i.test(philosophers[0].query),'first philosopher portrait query is not specific');
 assert(/plato/i.test(philosophers[1].query),'second philosopher portrait query is not specific');
 assert(/aristotle/i.test(philosophers[2].query),'third philosopher portrait query is not specific');
+const places=visualSlides('Platão fundou a Academia em Atenas. Depois, Sócrates aparece na explicação. Aristóteles ensinou no Liceu.', 'História da filosofia');
+assert(/academy.*archaeological/i.test(places[0].query),'the Academy should search for the ancient school, not only a portrait');
+assert(/socrates/i.test(places[1].query),'a mentioned person should change the visual topic');
+assert(/lyceum.*archaeological/i.test(places[2].query),'the Lyceum should search for its historic site');
 if(scenarios<1200||checks<10000)throw new Error(`Insufficient validation: ${scenarios} scenarios, ${checks} checks`);
 console.log(`${scenarios} synthetic narrative scenarios passed; ${checks} assertions passed. These validate chapter splitting, topic-specific media queries, boundary isolation, and narration-to-scene matching; they are not live image-provider/browser end-to-end tests.`);

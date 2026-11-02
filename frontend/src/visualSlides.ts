@@ -31,6 +31,10 @@ function imageQuery(topic: string, text: string, title: string) {
   // Prefer the person in the spoken sentence before the overall topic.
   for (const part of [text, title, topic]) {
     const context=normalized(part);
+    const hasPlato=/\b(?:platao|plato)\b/.test(context)||/\b(?:platao|plato)\b/.test(normalized(topic));
+    const hasAristotle=/\b(?:aristoteles|aristotle)\b/.test(context)||/\b(?:aristoteles|aristotle)\b/.test(normalized(topic));
+    if(/\b(?:academia|academy)\b/.test(context)&&hasPlato)return 'Plato Academy Athens archaeological site';
+    if(/\b(?:liceu|lyceum|lykeion)\b/.test(context)&&hasAristotle)return 'Aristotle Lyceum Athens archaeological site';
     const match=namedPhilosophers.map(([name,canonical])=>({canonical,index:context.search(new RegExp(`\\b${normalized(name)}\\b`))}))
       .filter(item=>item.index>=0).sort((a,b)=>a.index-b.index)[0];
     if(match)return match.canonical;

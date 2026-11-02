@@ -120,6 +120,10 @@ def _dedupe_study_images(images: list[dict]) -> list[dict]:
 
 def _media_search_terms(query: str) -> str:
     normalized = "".join(char for char in unicodedata.normalize("NFD", query.casefold()) if not unicodedata.combining(char))
+    if re.search(r"\b(?:academy|academia)\b", normalized) and re.search(r"\b(?:plato|platao)\b", normalized):
+        return "Plato Academy Athens archaeological site"
+    if re.search(r"\b(?:lyceum|lykeion|liceu)\b", normalized) and re.search(r"\b(?:aristotle|aristoteles)\b", normalized):
+        return "Aristotle Lyceum Athens archaeological site"
     matches = []
     for canonical, aliases in _VISUAL_SUBJECT_ALIASES.items():
         for alias in aliases:
@@ -149,10 +153,16 @@ def _filter_visual_subject(images: list[dict], videos: list[dict], query: str):
         return re.search(r"(?<!\w)" + r"\s+".join(re.escape(word) for word in words) + r"(?!\w)", text) is not None
 
     if requested:
+        academy = bool(re.search(r"\b(?:academy|academia)\b", normalized)) and bool(re.search(r"\b(?:plato|platao)\b", normalized))
+        lyceum = bool(re.search(r"\b(?:lyceum|lykeion|liceu)\b", normalized)) and bool(re.search(r"\b(?:aristotle|aristoteles)\b", normalized))
         def named_relevant(item: dict) -> bool:
             title = fold(item.get("title", ""))
             if any(term in title for term in _VISUAL_EXCLUDE_TERMS):
                 return False
+            if academy and re.search(r"\b(?:akademeia|academia de platao|plato'?s academy|academy of plato|ancient academy)\b", title):
+                return True
+            if lyceum and re.search(r"\b(?:lyceum|lykeion|liceu de aristoteles)\b", title):
+                return True
             if any(alias in {"napoleon", "napoleao"} for aliases in requested for alias in aliases) and any(
                 term in title for term in ("napoleon cake", "gateau napoleon")
             ):
@@ -964,7 +974,7 @@ def install_studies(app, authenticate):
             proxy = os.getenv("DDGS_PROXY") or os.getenv("HTTPS_PROXY") or os.getenv("https_proxy")
             def run():
                 with DDGS(timeout=6, proxy=proxy) as search:
-                    return list(search.images(search_query, max_results=min(24, limit)))
+                    return list(search.images(search_query, max_results=min(36, limit)))
             raw = await asyncio.wait_for(asyncio.to_thread(run), timeout=7)
             records = []
             for item in raw:

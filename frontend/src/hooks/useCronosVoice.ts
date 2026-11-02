@@ -8,6 +8,7 @@ import {spokenText} from '../audio/spokenText';
 import captureWorkletUrl from '../audio/capture.worklet.js?worker&url';
 import vadWasmUrl from '@echogarden/fvad-wasm/fvad.wasm?url';
 import {createSpeechDetector} from '../audio/speechDetector.js';
+import {createLiveSpeechPreview} from '../audio/liveSpeechPreview';
 
 let vadBinary:Promise<ArrayBuffer>|null=null;
 function loadVad(){return vadBinary||=(fetch(vadWasmUrl).then(response=>{if(!response.ok)throw new Error('Detector local de voz indisponível.');return response.arrayBuffer();}).catch(error=>{vadBinary=null;throw error;}));}
@@ -195,34 +196,44 @@ async function localWave(blob:Blob){
   return new Blob([bytes],{type:'audio/wav'});
 }
 
-export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms:number;endpoint_ms:number;wake_confirmed?:boolean})=>void,onError:(message:string)=>void,local=false,blocked=false,preferences?:any,onAudio?:(audio:Blob,metrics:{recognition_ms:number;endpoint_ms:number;wake_confirmed?:boolean})=>Promise<void>,interrupt?:{active:boolean;onKeyword:()=>void;wakeOnly?:boolean},onRecognitionStart?:(endpoint_ms:number)=>string|void) {
+export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms:number;endpoint_ms:number;wake_confirmed?:boolean})=>void,onError:(message:string)=>void,local=false,blocked=false,preferences?:any,onAudio?:(audio:Blob,metrics:{recognition_ms:number;endpoint_ms:number;wake_confirmed?:boolean})=>Promise<void>,interrupt?:{active:boolean;onKeyword:()=>void;wakeOnly?:boolean},onRecognitionStart?:(endpoint_ms:number)=>string|void,onPartial?:(text:string)=>void) {
   const [recording,setRecording]=useState(false),[capturing,setCapturing]=useState(false),[starting,setStarting]=useState(false),[transcribing,setTranscribing]=useState(false);
   const [ready,setReady]=useState(false);
   const audioLevelSource=useRef(0),enabled=useRef(false),opening=useRef(false),processing=useRef(false),mounted=useRef(true);
-  const latest=useRef({onTranscript,onError,local,blocked,preferences,onAudio,interrupt,onRecognitionStart});latest.current={onTranscript,onError,local,blocked,preferences,onAudio,interrupt,onRecognitionStart};
+  const latest=useRef({onTranscript,onError,local,blocked,preferences,onAudio,interrupt,onRecognitionStart,onPartial});latest.current={onTranscript,onError,local,blocked,preferences,onAudio,interrupt,onRecognitionStart,onPartial};
+  const preview=useRef<ReturnType<typeof createLiveSpeechPreview>>(null);
+  const beginPreview=()=>{preview.current?.abort();latest.current.onPartial?.('');preview.current=createLiveSpeechPreview(text=>latest.current.onPartial?.(text));};
   const keywordSocket=useRef<WebSocket|null>(null),keywordReady=useRef(false),keywordError=useRef(false);
   const [wakeOpen,setWakeOpen]=useState(false),wakeUntil=useRef(0),turnWake=useRef(false);
   const captureVersion=useRef(0),resumeAfter=useRef(0);
   const resources=useRef<{stream?:MediaStream;recorded?:MediaStream;context?:AudioContext;recorder?:MediaRecorder;node?:AudioWorkletNode;timer?:ReturnType<typeof setInterval>;abort?:AbortController;vad?:Awaited<ReturnType<typeof createSpeechDetector>>;submit?:()=>void}>({});
-  const lastRecording=useRef<{audio:Blob;endpoint_ms:number;wake_confirmed:boolean}|null>(null);
+  const lastRecording=useRef<{audio:Blob;endpoint_ms:number;wake_confirmed:boolean;durationSeconds:number}|null>(null);
   const [retryAvailable,setRetryAvailable]=useState(false);
   const acknowledge=useCallback(()=>{lastRecording.current=null;setRetryAvailable(false);},[]);
-  const deliverRecording=useCallback(async(audio:Blob,endpoint_ms:number,retryWake?:boolean)=>{
+  const deliverRecording=useCallback(async(audio:Blob,endpoint_ms:number,retryWake?:boolean,durationSeconds=0)=>{
     const version=captureVersion.current;
     const wake_confirmed=retryWake??turnWake.current;turnWake.current=false;
-    lastRecording.current={audio,endpoint_ms,wake_confirmed};setRetryAvailable(false);
+    lastRecording.current={audio,endpoint_ms,wake_confirmed,durationSeconds};setRetryAvailable(false);
     processing.current=true;setTranscribing(true);wakeUntil.current=0;setWakeOpen(false);
     resources.current.node?.port.postMessage({blocked:true});
     const abort=new AbortController();resources.current.abort=abort;
     const recognitionStarted=performance.now();const turnId=latest.current.onRecognitionStart?.(endpoint_ms);
     try{
       if(latest.current.onAudio){
+        preview.current?.abort();preview.current=null;
         // Native audio is now owned by the conversation, not a pending Fish
         // transcription. Keep the recording until a real transcript arrives.
         setRetryAvailable(true);
         const submission=latest.current.onAudio(audio,{recognition_ms:0,endpoint_ms,wake_confirmed});
         setTranscribing(false);
         await submission;return;
+      }
+      const previewText=await preview.current?.finish(durationSeconds);
+      preview.current=null;
+      if(previewText){
+        acknowledge();
+        latest.current.onTranscript(previewText,{recognition_ms:Math.round(performance.now()-recognitionStarted),endpoint_ms,wake_confirmed});
+        return;
       }
       const result=await withRequestDeadline(abort.signal,55000,async signal=>{
         const response=await api('/voice/transcribe',{method:'POST',headers:{'Content-Type':audio.type,...(turnId?{'X-Cronos-Turn':turnId}:{})},body:audio,signal});return response.json();
@@ -242,11 +253,11 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
   },[acknowledge]);
   const retry=useCallback(async()=>{
     const saved=lastRecording.current;if(!saved||processing.current||latest.current.blocked)return;
-    await deliverRecording(saved.audio,saved.endpoint_ms,saved.wake_confirmed);
+    await deliverRecording(saved.audio,saved.endpoint_ms,saved.wake_confirmed,saved.durationSeconds);
   },[deliverRecording]);
-  const cancelCapture=useCallback(()=>{captureVersion.current++;processing.current=false;turnWake.current=false;wakeUntil.current=0;resumeAfter.current=performance.now()+250;resources.current.abort?.abort();resources.current.node?.port.postMessage({blocked:true});if(resources.current.recorder?.state==='recording')resources.current.recorder.stop();audioLevelSource.current=0;if(mounted.current){setWakeOpen(false);setCapturing(false);setTranscribing(false);setReady(false);}},[]);
+  const cancelCapture=useCallback(()=>{captureVersion.current++;processing.current=false;turnWake.current=false;wakeUntil.current=0;resumeAfter.current=performance.now()+250;preview.current?.abort();preview.current=null;latest.current.onPartial?.('');resources.current.abort?.abort();resources.current.node?.port.postMessage({blocked:true});if(resources.current.recorder?.state==='recording')resources.current.recorder.stop();audioLevelSource.current=0;if(mounted.current){setWakeOpen(false);setCapturing(false);setTranscribing(false);setReady(false);}},[]);
   const stop=useCallback(()=>{
-    enabled.current=false;captureVersion.current++;processing.current=false;turnWake.current=false;resources.current.abort?.abort();
+    enabled.current=false;captureVersion.current++;processing.current=false;turnWake.current=false;preview.current?.abort();preview.current=null;latest.current.onPartial?.('');resources.current.abort?.abort();
     wakeUntil.current=0;if(mounted.current)setWakeOpen(false);resources.current.vad?.dispose();resources.current.vad=undefined;
     if(resources.current.timer)clearInterval(resources.current.timer);
     const recorder=resources.current.recorder;if(recorder?.state==='recording')recorder.stop();
@@ -284,12 +295,12 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
           if(event.data.empty){latest.current.onError('Ainda não há fala gravada para enviar. Fale perto do microfone e tente novamente.');return;}
           if(event.data.keywordPre){const socket=keywordSocket.current,frames=event.data.keywordPre as Int16Array;if(keywordReady.current&&socket?.readyState===WebSocket.OPEN&&socket.bufferedAmount<12800)for(let offset=0;offset<frames.length;offset+=1600)socket.send(frames.slice(offset,offset+1600).buffer);return;}
           if(event.data.keyword){const socket=keywordSocket.current;if(keywordReady.current&&socket?.readyState===WebSocket.OPEN&&socket.bufferedAmount<12800)socket.send(event.data.keyword.buffer);return;}
-          if(typeof event.data.active==='boolean'){if(mounted.current)setCapturing(event.data.active&&(!latest.current.interrupt?.wakeOnly||wakeUntil.current>performance.now()));return;}
+          if(typeof event.data.active==='boolean'){if(event.data.active&&!preview.current&&!latest.current.blocked&&(!latest.current.interrupt?.wakeOnly||wakeUntil.current>performance.now()))beginPreview();if(mounted.current)setCapturing(event.data.active&&(!latest.current.interrupt?.wakeOnly||wakeUntil.current>performance.now()));return;}
           if(!enabled.current||latest.current.blocked||processing.current)return;
           if(latest.current.interrupt?.wakeOnly&&wakeUntil.current<performance.now())return;
           const samples=event.data.samples as Int16Array,rate=event.data.rate as number,endpoint_ms=Math.max(0,Math.min(60000,Number(event.data.endpoint_ms)||0));
           if(rate!==16000||samples.length>61*rate)return;
-          await deliverRecording(pcmWav(samples,rate),endpoint_ms);
+          await deliverRecording(pcmWav(samples,rate),endpoint_ms,undefined,samples.length/rate);
         };
         const binary=(await loadVad()).slice(0);
         await new Promise<void>((resolve,reject)=>{const timeout=setTimeout(()=>reject(new Error('O detector de voz não iniciou. Atualize o WebView2 e reabra o Kronos.')),4000);initialize=error=>{clearTimeout(timeout);error?reject(error):resolve();};node.port.postMessage({vadBinary:binary},[binary]);});
@@ -323,7 +334,7 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
           try{
             const blob=new Blob(parts,{type:recorder.mimeType}),audio=latest.current.local?await localWave(blob):blob;
             if(version!==captureVersion.current||!mounted.current)return;
-            await deliverRecording(audio,endpoint_ms);
+            await deliverRecording(audio,endpoint_ms,undefined,(performance.now()-started)/1000);
           }catch(error){if(mounted.current)latest.current.onError(error instanceof Error?error.message:'Não consegui preparar a gravação.');}
           finally{if(version===captureVersion.current){processing.current=false;if(mounted.current)setTranscribing(false);}}
         };
@@ -343,10 +354,10 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
         const sensitivity=latest.current.preferences?.microphone_sensitivity??70;vad.mode(sensitivity>=80?1:sensitivity>=40?2:3);
         for(let i=0;i<320;i++)vadSamples[i]=Math.max(-32767,Math.min(32767,values[i]*32767*(latest.current.preferences?.microphone_gain??2)));
         const delta=rms-energyMean;energyMean=energyMean?energyMean*.5+rms*.5:rms;energyVariance=energyVariance*.5+delta*delta*.5;voiceReference*=.99;
-        const speech=vad.process(vadSamples)&&rms>.0001&&(rms>voiceReference*.18||Math.sqrt(energyVariance)>energyMean*.25);
+        const speech=vad.process(vadSamples)&&rms>.00006&&(rms>voiceReference*.18||Math.sqrt(energyVariance)>energyMean*.25);
         if(speech){voiceLevel=voiceLevel?voiceLevel*.8+rms*.2:rms;voiceReference=Math.max(voiceReference,voiceLevel);}
         speechRun=speech?speechRun+80:0;
-        if(speechRun>=160){if(!heard)setCapturing(!latest.current.interrupt?.wakeOnly||wakeUntil.current>now);heard=true;lastSpeech=now;}
+        if(speechRun>=160){if(!heard){beginPreview();setCapturing(!latest.current.interrupt?.wakeOnly||wakeUntil.current>now);}heard=true;lastSpeech=now;}
         if((heard&&now-lastSpeech>750)||(now-started>(heard?58000:3000)))recorder.stop();
       },80);
     }catch(error){const cancelled=!enabled.current;stop();if(!cancelled){const name=error instanceof DOMException?error.name:'';latest.current.onError(name==='NotAllowedError'||name==='SecurityError'?'Permita o microfone para o Cronos no navegador e tente novamente.':name==='NotReadableError'?'O Windows não liberou o microfone. Feche o aplicativo que está usando o dispositivo e tente novamente.':name==='NotFoundError'?'Nenhum microfone foi encontrado. Conecte um dispositivo e tente novamente.':error instanceof Error?error.message.slice(0,220):'Não foi possível abrir o microfone.');}}

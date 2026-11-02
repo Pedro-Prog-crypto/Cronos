@@ -5,7 +5,7 @@ class CronosCapture extends AudioWorkletProcessor {
     if(e.data.vadBinary){createSpeechDetector(e.data.vadBinary).then(vad=>{this.vad=vad;this.port.postMessage({vadReady:true});}).catch(()=>this.port.postMessage({vadError:true}));return;}
     if(e.data.flush){if(this.manualReady&&this.manualChunks.length){let end=this.manualAudible.lastIndexOf(true);const audible=end>=0;if(!audible)end=this.manualChunks.length-1;let start=end,frames=0,quiet=0;for(let i=end;i>=0;i--){frames+=this.manualChunks[i].length;quiet=this.manualAudible[i]?0:quiet+this.manualChunks[i].length;if(frames>sampleRate*(audible?30:2)||quiet>sampleRate*2){start=i+1;break;}start=i;}start=Math.max(0,start-Math.ceil(sampleRate*.25/128));let size=0;for(let i=start;i<=end;i++)size+=this.manualChunks[i].length;const output=new Int16Array(size);let offset=0;for(let i=start;i<=end;i++){output.set(this.manualChunks[i],offset);offset+=this.manualChunks[i].length;}const endpoint_ms=Math.round(this.silent/sampleRate*1000);this.clear();this.port.postMessage({samples:output,rate:sampleRate,manual:true,endpoint_ms},[output.buffer]);}else{this.port.postMessage({empty:true});}return;}
     if(e.data.waiting!==undefined&&e.data.waiting!==this.waiting){this.waiting=e.data.waiting;if(this.waiting)this.clear();}
-    if(e.data.arm){let frames=0;const tail=[];for(let i=(this.active?this.chunks:this.pre).length-1;i>=0&&frames<sampleRate*1.5;i--){const part=(this.active?this.chunks:this.pre)[i];tail.unshift(part);frames+=part.length;}this.waiting=false;this.chunks=tail;this.pre=[];this.frames=frames;this.silent=0;this.voiced=Math.max(Math.min(this.voiced,frames),sampleRate*.12);this.active=true;this.port.postMessage({active:true});}
+    if(e.data.arm){let frames=0;const tail=[];for(let i=(this.active?this.chunks:this.pre).length-1;i>=0&&frames<sampleRate*1.5;i--){const part=(this.active?this.chunks:this.pre)[i];tail.unshift(part);frames+=part.length;}this.waiting=false;this.chunks=tail;this.pre=[];this.frames=frames;this.silent=0;this.voiced=Math.max(Math.min(this.voiced,frames),sampleRate*.35);this.active=true;this.port.postMessage({active:true});}
     const previous=this.sensitivity;this.sensitivity=e.data.sensitivity??this.sensitivity;if(previous!==this.sensitivity)this.vad?.mode(this.sensitivity>=80?1:this.sensitivity>=40?2:3);
     this.gain=e.data.gain??this.gain;if(e.data.keyword!==undefined&&e.data.keyword!==this.keyword){this.keyword=e.data.keyword;this.keywordChunks=[];this.keywordFrames=0;if(this.keyword&&this.pre.length){const parts=this.pre.slice(-Math.ceil(sampleRate/128)),size=parts.reduce((n,p)=>n+p.length,0),output=new Int16Array(size);let offset=0;for(const part of parts){output.set(part,offset);offset+=part.length;}this.port.postMessage({keywordPre:output},[output.buffer]);}}this.blocked=e.data.blocked??this.blocked;if(this.blocked)this.clear();
   };}
@@ -22,18 +22,18 @@ class CronosCapture extends AudioWorkletProcessor {
     const rms=Math.sqrt(sum/data.length);
     const safeGain=Math.min(this.gain,peak>0?.95/peak:this.gain);
     const copy=new Int16Array(data.length);for(let i=0;i<data.length;i++){const value=Math.max(-1,Math.min(1,data[i]*safeGain));copy[i]=value<0?value*32768:value*32767;}
-    if(!this.waiting){this.manualChunks.push(copy);this.manualAudible.push(rms>.0001&&peak>.0003);this.manualFrames+=copy.length;while(this.manualFrames>sampleRate*60){this.manualFrames-=this.manualChunks.shift().length;this.manualAudible.shift();}if(!this.manualReady&&this.manualFrames>=sampleRate*.4){this.manualReady=true;this.port.postMessage({manualReady:true});}}
+    if(!this.waiting){this.manualChunks.push(copy);this.manualAudible.push(rms>.00006&&peak>.0002);this.manualFrames+=copy.length;while(this.manualFrames>sampleRate*60){this.manualFrames-=this.manualChunks.shift().length;this.manualAudible.shift();}if(!this.manualReady&&this.manualFrames>=sampleRate*.4){this.manualReady=true;this.port.postMessage({manualReady:true});}}
     for(const value of copy){this.vadFrame[this.vadOffset++]=value;if(this.vadOffset===320){this.vadSpeech=this.vad.process(this.vadFrame);this.vadOffset=0;}}
     const delta=rms-this.energyMean;this.energyMean=this.energyMean?this.energyMean*.9+rms*.1:rms;this.energyVariance=this.energyVariance*.9+delta*delta*.1;
     this.voiceReference*=.999;
     // Quiet, modulated speech remains valid when the speaker lowers their
     // voice. Weak stationary background must not inherit the previous word.
     const modulated=Math.sqrt(this.energyVariance)>this.energyMean*.25;
-    const speech=this.vadSpeech&&rms>.0001&&(rms>this.voiceReference*.18||modulated);
+    const speech=this.vadSpeech&&rms>.00006&&(rms>this.voiceReference*.18||modulated);
     if(speech){this.voiceLevel=this.voiceLevel?this.voiceLevel*.98+rms*.02:rms;this.voiceReference=Math.max(this.voiceReference,this.voiceLevel);}
     this.speechRun=speech?this.speechRun+data.length:0;
     if(this.waiting){this.pre.push(copy);while(this.pre.length>Math.ceil(sampleRate*1.5/data.length))this.pre.shift();return true;}
-    if(!this.active){this.pre.push(copy);while(this.pre.length>Math.ceil(sampleRate*.35/data.length))this.pre.shift();if(!speech)return true;this.active=true;this.port.postMessage({active:true});this.chunks=this.pre;this.pre=[];this.frames=this.chunks.reduce((n,c)=>n+c.length,0);}
+    if(!this.active){this.pre.push(copy);while(this.pre.length>Math.ceil(sampleRate*.8/data.length))this.pre.shift();if(!speech)return true;this.active=true;this.port.postMessage({active:true});this.chunks=this.pre;this.pre=[];this.frames=this.chunks.reduce((n,c)=>n+c.length,0);}
     else{this.chunks.push(copy);this.frames+=copy.length;}
     // Isolated clicks and short noise detections cannot renew the phrase forever.
     this.silent=this.speechRun>=sampleRate*.12?0:this.silent+data.length;

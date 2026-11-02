@@ -111,6 +111,17 @@ def test_visual_media_search_uses_short_unambiguous_subjects():
     assert _media_search_terms('Napoleão Bonaparte foi imperador') == 'Napoleon Bonaparte'
     assert _media_search_terms('segunda guerra mundial') == 'Second World War'
     assert _media_search_terms('Restaurante Casa Azul') == 'Restaurante Casa Azul'
+    assert _media_search_terms('Platão fundou a Academia') == 'Plato Academy Athens archaeological site'
+    assert _media_search_terms('Aristóteles ensinava no Liceu') == 'Aristotle Lyceum Athens archaeological site'
+
+
+def test_ancient_school_search_keeps_site_photos_without_a_persons_name():
+    images = [{'title': 'Ancient Academy archaeological site in Athens'},
+              {'title': 'Akademeia ruins in Athens'},
+              {'title': 'Modern Academy of Athens building'},
+              {'title': 'Plato marble portrait'}]
+    kept, _ = _filter_visual_subject(images, [], 'Plato Academy Athens archaeological site')
+    assert [item['title'] for item in kept] == [images[0]['title'], images[1]['title'], images[3]['title']]
 
 
 def test_philosopher_image_filter_rejects_unrelated_search_results():
@@ -181,7 +192,7 @@ def test_media_endpoint_returns_a_dense_openly_attributed_image_wall_and_license
         async def __aexit__(self, *args): pass
         async def get(self, url, params=None, **kwargs):
             pages=[]
-            for index in range(20):
+            for index in range(40):
                 is_video=index==0
                 ext='webm' if is_video else 'jpg'
                 base=f'https://upload.wikimedia.org/wikipedia/commons/demo/{index}.{ext}'
@@ -203,12 +214,13 @@ def test_media_endpoint_returns_a_dense_openly_attributed_image_wall_and_license
     monkeypatch.setattr('cronos.studies.httpx.AsyncClient', Client)
     monkeypatch.setattr('cronos.studies._public_http_url', lambda value: value)
     with TestClient(create_app(settings)) as client:
-        response=client.get('/studies/images?query=S%C3%B3crates&limit=18',headers=AUTH)
+        response=client.get('/studies/images?query=S%C3%B3crates&limit=30',headers=AUTH)
         image_response=client.get(response.json()['images'][0]['proxy_url'],headers=AUTH)
         poster_response=client.get(response.json()['videos'][0]['poster_proxy_url'],headers=AUTH)
     assert response.status_code==200,response.text
     result=response.json()
-    assert len(result['images'])==18
+    assert len(result['images'])==30
+    assert len({image['url'] for image in result['images']})==30
     assert result['images'][0]['license']=='CC BY-SA'
     assert result['images'][0]['proxy_url'].startswith('/studies/media/')
     assert image_response.status_code==200

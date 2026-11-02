@@ -7,7 +7,7 @@ import './StudyExplanationPanel.css';
 
 type StoryImage={title:string;url:string;proxy_url:string;source_url:string;license:string;artist:string;provider?:string;kind?:'image';aspect?:number};
 type StoryMedia={images:StoryImage[]};
-const PHOTO_WALL_TARGET=18;
+const PHOTO_WALL_TARGET=30;
 const PHOTO_WALL_DEADLINE_MS=9000;
 export type StudyPanelItem={id:string;title:string;reply:string;slot:number;locked:boolean;minimized:boolean;createdAt:number;revision?:number;position?:{left:number;top:number};spokenChunk?:string;spokenChunkIndex?:number;references?:Array<{title:string;url:string;excerpt?:string}>};
 async function decodeImage(image:HTMLImageElement,signal:AbortSignal){
@@ -31,6 +31,7 @@ function StudyStory({panel,onClose,speaking,onMediaState}:{panel:StudyPanelItem;
  const [loadState,setLoadState]=useState<'loading'|'ready'|'failed'>('loading');
  const [photosLoading,setPhotosLoading]=useState(false),[retry,setRetry]=useState(0),[failure,setFailure]=useState('');
  const assets=useRef(new Map<string,{url:string;hash:string;aspect:number}>());
+ const displayed=useRef(new Set<string>()),displayedHashes=useRef<string[]>([]);
  const mediaCache=useRef(new Map<string,{media:StoryMedia;expires:number}>());
  const imagePool=useRef<StoryImage[]>([]),sourcePool=useRef<Record<string,string>>({}),previousQuery=useRef('');
  const visibleImages=images.filter(image=>Boolean(imageSources[image.proxy_url]));
@@ -40,12 +41,13 @@ function StudyStory({panel,onClose,speaking,onMediaState}:{panel:StudyPanelItem;
   const timer=window.setInterval(()=>setWallStep(step=>(step+1)%visibleImages.length),4200);
   return()=>window.clearInterval(timer);
  },[visibleImages.length]);
- useEffect(()=>{onMediaState?.({topic:panel.title,status:visibleImages.length?'ready':loadState,loaded_images:visibleImages.length,image_titles:wallImages.map(image=>image.title.slice(0,100))});},[onMediaState,panel.title,loadState,visibleImages.length,wallStep]);
+ useEffect(()=>{onMediaState?.({topic:collectionQuery,status:visibleImages.length?'ready':loadState,loaded_images:visibleImages.length,image_titles:wallImages.map(image=>image.title.slice(0,100))});},[onMediaState,collectionQuery,loadState,visibleImages.length,wallStep]);
  useEffect(()=>{
-  if(visibleImages.length>=6||retry>=3)return;
+  if(visibleImages.length>=PHOTO_WALL_TARGET||retry>=3||photosLoading)return;
   const timer=window.setTimeout(()=>setRetry(value=>value+1),12000);
   return()=>window.clearTimeout(timer);
- },[visibleImages.length,retry]);
+ },[visibleImages.length,retry,photosLoading,collectionQuery]);
+ useEffect(()=>{setRetry(0);},[collectionQuery]);
  useEffect(()=>()=>{assets.current.forEach(asset=>URL.revokeObjectURL(asset.url));assets.current.clear();},[]);
  useEffect(()=>{
   let disposed=false;
@@ -61,14 +63,14 @@ function StudyStory({panel,onClose,speaking,onMediaState}:{panel:StudyPanelItem;
    let candidates:StoryImage[];
    if(cached&&cached.expires>Date.now())candidates=cached.media.images;
    else{
-    const response=await api(`/studies/images?query=${encodeURIComponent(collectionQuery)}&limit=24&attempt=${retry%21}`,{signal:controller.signal});
+    const response=await api(`/studies/images?query=${encodeURIComponent(collectionQuery)}&limit=36&attempt=${retry%21}`,{signal:controller.signal});
     const data=await response.json();
     const urls=new Set<string>();
     candidates=(data.images||[]).filter((item:StoryImage)=>{
      const identity=normalizedImageUrl(item.url);
      if(!/^https:\/\//i.test(item.url)||!/^\/studies\/media\/[A-Za-z0-9_-]+$/.test(item.proxy_url)||!/^https?:\/\//i.test(item.source_url)||urls.has(identity))return false;
      urls.add(identity);return true;
-    }).slice(0,24);
+    }).slice(0,36);
     // Failures and empty searches are retried on a later visit, never cached for 20 minutes.
     if(candidates.length){
      if(mediaCache.current.size>=12)mediaCache.current.delete(mediaCache.current.keys().next().value!);
@@ -81,11 +83,11 @@ function StudyStory({panel,onClose,speaking,onMediaState}:{panel:StudyPanelItem;
    candidates=[...candidates].sort((left,right)=>Number(assets.current.has(normalizedImageUrl(left.url)))-Number(assets.current.has(normalizedImageUrl(right.url))));
    window.clearTimeout(timer);timer=window.setTimeout(()=>controller.abort(),PHOTO_WALL_DEADLINE_MS);
    setPhotosLoading(true);
-   let next=0;const accepted:StoryImage[]=preserve?[...imagePool.current]:[],sources:Record<string,string>=preserve?{...sourcePool.current}:{},hashes:string[]=accepted.map(item=>assets.current.get(normalizedImageUrl(item.url))?.hash||'').filter(Boolean);
+   let next=0;const accepted:StoryImage[]=preserve?[...imagePool.current]:[],sources:Record<string,string>=preserve?{...sourcePool.current}:{},hashes:string[]=[...displayedHashes.current];
    const known=new Set(accepted.map(item=>normalizedImageUrl(item.url)));
    const worker=async()=>{while(next<candidates.length&&accepted.length<PHOTO_WALL_TARGET&&!controller.signal.aborted&&!disposed){
     const candidate=candidates[next++],identity=normalizedImageUrl(candidate.url);
-    if(known.has(identity))continue;
+    if(known.has(identity)||displayed.current.has(identity))continue;
     let temporary:string|undefined;
     try{
      let asset=assets.current.get(identity);
@@ -111,6 +113,7 @@ function StudyStory({panel,onClose,speaking,onMediaState}:{panel:StudyPanelItem;
      if(asset.hash&&isNearDuplicateHash(asset.hash,hashes,3))continue;
      if(asset.hash)hashes.push(asset.hash);
      known.add(identity);
+     displayed.current.add(identity);if(asset.hash)displayedHashes.current.push(asset.hash);
      accepted.push({...candidate,aspect:asset.aspect});sources[candidate.proxy_url]=asset.url;
      imagePool.current=[...accepted];sourcePool.current={...sources};
      setImages([...accepted]);setImageSources({...sources});setLoadState('ready');
