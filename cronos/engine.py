@@ -8,7 +8,7 @@ from datetime import datetime
 from uuid import uuid4
 from cronos.usage import request_scope
 from cronos.news import current_news_query
-from cronos.memory_policy import knowledge_topics,social_or_control,greeting_only
+from cronos.memory_policy import knowledge_topics,social_or_control,greeting_only,presence_only
 from cronos.conversation_metrics import save as save_timings
 from cronos.spoken_text import conversation_text
 from cronos.cognition import plan_for
@@ -77,21 +77,22 @@ class Engine:
         prefs=getattr(self,'panel_preferences',None)
         prefetch_news=bool(news_query and 'web_news' in self.registry.tools and (not prefs or (prefs.web_enabled and not prefs.confirm_tools)))
         greeting = audio is None and not heard_context and not page_context and greeting_only(message)
+        presence = audio is None and presence_only(message)
         from cronos.study_intent import is_study_request
         explanation = audio is None and is_study_request(message)
         cognitive = plan_for(message, set(self.registry.tools)) if audio is None else None
         preferences, commitments, goals, nudge = await asyncio.to_thread(
-            self.memory.conversation_context, brief=greeting,
+            self.memory.conversation_context, brief=greeting or presence,
             proactive=not prefs or prefs.proactive_suggestions)
         personality = self.settings.personality.read_text(encoding="utf-8")
-        recall = '' if audio is not None or social_or_control(message) or prefetch_news else await self.recall(message)
+        recall = '' if audio is not None or presence or social_or_control(message) or prefetch_news else await self.recall(message)
         recall_done=time.perf_counter()
         screen_active = False
-        if greeting:
+        if greeting or presence:
             # A greeting does not need the entire tool catalog, past searches or
             # a screenshot. Keep the chosen personality; let the model answer.
             system=personality+"\nDirija-se ao usuário como senhor. Responda naturalmente ao cumprimento atual, mantendo sua personalidade. Nenhuma ferramenta é necessária para esta saudação. Retorne topics e tool_calls vazios."
-            if nudge:
+            if nudge and greeting:
                 system += ("\nHá um compromisso real próximo registrado pelo senhor: "
                            + json.dumps({'title': nudge['title'], 'due_date': nudge['due_date'], 'days_left': nudge['days_left']}, ensure_ascii=False)
                            + ". Mencione uma vez, brevemente, e ofereça ajuda concreta para se preparar, sem substituir a resposta ao cumprimento.")
@@ -172,7 +173,7 @@ class Engine:
         from cronos.conversation_transport import conversation_provider
         from cronos.council import CouncilProvider, council_ids
         route_settings = self.settings
-        council_active = self.provider is None and audio is None and len(council_ids(self.settings)) > 1
+        council_active = self.provider is None and audio is None and not greeting and not presence and len(council_ids(self.settings)) > 1
         if self.provider is None and explanation and not council_active:
             from cronos.evolution import explanation_providers
             routes = explanation_providers(self.settings)
@@ -182,8 +183,15 @@ class Engine:
                 route_settings = replace(self.settings, provider=chosen,
                                          gemini_transport='rest' if chosen == 'gemini' else self.settings.gemini_transport,
                                          output_tokens=max(2400, self.settings.output_tokens or 0))
-        provider = self.provider or (CouncilProvider(route_settings) if council_active else conversation_provider(route_settings))
-        if self.provider is None and audio is None and not council_active:
+        if self.provider is None and presence:
+            from cronos.council import PresenceProvider
+            provider = PresenceProvider()
+        elif self.provider is None and greeting:
+            from cronos.council import QuickGreetingProvider
+            provider = QuickGreetingProvider(route_settings)
+        else:
+            provider = self.provider or (CouncilProvider(route_settings) if council_active else conversation_provider(route_settings))
+        if self.provider is None and audio is None and not council_active and not greeting and not presence:
             from cronos.evolution import ResilientProvider
             provider = ResilientProvider(route_settings, provider, all_configured=explanation)
         final = None

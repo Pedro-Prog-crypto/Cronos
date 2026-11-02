@@ -61,6 +61,7 @@ class SecurityMiddleware:
         self.app, self.settings = app, settings
         self.failures = deque()
         self.active = 0
+        self.interactive_active = 0
         self.eye_active = 0
 
     async def __call__(self, scope, receive, send):
@@ -169,10 +170,18 @@ class SecurityMiddleware:
             await send(event)
         eye_request=path.startswith('/api/')
         regular_request=not public and not preflight and not eye_request and path not in {'/world/close','/world/eye/heartbeat'}
-        if not preflight and ((eye_request and self.eye_active>=12) or (regular_request and self.active>=4)):
+        interactive_request=regular_request and path in {
+            '/chat','/chat/stream','/chat/audio/stream','/voice/transcribe',
+            '/voice/speech','/voice/pcm','/voice/device','/voice/stream'}
+        # Background polling must not consume every slot needed for hearing,
+        # answering and speaking. Keep at most two reserved interactions.
+        interactive_reserved=interactive_request and self.interactive_active<2
+        if not preflight and ((eye_request and self.eye_active>=12) or
+                              (regular_request and self.active>=4 and not interactive_reserved)):
             return await JSONResponse({'detail': 'Cronos ocupado. Aguarde as solicitações atuais.'}, 429)(scope, receive, secure_send)
         if eye_request:self.eye_active+=1
         elif regular_request:self.active += 1
+        if interactive_request:self.interactive_active+=1
         try:
             body = bytearray()
             if scope.get('method') in {'POST', 'PUT', 'PATCH'} or length or headers.get('transfer-encoding'):
@@ -205,3 +214,4 @@ class SecurityMiddleware:
         finally:
             if eye_request:self.eye_active-=1
             elif regular_request:self.active -= 1
+            if interactive_request:self.interactive_active-=1

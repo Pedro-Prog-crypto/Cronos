@@ -56,6 +56,29 @@ def test_chunked_size_guard(settings):
     assert not reached
 
 
+def test_chat_has_reserved_slot_when_auxiliary_requests_are_busy(settings):
+    async def app(scope, receive, send):
+        await send({'type':'http.response.start','status':200,'headers':[]})
+        await send({'type':'http.response.body','body':b'ok'})
+    middleware=SecurityMiddleware(app,settings)
+    middleware.active=4
+    async def request(path):
+        sent=[]
+        async def send(event):sent.append(event)
+        scope={'type':'http','method':'GET','path':path,'scheme':'http',
+               'client':('127.0.0.1',1),
+               'headers':[(b'host',b'127.0.0.1'),(b'authorization',b'Bearer test-token')]}
+        await middleware(scope,lambda:None,send)
+        return sent[0]['status']
+    assert asyncio.run(request('/status'))==429
+    assert asyncio.run(request('/chat/stream'))==200
+    assert asyncio.run(request('/voice/transcribe'))==200
+    assert asyncio.run(request('/voice/speech'))==200
+    assert middleware.active==4 and middleware.interactive_active==0
+    middleware.interactive_active=2
+    assert asyncio.run(request('/chat/stream'))==429
+
+
 @pytest.mark.parametrize('relative',['../outside','.hidden/a.md','C:\\secret.txt','a.md:secret','credentials.json'])
 def test_private_and_windows_paths(tmp_path, relative):
     with pytest.raises(SecurityError):

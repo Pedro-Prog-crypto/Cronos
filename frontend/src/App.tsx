@@ -310,7 +310,7 @@ export default function App(){
     void microphone.toggle();
   };
   const sendText=async(value:string,source:'text'|'transcription'='text',audio?:Blob,wakeConfirmed=false)=>{
-    const text=value.trim();if(!text)return;if(inFlight.current){setDraft(text);tell('Sua pergunta foi reconhecida e está guardada no campo. Aguarde a resposta atual ou pressione Esc antes de enviar.',true);return;}if(!audio&&runCommand(text)){setDraft('');return;}
+    const text=value.trim();if(!text)return;if(!audio&&localCommand(text,eyeOpen)?.type==='presence'){runCommand(text);setDraft('');return;}if(inFlight.current){setDraft(text);tell('Sua pergunta foi reconhecida e está guardada no campo. Aguarde a resposta atual ou pressione Esc antes de enviar.',true);return;}if(!audio&&runCommand(text)){setDraft('');return;}
     if(!connected){tell('A conexão automática ainda não está disponível. Feche e abra o Kronos novamente.',true);return;}
     const previousVisualState=visualState.current?{...visualState.current,visible:Boolean(focusedStudyPanel&&!chatOpen&&!moduleActive&&!eyeActive&&!studyActive&&!studioActive)}:undefined;
     const pendingHeardContext=interruptedContext.current;

@@ -17,6 +17,14 @@ def greeting_only(text):
     return bool(text and re.fullmatch(phrase+r'(?: '+phrase+r')*',text))
 
 
+def presence_only(text):
+    text=normalized(text)
+    return bool(re.fullmatch(
+        r'(?:(?:voce|vc) )?(?:esta|ta) (?:ai|na escuta|ouvindo|escutando|me ouvindo|me escutando)'
+        r'|(?:consegue|pode) me (?:ouvir|escutar)'
+        r'|(?:me ouve|me escuta|na escuta|teste de (?:voz|audio|microfone))', text))
+
+
 def social_or_control(text):
     if greeting_only(text):return True
     text=normalized(text)
