@@ -38,6 +38,7 @@ def test_confirmation_and_reversible_routing(tmp_path, monkeypatch):
 
 def test_default_fallback_uses_configured_alternative_after_transient_error(tmp_path,monkeypatch):
     settings=setup(tmp_path,monkeypatch)
+    monkeypatch.setattr(evolution,'ollama_ready',lambda current:False)
     calls=[]
     class Primary:
         async def reply(self,*args):raise ProviderError('quota',429)
@@ -48,7 +49,7 @@ def test_default_fallback_uses_configured_alternative_after_transient_error(tmp_
         return Alternative()
     monkeypatch.setattr('cronos.providers.make_provider',factory)
     wrapped=evolution.ResilientProvider(settings,Primary())
-    assert evolution.read(settings)['routing']=={'enabled':True,'fallbacks':['ollama','second']}
+    assert evolution.read(settings)['routing']=={'enabled':True,'fallbacks':['second']}
     result=asyncio.run(wrapped.reply('system',[{'role':'user','content':'test'}]))
     assert result['provider_used']=='second' and len(calls)==1
     with pytest.raises(ProviderError):asyncio.run(wrapped.reply('system',[{'audio_pcm':b'pcm'}]))
@@ -56,6 +57,67 @@ def test_default_fallback_uses_configured_alternative_after_transient_error(tmp_
         async def reply(self,*args):raise ProviderError('format invalid')
     with pytest.raises(ProviderError):asyncio.run(evolution.ResilientProvider(settings,Invalid()).reply('',[]))
     assert len(calls)==1
+
+
+def test_automatic_explanations_skip_ollama_without_the_selected_model(tmp_path, monkeypatch):
+    import httpx
+    settings=setup(tmp_path,monkeypatch)
+    def tags(url, **kwargs):
+        return httpx.Response(200,json={'models':[{'name':'other:latest'}]},
+                              request=httpx.Request('GET',url))
+    monkeypatch.setattr(evolution.httpx,'get',tags)
+    evolution._ollama_model_ready.cache_clear()
+    assert not evolution.ollama_ready(settings)
+    assert evolution.explanation_providers(settings)==['second','gemini']
+    from cronos.council import council_ids
+    assert council_ids(settings)==['gemini','second']
+    assert evolution.read(settings)['routing']=={'enabled':True,'fallbacks':['second']}
+    monkeypatch.setattr(evolution.httpx,'get',lambda url, **kwargs:httpx.Response(
+        200,json={'models':[{'name':'gemma3:4b'}]},request=httpx.Request('GET',url)))
+    evolution._ollama_model_ready.cache_clear()
+    assert evolution.ollama_ready(settings)
+    assert 'ollama' in evolution.explanation_providers(settings)
+    evolution._ollama_model_ready.cache_clear()
+
+
+def test_explanation_responds_with_gemini_route_when_ollama_is_offline(tmp_path, monkeypatch):
+    settings=setup(tmp_path,monkeypatch)
+    personality=tmp_path/'personality.md';personality.write_text('Responda com clareza.',encoding='utf-8')
+    settings=replace(settings,personality=personality,providers_file=tmp_path/'missing.json')
+    monkeypatch.setattr(evolution,'ollama_ready',lambda current:False)
+    used=[]
+    class Reply:
+        async def reply(self,system,messages):
+            return {'reply':'Sócrates foi um filósofo grego.','topics':[],'tool_calls':[]}
+    def provider(route):
+        used.append(route.provider)
+        return Reply()
+    monkeypatch.setattr('cronos.conversation_transport.conversation_provider',provider)
+    with TestClient(create_app(settings)) as client:
+        response=client.post('/chat/stream',headers={'Authorization':'Bearer test'},json={'message':'Explique quem foi Sócrates.'})
+    assert response.status_code==200
+    assert 'Sócrates foi um filósofo grego.' in response.text
+    assert used==['gemini']
+
+
+def test_offline_primary_ollama_uses_configured_gemini_for_regular_question(tmp_path, monkeypatch):
+    settings=setup(tmp_path,monkeypatch)
+    personality=tmp_path/'personality.md';personality.write_text('Responda com clareza.',encoding='utf-8')
+    settings=replace(settings,provider='ollama',personality=personality,providers_file=tmp_path/'missing.json')
+    monkeypatch.setattr(evolution,'ollama_ready',lambda current:False)
+    used=[]
+    class Reply:
+        async def reply(self,system,messages):
+            return {'reply':'Está funcionando.','topics':[],'tool_calls':[]}
+    def provider(route):
+        used.append(route.provider)
+        return Reply()
+    monkeypatch.setattr('cronos.conversation_transport.conversation_provider',provider)
+    with TestClient(create_app(settings)) as client:
+        response=client.post('/chat/stream',headers={'Authorization':'Bearer test'},json={'message':'Quanto é 2 + 2?'})
+    assert response.status_code==200
+    assert 'Está funcionando.' in response.text
+    assert used==['gemini']
 
 
 def test_slow_primary_is_bounded_and_uses_configured_reserve(tmp_path,monkeypatch):

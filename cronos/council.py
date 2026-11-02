@@ -1,9 +1,7 @@
 """Consult configured text models in parallel, then synthesize one answer."""
 import asyncio
 import json
-import socket
 from dataclasses import replace
-from urllib.parse import urlsplit
 
 from cronos.providers import ProviderError
 from cronos.reply_stream import intro_sink, reply_sink
@@ -55,21 +53,11 @@ class QuickGreetingProvider:
 
 def council_ids(settings):
     from cronos.integrations import provider_catalog
+    from cronos.evolution import ollama_ready
     ids = [item['id'] for item in provider_catalog(settings) if item['configured']]
-    if 'ollama' in ids and not _ollama_available(settings.ollama_url):
+    if 'ollama' in ids and not ollama_ready(settings):
         ids.remove('ollama')
     return list(dict.fromkeys(ids))
-
-
-def _ollama_available(url):
-    parsed = urlsplit(url)
-    if parsed.hostname not in {'localhost','127.0.0.1','::1'}:
-        return False
-    try:
-        with socket.create_connection((parsed.hostname,parsed.port or 11434),timeout=.1):
-            return True
-    except (OSError,ValueError):
-        return False
 
 
 class CouncilProvider:

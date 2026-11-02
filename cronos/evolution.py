@@ -1,8 +1,13 @@
 """Supervised, reversible integration configuration. Never executes downloaded code."""
 import json
 import threading
+import time
+from functools import lru_cache
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlsplit
+
+import httpx
 
 from pydantic import BaseModel, ConfigDict, Field
 from cronos.integrations import ProviderSpec, checked_url, specs, provider_catalog, available_models
@@ -33,8 +38,8 @@ def read(settings):
     if not path.exists():
         # On a fresh install, use configured alternatives automatically after
         # a retryable failure. An existing evolution.json remains authoritative.
-        alternatives = [p['id'] for p in provider_catalog(settings)
-                        if p['configured'] and p['id'] != settings.provider]
+        alternatives = [provider_id for provider_id in explanation_providers(settings)
+                        if provider_id != settings.provider]
         return {'routing': Routing(fallbacks=alternatives, enabled=bool(alternatives)).model_dump(),
                 'previous': None, 'updated_at': None}
     try:
@@ -117,13 +122,37 @@ def checkup(settings):
             'discovery': 'Use integrations_models para modelos anunciados pela API; novidades de outros provedores exigem pesquisa em fontes oficiais. Não há catálogo universal garantido.'}
 
 
+@lru_cache(maxsize=64)
+def _ollama_model_ready(url: str, model: str, interval: int) -> bool:
+    """A local endpoint and the selected model must both exist before auto-routing."""
+    del interval
+    try:
+        base = checked_url(url)
+        parsed = urlsplit(base)
+        if parsed.scheme != 'http' or parsed.hostname not in {'localhost', '127.0.0.1', '::1'}:
+            return False
+        response = httpx.get(base.rstrip('/') + '/api/tags', timeout=.5, trust_env=False)
+        response.raise_for_status()
+        names = {str(item.get('name', '')).casefold() for item in response.json().get('models', [])
+                 if isinstance(item, dict)}
+        target = model.casefold()
+        return target in names or ':' not in target and target + ':latest' in names
+    except (ProviderError, httpx.HTTPError, ValueError, TypeError, AttributeError):
+        return False
+
+
+def ollama_ready(settings) -> bool:
+    return _ollama_model_ready(settings.ollama_url, settings.ollama_model, int(time.monotonic() // 15))
+
+
 def explanation_providers(settings):
     """Rotate real configured text providers; keep local Ollama as the last option.
 
     One model answers each successful turn. Calling every paid API for every
     sentence would multiply both latency and usage without improving the voice.
     """
-    available = [item for item in provider_catalog(settings) if item['configured']]
+    available = [item for item in provider_catalog(settings)
+                 if item['configured'] and (item['id'] != 'ollama' or ollama_ready(settings))]
     return [item['id'] for item in available if item['id'] not in {'gemini', 'ollama'}] + [
         item['id'] for item in available if item['id'] in {'gemini', 'ollama'}
     ]
@@ -197,7 +226,7 @@ class ResilientProvider:
                 mark('answer_route_failed',provider='routing',error_type='configuration')
                 return
             if policy.enabled:
-                usable = {p['id'] for p in provider_catalog(self.settings) if p['configured']}
+                usable = set(explanation_providers(self.settings))
                 reserves = list(dict.fromkeys(p for p in policy.fallbacks if p != self.settings.provider and p in usable))
             reserve_deadline = loop.time() + FALLBACK_TOTAL_TIMEOUT_SECONDS
 

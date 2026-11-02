@@ -1,5 +1,5 @@
 {
-  "revision": "explanation-routing-2026-11-02-r24",
+  "revision": "provider-readiness-2026-11-02-r25",
   "files": {
     "cronos/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "cronos/app.py": "4da75eb434780ae0ca03afdc3f313f7e0477ea9ff9aaa964136a2bbed8573186",
@@ -12,7 +12,7 @@
     "cronos/control.py": "2034c8c4fc25cb9b50345570e9d630aa6980478f6243deae4da52a2fc7cec7aa",
     "cronos/conversation_metrics.py": "21bfa6eec780dce0639f0c89aacb97a13498495370ac6aaf5b277dda1f7b92ff",
     "cronos/conversation_transport.py": "79dc6b0e4ff36771018e87cc9e15c1fc10e1baafd173714e221ea1cd91ded702",
-    "cronos/council.py": "c2c28702400ccbfb5bd5eadbc477d8d662b6eae5b521d5ddf25fcc7c5dfcd905",
+    "cronos/council.py": "07a3774a99553371227d2da2326fe7914dd9ca528fdf9af8717e756f5d801d3a",
     "cronos/delivery.py": "2a74daddfecebca39b66d250b8ea6744c1dd786d958805ad638126d990039701",
     "cronos/desktop.py": "cf7a317ec22f71e9945cd64b5502ee04f9aa9168ca0cea4958d81845a66c010c",
     "cronos/desktop_overlay.py": "7893686da3c6e6bc65588d05fbd72a4c8068d1753847acfd801fa6f6b23d1a20",
@@ -21,8 +21,8 @@
     "cronos/device_voice.py": "4abb16bea900224d15171b343a53ee90579167ff68863cad20154e8ab7cc8c1d",
     "cronos/diagnostics.py": "e63ee173374b4512cd1d3d5f87d35e66061ab0ab16b0722d876bb9fb0ccd4aa9",
     "cronos/documents.py": "090994d41402871460161a886831ce6e5482df2843ccdaf746ca50172f52dd22",
-    "cronos/engine.py": "c47ca02f06a363fee2863248a6a84b360a387b1eb7536f4fca08f99b83b8db67",
-    "cronos/evolution.py": "e9e216d66c35a813ca109e32bb659be3cb1f6ec6e81363be63d8135c062c31d5",
+    "cronos/engine.py": "ee6a0845e77318e83d57fe03b3b7676e9362d19190e1041d1554eb5fe0b4cb9a",
+    "cronos/evolution.py": "91738577339df7fd5345a824ac19e7673944af930e604ed9eb033a7592c2bd9e",
     "cronos/eye-server/runtime/eccodes/build/eccodes/eccodes.js": "2bdf3de1d2e9126c4e88bc421bf9309ae459f9bd4f024d81fdc1df9dd4bb1510",
     "cronos/eye-server/runtime/eccodes/build/eccodes/index.js": "6d7d3090a9f19a963e7d59605e7277a33b56ff8488032b043fe9a174c8d72178",
     "cronos/eye-server/runtime/eccodes/index.js": "8572a7b111bb15be6b077a7e90f24b35d60584d2dafe892055f5fb3fa38cc2b5",
