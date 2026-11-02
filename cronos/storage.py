@@ -7,11 +7,13 @@ import sqlite3
 import threading
 import unicodedata
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from uuid import UUID, uuid4
 from cronos.security import safe_path
-from cronos.memory_policy import knowledge_topics,graph_note,substantive_question
+from cronos.memory_policy import knowledge_topics,graph_note,substantive_question,inferred_subject
+from cronos.temporal_memory import explicit_event, resolution, plain, SAO_PAULO
+from cronos.cognition import explicit_goal
 
 
 def fold(text):
@@ -39,7 +41,7 @@ class Memory:
         self.warnings = []
         self._index_lock = threading.RLock()
         self._export_lock = threading.RLock()
-        for folder in ("Conversas", "Temas", "Memorias", ".cronos"):
+        for folder in ("Conversas", "Temas", "Memorias", "Compromissos", "Metas", ".cronos"):
             self.path(folder, "").mkdir(parents=True, exist_ok=True)
         self.database = self.path(".cronos", "memory.sqlite3")
         with self.connect() as db:
@@ -56,6 +58,17 @@ class Memory:
                 CREATE TABLE IF NOT EXISTS imports (path TEXT PRIMARY KEY);
                 CREATE TABLE IF NOT EXISTS imported_turns (source TEXT NOT NULL, source_id INTEGER NOT NULL,
                     PRIMARY KEY(source, source_id));
+                CREATE TABLE IF NOT EXISTS temporal_events (
+                    id INTEGER PRIMARY KEY, title TEXT NOT NULL, kind TEXT NOT NULL,
+                    due_date TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active',
+                    source_session TEXT NOT NULL, source_text TEXT NOT NULL,
+                    created TEXT NOT NULL, last_nudge TEXT);
+                CREATE INDEX IF NOT EXISTS temporal_due ON temporal_events(status,due_date);
+                CREATE TABLE IF NOT EXISTS procedural_preferences (
+                    kind TEXT PRIMARY KEY, content TEXT NOT NULL, source_session TEXT NOT NULL, updated TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS personal_goals (
+                    id INTEGER PRIMARY KEY, title TEXT NOT NULL, normalized TEXT NOT NULL UNIQUE,
+                    status TEXT NOT NULL DEFAULT 'active', source_session TEXT NOT NULL, created TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS tool_events (id INTEGER PRIMARY KEY, session TEXT NOT NULL,
                     payload TEXT NOT NULL, created TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS notes (path TEXT PRIMARY KEY, title TEXT NOT NULL, fingerprint TEXT NOT NULL);
@@ -117,6 +130,90 @@ class Memory:
         with self.connect() as db:
             row = db.execute("SELECT session FROM turns WHERE role='assistant' ORDER BY id DESC LIMIT 1").fetchone()
         return UUID(row['session']) if row else None
+
+    def upcoming_events(self, days=21, now=None):
+        today = (now or datetime.now(SAO_PAULO)).astimezone(SAO_PAULO).date()
+        end = (today + timedelta(days=days)).isoformat()
+        with self.connect() as db:
+            rows = db.execute("SELECT id,title,kind,due_date,last_nudge FROM temporal_events "
+                              "WHERE status='active' AND due_date BETWEEN ? AND ? ORDER BY due_date,id LIMIT 20",
+                              (today.isoformat(), end)).fetchall()
+        return [{**dict(row), 'days_left': (date.fromisoformat(row['due_date'])-today).days}
+                for row in rows]
+
+    def due_suggestion(self, now=None):
+        moment = (now or datetime.now(SAO_PAULO)).astimezone(SAO_PAULO)
+        for event in self.upcoming_events(14, moment):
+            last = event['last_nudge']
+            if not last or (moment - datetime.fromisoformat(last)).total_seconds() >= 48*3600:
+                return event
+        return None
+
+    def mark_nudged(self, ident, now=None):
+        stamp = (now or datetime.now(SAO_PAULO)).astimezone(SAO_PAULO).isoformat()
+        with self.connect() as db:
+            db.execute("UPDATE temporal_events SET last_nudge=? WHERE id=? AND status='active'", (stamp, ident))
+
+    def set_commitment_status(self, ident, status):
+        if status not in {'completed', 'cancelled'}:
+            raise ValueError('Estado inválido.')
+        with self.connect() as db:
+            changed = db.execute("UPDATE temporal_events SET status=? WHERE id=? AND status='active'",
+                                 (status, ident)).rowcount
+        return bool(changed)
+
+    def procedural_context(self):
+        with self.connect() as db:
+            rows = db.execute('SELECT kind,content FROM procedural_preferences ORDER BY updated DESC LIMIT 5').fetchall()
+        return [dict(row) for row in rows]
+
+    def active_goals(self):
+        with self.connect() as db:
+            rows = db.execute("SELECT id,title,created FROM personal_goals WHERE status='active' ORDER BY id DESC LIMIT 8").fetchall()
+        return [dict(row) for row in rows]
+
+    def set_goal_status(self, ident, status):
+        if status not in {'completed', 'cancelled'}:
+            raise ValueError('Estado inválido.')
+        with self.connect() as db:
+            changed = db.execute("UPDATE personal_goals SET status=? WHERE id=? AND status='active'",
+                                 (status, ident)).rowcount
+        return bool(changed)
+
+    def _store_personal_memory(self, db, session, message, stamp):
+        records = []
+        event = explicit_event(message)
+        if event:
+            exists = db.execute("SELECT id FROM temporal_events WHERE status='active' AND kind=? AND due_date=?",
+                                (event['kind'], event['due_date'])).fetchone()
+            if not exists:
+                cursor = db.execute("INSERT INTO temporal_events(title,kind,due_date,source_session,source_text,created) "
+                           "VALUES(?,?,?,?,?,?)", (event['title'], event['kind'], event['due_date'], str(session), event['source'], stamp))
+                records.append((f"Compromissos/{cursor.lastrowid}.md", event['title'],
+                                f"Data: {event['due_date']}\n\nOrigem: [[Conversas/{session}]]\n"))
+        closed = resolution(message)
+        if closed:
+            rows = db.execute("SELECT id,title FROM temporal_events WHERE kind=? AND status='active'",
+                              (closed[0],)).fetchall()
+            matching = [row for row in rows if row['title'] != closed[0] and row['title'] in plain(message)]
+            chosen = matching[0] if len(matching) == 1 else rows[0] if len(rows) == 1 else None
+            if chosen:
+                db.execute('UPDATE temporal_events SET status=? WHERE id=?', (closed[1], chosen['id']))
+        text = plain(message)
+        goal = explicit_goal(message)
+        if goal:
+            cursor = db.execute("INSERT OR IGNORE INTO personal_goals(title,normalized,source_session,created) VALUES(?,?,?,?)",
+                                (goal, fold(goal), str(session), stamp))
+            if cursor.rowcount:
+                records.append((f"Metas/{cursor.lastrowid}.md", goal,
+                                f"Origem: [[Conversas/{session}]]\n"))
+        if len(message) <= 400 and '?' not in message and re.search(r'\b(?:prefiro que|eu prefiro|nao gosto quando|nao gosto de|sempre que eu pedir|nunca quero que|quero que voce sempre|nao quero que voce)\b', text):
+            kind = ('visual' if re.search(r'\b(?:imagem|foto|painel|card|tela)\b', text) else
+                    'explanation' if re.search(r'\b(?:explic|expliqu|respost|detalh|curt|resum)\w*\b', text) else 'general')
+            db.execute("INSERT INTO procedural_preferences(kind,content,source_session,updated) VALUES(?,?,?,?) "
+                       "ON CONFLICT(kind) DO UPDATE SET content=excluded.content,source_session=excluded.source_session,updated=excluded.updated",
+                       (kind, message, str(session), stamp))
+        return records
 
     def _markdown_files(self):
         for directory, folders, filenames in os.walk(self.vault, followlinks=False):
@@ -188,11 +285,22 @@ class Memory:
             visible = {row["path"] for row in rows}
             valid = {row["path"] for row in all_notes}
             edges = set()
+            memory_targets = {}
             for link in db.execute("SELECT source,target FROM note_links"):
                 matches = list(dict.fromkeys(lookup.get(fold(link['target']), [])))
-                if link['source'] in valid and len(matches) == 1 and matches[0] != link['source']:
+                if link['source'].startswith('Memorias/') and len(matches) == 1 and matches[0] in valid:
+                    memory_targets.setdefault(link['source'],set()).add(matches[0])
+                elif link['source'] in valid and len(matches) == 1 and matches[0] != link['source']:
                     edges.add(tuple(sorted((link['source'], matches[0]))))
-            return {"nodes": [dict(row) for row in rows],
+            for linked in memory_targets.values():
+                ordered = sorted(linked)
+                for index,left in enumerate(ordered):
+                    for right in ordered[index+1:]:
+                        edges.add((left,right))
+            def label(row):
+                title = re.sub(r'\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b|\b\d{1,2}:\d{2}\b', '', row['title']).strip(' -—:')
+                return {'path': row['path'], 'title': title or Path(row['path']).stem}
+            return {"nodes": [label(row) for row in rows],
                     "edges": [{"source": a, "target": b} for a,b in sorted(edges) if a in visible or b in visible],
                     "total": len(all_notes), "next_offset": offset + len(rows) if offset + len(rows) < len(all_notes) else None}
 
@@ -258,6 +366,10 @@ class Memory:
 
     def record(self, session, message, reply, topics):
         topics=knowledge_topics(message,topics)
+        if not topics and substantive_question(message):
+            subject=inferred_subject(message)
+            if subject:
+                topics=[{'title':subject,'summary':f'Pergunta do senhor: {message[:300]}\nResposta anterior do Cronos, não verificada: {reply[:900]}','aliases':[]}]
         stamp = datetime.now(timezone.utc).isoformat()
         event = str(uuid4())
         conversation = f"Conversas/{session}.md"
@@ -265,6 +377,7 @@ class Memory:
         with self.connect() as db:
             db.executemany("INSERT INTO turns(session,role,content,created) VALUES(?,?,?,?)",
                            [(str(session), "user", message, stamp), (str(session), "assistant", reply, stamp)])
+            personal_records = self._store_personal_memory(db, session, message, stamp)
             body = f"\n## {stamp}\n\n### Você\n{quoted(message)}\n\n### Cronos — resposta de IA, não verificada\n{quoted(reply)}\n"
             if getattr(self, 'save_diary', True):
                 db.execute("INSERT INTO exports(path,marker,header,body) VALUES(?,?,?,?)",
@@ -287,6 +400,12 @@ class Memory:
                 index_body = f"- [[{target['path'][:-3]}|{target['title'].replace(']', '').replace('|', '-')}]]\n"
                 db.execute("INSERT OR IGNORE INTO exports(path,marker,header,body) VALUES(?,?,?,?)",
                            ("Mapa de Conhecimento.md", "index:" + target["path"], "# Mapa de Conhecimento\n\n", index_body))
+            for path,title,content in personal_records:
+                links = ' · '.join(f"[[{item[:-3]}]]" for item in files if item.startswith('Temas/'))
+                db.execute("INSERT INTO exports(path,marker,header,body) VALUES(?,?,?,?)",
+                           (path, event + ':' + path, f"# {title}\n\n",
+                            content + (f"\nTemas: {links}\n" if links else '')))
+                files.append(path)
             if topics or substantive_question(message):
                 knowledge = f"Memorias/{event}.md"
                 links = " · ".join(f"[[{path[:-3]}]]" for path in files)
@@ -296,7 +415,7 @@ class Memory:
                 if not topics:files.append(knowledge)
         self.flush_exports()
         try:
-            if topics or substantive_question(message):
+            if topics or substantive_question(message) or personal_records:
                 self.sync_notes()
         except (OSError, ValueError):
             self.warnings.append("Conversa salva; indexação pendente. Verifique arquivos, permissões e links no vault.")
@@ -327,7 +446,21 @@ class Memory:
         with self.connect() as db:
             return {"messages": db.execute("SELECT count(*) FROM turns").fetchone()[0],
                     "indexed_notes": db.execute("SELECT count(*) FROM notes").fetchone()[0],
-                    "pending_exports": db.execute("SELECT count(*) FROM exports WHERE done=0").fetchone()[0]}
+                    "pending_exports": db.execute("SELECT count(*) FROM exports WHERE done=0").fetchone()[0],
+                    "active_commitments": db.execute("SELECT count(*) FROM temporal_events WHERE status='active'").fetchone()[0],
+                    "procedural_preferences": db.execute("SELECT count(*) FROM procedural_preferences").fetchone()[0],
+                    "active_goals": db.execute("SELECT count(*) FROM personal_goals WHERE status='active'").fetchone()[0]}
+
+    def layers(self):
+        """Five durable, distinct kinds of memory backed by real records."""
+        with self.connect() as db:
+            return {
+                'episodic': db.execute('SELECT count(*) FROM turns').fetchone()[0],
+                'semantic': db.execute('SELECT count(*) FROM notes').fetchone()[0],
+                'temporal': db.execute('SELECT count(*) FROM temporal_events').fetchone()[0],
+                'procedural': db.execute('SELECT count(*) FROM procedural_preferences').fetchone()[0],
+                'relational': db.execute('SELECT count(*) FROM note_links').fetchone()[0],
+            }
 
     def log_tool(self, session, result):
         with self.connect() as db:

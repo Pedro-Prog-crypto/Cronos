@@ -52,6 +52,7 @@ class Monitor:
         self.resources = {}
         self.baseline = None
         self.component_status = {}
+        self.proactive_enabled = False
 
     def update(self, code, active, severity="warning", message="", suggestion=""):
         with self.lock:
@@ -145,6 +146,14 @@ class Monitor:
         except (OSError, ValueError, RuntimeError, sqlite3.Error):
             self.update("memory_check", True, "critical", "O diagnóstico não conseguiu consultar a memória ou seu disco.",
                         "Confira o vault e as permissões. O monitor não altera nem repara arquivos automaticamente.")
+        try:
+            commitment = self.memory.due_suggestion() if self.proactive_enabled else None
+            near = commitment if commitment and commitment['days_left'] <= 7 else None
+            self.update('upcoming_commitment', bool(near), 'info',
+                        f"Seu compromisso {near['title']} está a {near['days_left']} dia(s)." if near else '',
+                        'Posso ajudar a revisar ou reorganizar o preparo.')
+        except (OSError, ValueError, sqlite3.Error):
+            self.update('upcoming_commitment', False)
         pressure = memory_pressure()
         with self.lock:
             self.resources["ram_used_percent"] = pressure

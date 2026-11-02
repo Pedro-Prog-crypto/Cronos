@@ -42,7 +42,7 @@ class Preferences(BaseModel):
     confirm_critical: Literal[True] = True
     lock_minimize: bool = False
     log_security: bool = True
-    search_requested_only: bool = True
+    search_requested_only: bool = False
     trusted_sources: bool = True
     search_provider: Literal['auto', 'duckduckgo'] = 'auto'
     auto_refresh: bool = True
@@ -86,6 +86,13 @@ class PanelState:
                         data['response_style']='detailed'
                         payload=json.dumps(data);db.execute('UPDATE panel_preferences SET payload=? WHERE id=1',(payload,));row=(payload,)
                 db.execute('INSERT INTO panel_migrations(name) VALUES(?)',('detailed-responses-v1',))
+            if not db.execute('SELECT 1 FROM panel_migrations WHERE name=?',('research-when-needed-v1',)).fetchone():
+                # The user requested current knowledge without having to say
+                # "pesquise" every time. Later explicit choices remain intact.
+                if row:
+                    data=json.loads(row[0]);data['search_requested_only']=False
+                    payload=json.dumps(data);db.execute('UPDATE panel_preferences SET payload=? WHERE id=1',(payload,));row=(payload,)
+                db.execute('INSERT INTO panel_migrations(name) VALUES(?)',('research-when-needed-v1',))
         self.preferences = Preferences(context_messages=state.engine.settings.context_messages,
                                        voice_speed=state.engine.settings.fish_speed,
                                        commands_enabled=state.engine.settings.allow_executables)
@@ -109,6 +116,7 @@ class PanelState:
         state.engine.panel_preferences = prefs
         state.memory.save_diary = prefs.save_diary
         state.monitor.record_events = prefs.log_security
+        state.monitor.proactive_enabled = prefs.proactive_suggestions
         state.registry.permission_policy = self.policy
         state.registry.current_settings = lambda: state.engine.settings
 

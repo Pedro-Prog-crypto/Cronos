@@ -35,10 +35,21 @@ def knowledge_topics(message,topics):
     return [topic for topic in topics if normalized(topic['title']) not in GENERIC_TITLES and (not normalized(topic['title']) or not social_or_control(topic['title']))]
 
 def graph_note(path,title):
-    if path.startswith('Conversas/') or path=='Mapa de Conhecimento.md':return False
+    if path.startswith(('Conversas/','Memorias/')) or path=='Mapa de Conhecimento.md':return False
     if path.startswith(('Memorias/','Temas/')) and (normalized(title) in GENERIC_TITLES or (social_or_control(title) and (normalized(title) or path.startswith('Memorias/')))):return False
     return True
 
 def substantive_question(message):
     if social_or_control(message):return False
     return bool(re.search(r'(?:^| )(?:quem|como|por que|porque|o que|qual|quais|quanto|quantos|quantas|explique|calcule|demonstre|fale sobre|me fale sobre|conte sobre|noticias)(?: |$)',normalized(message)))
+
+
+def inferred_subject(message):
+    """Extract a named topic from a direct question when a model omitted topics."""
+    text=re.sub(r'^\s*(?:cronos|kronos|jarvis)[,\s]+','',message.strip(),flags=re.I)
+    match=re.search(r'\b(?:quem foi|quem é|quem era|o que é|explique|me fale sobre|fale sobre)\s+(.+?)(?:[?!.]|$)',text,re.I)
+    if not match:return None
+    title=match[1].strip(' ,;:-')
+    if len(title)<3 or len(title)>80 or normalized(title) in {'isso','ele','ela','aquilo','voce','mim'}:
+        return None
+    return title

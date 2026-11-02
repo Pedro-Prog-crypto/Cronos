@@ -105,6 +105,10 @@ class MemoryQuery(BaseModel):
     limit: int = Field(default=8, ge=1, le=100)
 
 
+class CommitmentStatus(BaseModel):
+    status: Literal['completed', 'cancelled']
+
+
 def create_app(settings: Settings | None = None, provider=None, fish_factory=None, vision_provider=None,
                windows_runner=None, windows_platform=None):
     settings = settings or Settings.from_env()
@@ -494,6 +498,32 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
     @app.get("/memory/status", dependencies=[Depends(authenticate)])
     async def memory_status(request: Request):
         return request.app.state.memory.stats()
+
+    @app.get('/memory/layers', dependencies=[Depends(authenticate)])
+    async def memory_layers(request: Request):
+        return await asyncio.to_thread(request.app.state.memory.layers)
+
+    @app.get('/memory/commitments', dependencies=[Depends(authenticate)])
+    async def memory_commitments(request: Request):
+        return {'events': await asyncio.to_thread(request.app.state.memory.upcoming_events, 90)}
+
+    @app.post('/memory/commitments/{ident}/status', dependencies=[Depends(authenticate)])
+    async def memory_commitment_status(ident: int, body: CommitmentStatus, request: Request):
+        changed = await asyncio.to_thread(request.app.state.memory.set_commitment_status, ident, body.status)
+        if not changed:
+            raise HTTPException(404, 'Compromisso ativo não encontrado.')
+        return {'updated': True}
+
+    @app.get('/memory/goals', dependencies=[Depends(authenticate)])
+    async def memory_goals(request: Request):
+        return {'goals': await asyncio.to_thread(request.app.state.memory.active_goals)}
+
+    @app.post('/memory/goals/{ident}/status', dependencies=[Depends(authenticate)])
+    async def memory_goal_status(ident: int, body: CommitmentStatus, request: Request):
+        changed = await asyncio.to_thread(request.app.state.memory.set_goal_status, ident, body.status)
+        if not changed:
+            raise HTTPException(404, 'Objetivo ativo não encontrado.')
+        return {'updated': True}
 
     async def fish_client():
         if settings.privacy_mode != 'online':

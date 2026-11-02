@@ -63,4 +63,14 @@ entre integracoes realmente configuradas e tentam outra em caso de falha.
 O mural usa seis quadros proporcionais e troca fotos durante a fala.
 A ultima conversa volta ao reabrir. IMPORTAR-DADOS-PARA-CRONOS.bat agora mescla
 tambem as mensagens do banco antigo sem repetir importacoes da mesma origem.
-Detalhes e limites para a proxima etapa: docs\IDEIA-CENTRAL-CEREBRO-CRONOS.md
+O raciocinio, a memoria e a iniciativa seguem dentro do Cronos principal.
+
+REVISAO DE 02/11/2026 — MEMORIA E INICIATIVA (R16)
+O Cronos principal agora separa historico de conversas, notas e temas, compromissos,
+preferencias de interacao e ligacoes entre assuntos. Provas e outros prazos com data
+clara podem gerar um lembrete contextual, sem inventar eventos. Objetivos declarados
+tambem ficam disponiveis em conversas futuras. O grafo mostra nomes de assuntos,
+metas e compromissos sem datas ou codigos nos rotulos. A busca na web fica disponivel
+quando o assunto exige atualizacao, sem precisar dizer "pesquise" em toda pergunta.
+Avisos automaticos exigem que o Cronos esteja em execucao; esta versao nao instala
+um servidor na nuvem nem adiciona contas ou cobranças.

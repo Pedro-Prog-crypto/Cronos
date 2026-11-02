@@ -41,6 +41,7 @@ def test_followup_can_save_real_content_and_cronos_myth_is_not_an_assistant_call
 def test_real_question_is_saved_when_model_omits_topics(tmp_path):
     memory=Memory(tmp_path/'vault')
     paths=memory.record(uuid4(),'Quem foi Sócrates?','Filósofo ateniense.',[])
-    assert len(paths)==1 and paths[0].startswith('Memorias/')
+    assert len(paths)==1 and paths[0].startswith('Temas/')
     assert 'Quem foi Sócrates?' in (memory.vault/paths[0]).read_text()
-    assert paths[0] in {note['path'] for note in memory.graph()['nodes']}
+    assert any(note['title']=='Sócrates' for note in memory.graph()['nodes'])
+    assert len(list((memory.vault/'Memorias').glob('*.md')))==1

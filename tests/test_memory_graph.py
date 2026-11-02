@@ -30,7 +30,19 @@ def test_each_turn_creates_an_immutable_markdown_memory(tmp_path):
     assert len(list((memory.vault/'Temas').glob('*.md')))==1
     memory.flush_exports()
     assert len(list((memory.vault/'Memorias').glob('*.md')))==2
-    assert memory.graph()['edges']
+    graph=memory.graph()
+    assert [node['title'] for node in graph['nodes']]==['Platão']
+    assert graph['edges']==[]
+
+
+def test_graph_links_real_topics_without_showing_conversation_dates(tmp_path):
+    memory=Memory(tmp_path/'vault')
+    memory.record(uuid4(),'Estudar Platão e Sócrates em 15/12/2026','Ambos discutiram virtude.',[
+        {'title':'Platão','summary':'Aluno de Sócrates'},
+        {'title':'Sócrates','summary':'Mestre de Platão'}])
+    graph=memory.graph()
+    assert {node['title'] for node in graph['nodes']}=={'Platão','Sócrates'}
+    assert len(graph['edges'])==1
 
 
 def test_graph_is_authenticated_and_paged(settings):

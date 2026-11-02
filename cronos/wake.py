@@ -36,7 +36,7 @@ DEFAULT_SETTINGS = {
 PHRASES = {"abrir cronos", "abrir kronos", "cronos abrir", "kronos abrir"}  # compatibilidade antiga
 MODEL_LAYOUTS = (("am/final.mdl", "conf/model.conf"),
                  ("final.mdl", "mfcc.conf", "HCLr.fst", "Gr.fst"))
-WAKE_VERSION = 15
+WAKE_VERSION = 16
 WAKE_GREETING = "Pois não, senhor? O que deseja?"
 
 
