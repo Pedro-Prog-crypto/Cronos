@@ -17,16 +17,17 @@ const context={sampleRate:16000,Int16Array,Float32Array,Math,Promise,
   registerProcessor:(_name,value)=>{Processor=value;}};
 vm.runInNewContext(source,context);
 const worklet=new Processor();
-worklet.vad={process:frames=>frames.some(value=>value!==0),mode:()=>{}};
+    // Reproduce a detector that never classifies this quiet voice as speech.
+    worklet.vad={process:()=>false,mode:()=>{}};
 for(let index=0;index<1250;index++)worklet.process([[new Float32Array(128)]]);
-assert.equal(messages.some(value=>value.manualReady),false);
+    assert.equal(messages.some(value=>value.manualReady),true);
 for(let index=0;index<50;index++)worklet.process([[new Float32Array(128).fill(.1)]]);
-assert.equal(messages.some(value=>value.manualReady),true);
+    assert.equal(messages.some(value=>value.samples&&!value.manual),false);
 worklet.port.onmessage({data:{flush:true}});
 const recording=messages.find(value=>value.manual);
 assert.ok(recording);
 assert.ok(recording.samples.length>4000);
-assert.ok(recording.samples.length<16000,'the old 10 seconds of silence must be excluded');
+    assert.ok(recording.samples.length<16000*3,'the old 10 seconds of silence must be excluded');
 assert.ok(recording.samples.some(value=>value!==0));
 '''
     result=subprocess.run(['node','--input-type=module','-e',script],cwd=Path(__file__).resolve().parents[1],

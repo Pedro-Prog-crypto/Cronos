@@ -84,3 +84,10 @@ cortada apenas porque a integracao parou antes de concluir o restante.
 Se a rede ou as integracoes estiverem indisponiveis, o Cronos mostra a etapa
 que falhou e conserva a gravacao para nova tentativa. A velocidade final ainda
 depende do microfone, da rede e dos provedores configurados.
+
+REVISAO DE 02/11/2026 — RECUPERACAO DO MICROFONE (R18)
+O prazo curto de transcricao da R17 foi revertido porque podia cancelar o audio
+antes de a integracao reconhece-lo. O botao Enviar fala agora fica disponivel
+mesmo quando o detector automatico de voz falha: ele envia a gravacao recente,
+retirando o silencio antigo. Se a deteccao automatica nao enviar sua pergunta,
+clique no botao de envio de fala apos terminar de falar.

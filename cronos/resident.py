@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
-VERSION = 17
+VERSION = 18
 
 
 def folder(project=None):

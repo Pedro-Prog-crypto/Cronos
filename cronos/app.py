@@ -60,9 +60,9 @@ class ApprovalInput(BaseModel):
     accepted: bool
 
 
-VOICE_REQUEST_TIMEOUT_SECONDS = 12
-TRANSCRIPTION_TIMEOUT_SECONDS = 14
-TRANSCRIPTION_TOTAL_TIMEOUT_SECONDS = 20
+VOICE_REQUEST_TIMEOUT_SECONDS = 30
+TRANSCRIPTION_TIMEOUT_SECONDS = 30
+TRANSCRIPTION_TOTAL_TIMEOUT_SECONDS = 40
 # Recovery ceiling, not the latency target. Each route has its own timeout;
 # a reserve is hedged after eight seconds without cancelling a valid primary.
 CONVERSATION_FIRST_REPLY_TIMEOUT_SECONDS = 120
