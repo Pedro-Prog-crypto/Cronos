@@ -120,6 +120,36 @@ def test_offline_primary_ollama_uses_configured_gemini_for_regular_question(tmp_
     assert used==['gemini']
 
 
+def test_visual_explanation_stays_inside_cronos_and_skips_slow_council(tmp_path, monkeypatch):
+    settings=setup(tmp_path,monkeypatch)
+    personality=tmp_path/'personality.md';personality.write_text('Responda com clareza.',encoding='utf-8')
+    settings=replace(settings,personality=personality)
+    monkeypatch.setattr(evolution,'ollama_ready',lambda current:False)
+    calls=[]
+    class Reply:
+        async def reply(self,system,messages):
+            calls.append(system)
+            assert 'browser_search' not in system.split('Ferramentas realmente disponíveis:')[-1]
+            if len(calls)==1:
+                return {'reply':'','topics':[],'tool_calls':[{'name':'browser_search','arguments':{'query':'Segunda Guerra Mundial'}}]}
+            return {'reply':'A Segunda Guerra Mundial começou em 1939.','topics':[],'tool_calls':[]}
+    monkeypatch.setattr('cronos.conversation_transport.conversation_provider',lambda route:Reply())
+    with TestClient(create_app(settings)) as client:
+        registry=client.app.state.engine.registry
+        original=registry.execute
+        async def execute(name,*args,**kwargs):
+            if name in {'browser_open','browser_search'}:raise AssertionError('Visual request opened a browser')
+            return await original(name,*args,**kwargs)
+        monkeypatch.setattr(registry,'execute',execute)
+        response=client.post('/chat/stream',headers={'Authorization':'Bearer test'},
+                             json={'message':'Cronos, me explique visualmente sobre a Segunda Guerra Mundial.'})
+    assert response.status_code==200
+    assert 'A Segunda Guerra Mundial começou em 1939.' in response.text
+    assert len(calls)==2
+    assert 'CONSELHO DE IAs' not in ''.join(calls)
+    assert 'Nenhuma aba externa foi aberta' in response.text
+
+
 def test_slow_primary_is_bounded_and_uses_configured_reserve(tmp_path,monkeypatch):
     settings=setup(tmp_path,monkeypatch)
     evolution.routing(settings,{'enabled':True,'fallbacks':['second']})

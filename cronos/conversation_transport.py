@@ -8,18 +8,18 @@ from cronos.reply_stream import ready_intro, ready_reply, deliver_intro, deliver
 FIRST_TEXT_TIMEOUT = 8.0
 
 
-async def receive_conversation(client, url, headers, payload):
+async def receive_conversation(client, url, headers, payload, *, first_text_timeout=None):
     try:
-        return await _receive_conversation(client, url, headers, payload)
+        return await _receive_conversation(client, url, headers, payload, first_text_timeout=first_text_timeout)
     except TimeoutError:
         raise ProviderError('A conexão de texto ficou sem resposta; tentando a próxima integração configurada.', 504) from None
 
 
-async def _receive_conversation(client, url, headers, payload):
+async def _receive_conversation(client, url, headers, payload, *, first_text_timeout=None):
     """Deliver useful speech prefixes directly from Gemini's text SSE stream."""
     from cronos.structured_stream import receive, progress_sink
     introduced = delivered = False
-    async with asyncio.timeout(FIRST_TEXT_TIMEOUT) as first_text:
+    async with asyncio.timeout(first_text_timeout or FIRST_TEXT_TIMEOUT) as first_text:
         async def progress(characters, snapshot):
             nonlocal introduced, delivered
             if characters:

@@ -166,7 +166,8 @@ class Gemini:
         try:
             # Long code may legitimately take minutes while bytes keep arriving.
             # A silent connection must still fail promptly and preserve its prefix.
-            timeout=httpx.Timeout(90,connect=15,write=45,pool=15) if structured else httpx.Timeout(min(15,self.settings.provider_timeout),connect=min(3,self.settings.provider_timeout),write=min(8,self.settings.provider_timeout),pool=2)
+            detailed=(self.settings.output_tokens or 0)>=2400
+            timeout=httpx.Timeout(90,connect=15,write=45,pool=15) if structured else httpx.Timeout(min(22 if detailed else 15,self.settings.provider_timeout),connect=min(3,self.settings.provider_timeout),write=min(8,self.settings.provider_timeout),pool=2)
             async with httpx.AsyncClient(timeout=timeout) as client:
                 for attempt in range(2):
                     from cronos.structured_stream import receive
@@ -184,6 +185,7 @@ class Gemini:
                                                      **({"maxOutputTokens": self.settings.output_tokens} if self.settings.output_tokens else {}),
                                                      **({"thinkingConfig":{"thinkingBudget":0}} if model.startswith("gemini-2.5-flash") else {})},
                             },
+                            **({"first_text_timeout":20} if not structured and detailed else {}),
                         )
                     except httpx.HTTPStatusError as error:
                         # SSE rejects HTTP errors before a body can be parsed;

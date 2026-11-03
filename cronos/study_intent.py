@@ -34,6 +34,18 @@ def is_study_request(text: str) -> bool:
     return bool(explicit or contextual or (school_topic and "?" in value))
 
 
+def is_visual_request(text: str) -> bool:
+    """A visual explanation belongs to Cronos's mural, not an external browser."""
+    value = normalize(text)
+    if re.search(r"\b(?:sem imagens|sem fotos|so texto|somente texto|por escrito|de forma escrita|apenas texto|nao (?:mostre|mostrar|exiba|exibir|quero imagens|quero fotos))\b", value):
+        return False
+    return bool(
+        re.search(r"\b(?:mostre|mostra|mostrar|exiba|exibe|quero ver|coloque|poe|busque|procure)\b.{0,100}\b(?:imagens?|fotos?|fotografias|mural visual)\b", value)
+        or re.search(r"\b(?:explique|explica|apresente|apresenta|mostre|mostra)\b.{0,100}\b(?:com imagens|com fotos|visualmente|de forma visual|apresentacao visual|apresentacao imersiva)\b", value)
+        or re.search(r"\b(?:apresentacao visual|apresentacao imersiva|mural de imagens)\s+(?:sobre|de|do|da)\b", value)
+    )
+
+
 def requests_exhaustive_lookup(text: str) -> bool:
     value = normalize(text)
     if re.search(r"\b(?:nao|sem)\s+(?:pesquis|busc|procur)", value):

@@ -101,6 +101,17 @@ def test_heartbeats_do_not_keep_a_silent_connection_alive(settings,monkeypatch):
     asyncio.run(run());assert closed
 
 
+def test_detailed_answer_can_wait_for_first_text_while_short_answer_stays_bounded(monkeypatch):
+    monkeypatch.setattr(transport,'FIRST_TEXT_TIMEOUT',.01)
+    async def delayed(*args,**kwargs):
+        await asyncio.sleep(.03)
+        return 'complete'
+    monkeypatch.setattr('cronos.structured_stream.receive',delayed)
+    assert asyncio.run(transport.receive_conversation(None,'','','',first_text_timeout=.1))=='complete'
+    with pytest.raises(ProviderError,match='sem resposta'):
+        asyncio.run(transport.receive_conversation(None,'','',''))
+
+
 def test_in_progress_answer_survives_first_reply_deadline(settings,monkeypatch):
     monkeypatch.setattr(evolution,'FIRST_REPLY_TIMEOUT_SECONDS',.02)
     class Streaming:

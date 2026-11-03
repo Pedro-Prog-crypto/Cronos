@@ -7,7 +7,7 @@ from pypdf import PdfWriter
 
 from cronos.app import create_app
 from cronos.studies import LAYOUTS, MAX_LIBRARY_BYTES, MAX_PDF_BYTES, StudyStore, _PageText, _dedupe_study_images, _filter_philosopher_images, _filter_visual_subject, _media_search_terms, _public_http_url, _wikipedia_portraits
-from cronos.study_intent import is_study_request, requests_exhaustive_lookup
+from cronos.study_intent import is_study_request, is_visual_request, requests_exhaustive_lookup
 from test_backend import AUTH, settings
 
 
@@ -93,6 +93,8 @@ def test_study_intent_prefers_deep_explanation_and_allows_requested_complete_web
     assert requests_exhaustive_lookup('Cronos, me fale todas as obras do PAIS.')
     assert requests_exhaustive_lookup('Quero a lista completa de leis vigentes.')
     assert not requests_exhaustive_lookup('Não pesquise na web; explique o conceito de fotossíntese.')
+    assert is_visual_request('Cronos, me explique visualmente sobre a Segunda Guerra Mundial.')
+    assert not is_visual_request('Cronos, me explique por escrito a Segunda Guerra Mundial.')
 
 
 def test_visual_explanation_intent_covers_people_processes_and_events_without_grabbing_small_talk():
