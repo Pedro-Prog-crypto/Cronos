@@ -31,6 +31,13 @@ class Engine:
         self.screen_observations = {}
         self.memory_refresh = None
         self._explanation_index = 0
+        self._learning = None
+
+    def learning(self):
+        if self._learning is None:
+            from cronos.learning import LearningStore, UniversalLearningEngine
+            self._learning = UniversalLearningEngine(LearningStore(self.settings.vault))
+        return self._learning
 
     async def recall(self, message):
         # Pick up newly copied notes, but never wait for an entire large vault
@@ -84,6 +91,12 @@ class Engine:
         explanation = audio is None and is_study_request(message)
         visual_request = audio is None and is_visual_request(message)
         visual_capability = audio is None and asks_visual_capability(message)
+        from cronos.learning import exercise_topic, submitted_answer
+        exercise_request = exercise_topic(message) if audio is None else None
+        answer_request = submitted_answer(message) if audio is None else None
+        pending_exercise = await asyncio.to_thread(self.learning().store.pending, str(session)) if answer_request else None
+        learning_action = exercise_request is not None or pending_exercise is not None
+        explanation = explanation or learning_action
         cognitive = plan_for(message, set(self.registry.tools)) if audio is None else None
         preferences, commitments, goals, nudge = await asyncio.to_thread(
             self.memory.conversation_context, brief=greeting or presence,
@@ -121,6 +134,17 @@ class Engine:
                 system += ("\nMODO DE EXPLICAÇÃO IMERSIVA: quando a pergunta for de estudo ou pedir uma explicação, fale como um narrador especialista, natural e seguro, mantendo uma explicação contínua do começo ao fim, sem exigir que o usuário avance capítulos. Não comece com bordões, comentários sobre o pedido ou frases vazias. Apresente os fatos na ordem que ajuda a compreender; conecte pessoas, lugares, causas, consequências, imagens mentais e exemplos concretos do cotidiano. Explique termos difíceis com clareza sem infantilizar e mantenha transições naturais entre as ideias. A resposta deve ensinar de verdade: para perguntas amplas de história, filosofia ou ciência, desenvolva normalmente 5 a 8 parágrafos substanciais, cobrindo contexto, ideias principais, exemplos, impacto e limites; para uma pergunta específica, aprofunde o ponto pedido sem alongar por volume. Não encerre após uma definição curta ou duas frases, a menos que o senhor peça uma resposta breve. Corrija com delicadeza premissas factuais equivocadas antes de desenvolver o assunto; por exemplo, diferencie a Academia de Platão do Liceu fundado por Aristóteles. A interface pode mostrar imagens com uma legenda pequena durante a fala; explique oralmente o assunto sem afirmar que uma imagem específica carregou antes de receber confirmação da interface. Escreva em prosa falável e evite listas longas, títulos repetitivos e metacomentários. Não invente imagens, fontes ou detalhes. Quando a pergunta tratar de fatos atuais, pessoas públicas, política, ciência recente ou lista completa, use web_search/web_news se disponíveis e cite os links e datas reais; se a busca falhar, diga o limite com clareza. Dê uma avaliação própria quando for pedida e justifique-a com critérios e evidências, sem falsa neutralidade automática. Termine com uma pergunta de continuação específica e natural somente quando ela ajudar a conversa; evite o fecho genérico 'algo mais?'. Cards só devem aparecer se o senhor pedir explicitamente. Se o senhor pedir especificamente para 'mostrar um texto' ou 'escrever um texto na tela', responda no painel comum, sem iniciar a apresentação imersiva.")
             if explanation or audio is not None:
                 system += ("\nPROFUNDIDADE PADRÃO: se o senhor pedir quem foi uma pessoa, construa uma biografia explicativa, não apenas uma definição. Quando houver dados confiáveis, inclua nascimento (data e lugar), ambiente familiar e histórico relevante, formação, caminho até a atividade pela qual ficou conhecida, ideias e visão de mundo, decisões e obras principais, relações e influências, controvérsias com contexto, impacto posterior, morte (data, lugar e causa quando conhecida) e o que permanece incerto ou debatido. Explique por que cada etapa importa e conecte causas e consequências com exemplos compreensíveis. Não invente datas, causa de morte, motivações íntimas ou opiniões atribuídas; se não souber, assuma a incerteza. Se pedir várias pessoas importantes, diga o critério de importância e compare contribuições, sem fingir que existe ranking universal. Respostas explicativas são substanciais por padrão, salvo se o senhor pedir brevidade. O formato visual é decidido pela interface: texto legível é o padrão; imagens só quando ele pedir explicitamente uma apresentação visual ou fotos; cards apenas quando pedir cards.")
+            if explanation:
+                from cronos.learning import learning_guidance
+                system += "\n" + learning_guidance(message)
+                profile = await asyncio.to_thread(self.learning().store.profile)
+                if profile["topics"]:
+                    system += ("\nProgresso demonstrado por exercícios reais, não por leitura: "
+                               + json.dumps(profile["topics"][:5], ensure_ascii=False))
+                if 'pas' in message.casefold():
+                    plan = await asyncio.to_thread(self.learning().store.plan)
+                    system += ("\nPlano PAS registrado; a data de prova foi informada pelo usuário, "
+                               "não verificada no edital: " + json.dumps(plan, ensure_ascii=False))
             if visual_context:
                 system += ('\nEstado confirmado do mural visual na interface antes desta pergunta: '
                            + json.dumps(visual_context,ensure_ascii=False)
@@ -221,6 +245,11 @@ class Engine:
         if self.provider is None and audio is None and not council_active and not greeting and not presence and not visual_capability:
             from cronos.evolution import ResilientProvider
             provider = ResilientProvider(route_settings, provider, all_configured=explanation or visual_request)
+        if learning_action:
+            from cronos.learning import LearningConversationProvider
+            provider = LearningConversationProvider(provider, self.learning(), str(session),
+                                                    topic=exercise_request, answer=answer_request,
+                                                    pending=pending_exercise)
         final = None
         turn=str(uuid4())
         if prefetch_news:

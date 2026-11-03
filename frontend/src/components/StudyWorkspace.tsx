@@ -9,6 +9,10 @@ type Source={id:string;filename:string;size:number;page_count:number;indexed_cha
 type Citation={source:string;page:number;text?:string};
 type ImageResult={title:string;url:string;source_url:string;license:string;artist:string};
 type Lesson={id:string;question:string;answer:string;layout:string;citations:Citation[];created_at:string;image?:ImageResult|null};
+type LearningMode='auto'|'simple'|'lesson'|'deep'|'visual'|'tutor'|'exam'|'research';
+type Exercise={id:string;topic:string;skill:string;question:string;origin:'simulated';created_at:string};
+type Grade={correct:boolean;feedback:string;error_point:string;next_step:string;due_date:string};
+type Plan={days_left:number;daily_minutes:number;focus_subjects:string[];weak_topics:string[];reviews_due:{topic:string;due_date:string}[];date_status:string;official_sources:string[];suggested_blocks:string[]};
 type Props={active:boolean;onMinimize:()=>void;onClose:()=>void};
 
 const fmt=(bytes:number)=>bytes<1024*1024?`${Math.ceil(bytes/1024)} KiB`:`${(bytes/(1024*1024)).toFixed(1)} MiB`;
@@ -33,10 +37,10 @@ const Article=React.memo(function Article({text}:{text:string}){
  return <div className="study-prose">{output}</div>;
 });
 
-const StudyQuestionForm=React.memo(function StudyQuestionForm({subjectName,hasSources,explaining,onExplain}:{subjectName:string;hasSources:boolean;explaining:boolean;onExplain:(value:string)=>Promise<boolean>}){
- const [value,setValue]=useState('');
- const submit=async(event:React.FormEvent)=>{event.preventDefault();const prompt=value.trim();if(prompt.length<2||explaining)return;if(await onExplain(prompt))setValue('');};
- return <form className="study-question-box" onSubmit={submit}><label htmlFor="study-question">O que o senhor quer aprender nesta matéria?</label><div className="study-question-input"><textarea id="study-question" value={value} onChange={event=>setValue(event.target.value)} maxLength={5000} rows={2} placeholder={hasSources?`Pergunte sobre ${subjectName.toLowerCase()} ou peça para explicar um trecho dos seus materiais…`:`Faça uma pergunta de ${subjectName.toLowerCase()}…`} disabled={explaining}/><button type="submit" disabled={explaining||value.trim().length<2} aria-label="Pedir explicação"><Send size={17}/><span>{explaining?'Preparando aula':'Explicar'}</span></button></div><small>As respostas com arquivos citam a fonte e a página utilizados.</small></form>;
+const StudyQuestionForm=React.memo(function StudyQuestionForm({subjectName,hasSources,explaining,onExplain}:{subjectName:string;hasSources:boolean;explaining:boolean;onExplain:(value:string,mode:LearningMode)=>Promise<boolean>}){
+ const [value,setValue]=useState(''),[mode,setMode]=useState<LearningMode>('auto');
+ const submit=async(event:React.FormEvent)=>{event.preventDefault();const prompt=value.trim();if(prompt.length<2||explaining)return;if(await onExplain(prompt,mode))setValue('');};
+ return <form className="study-question-box" onSubmit={submit}><label htmlFor="study-question">O que o senhor quer aprender nesta matéria?</label><div className="study-question-input"><textarea id="study-question" value={value} onChange={event=>setValue(event.target.value)} maxLength={5000} rows={2} placeholder={hasSources?`Pergunte sobre ${subjectName.toLowerCase()} ou peça para explicar um trecho dos seus materiais…`:`Faça uma pergunta de ${subjectName.toLowerCase()}…`} disabled={explaining}/><button type="submit" disabled={explaining||value.trim().length<2} aria-label="Pedir explicação"><Send size={17}/><span>{explaining?'Preparando aula':'Explicar'}</span></button></div><div className="study-learning-mode"><label htmlFor="study-mode">Forma de ensinar</label><select id="study-mode" value={mode} onChange={event=>setMode(event.target.value as LearningMode)} disabled={explaining}><option value="auto">Automática</option><option value="simple">Simples</option><option value="lesson">Aula completa</option><option value="deep">Ultradetalhada</option><option value="visual">Visual</option><option value="tutor">Professor particular</option><option value="exam">Preparação para prova</option><option value="research">Pesquisa profunda</option></select></div><small>As respostas com arquivos citam a fonte e a página utilizados.</small></form>;
 });
 
 const StudyLinkForm=React.memo(function StudyLinkForm({disabled,adding,onAdd}:{disabled:boolean;adding:boolean;onAdd:(url:string)=>Promise<boolean>}){
@@ -49,6 +53,8 @@ export default function StudyWorkspace({active,onMinimize,onClose}:Props){
  const [subjects,setSubjects]=useState<Subject[]>([]),[subjectId,setSubjectId]=useState(''),[sources,setSources]=useState<Source[]>([]),[lessons,setLessons]=useState<Lesson[]>([]),[selectedLesson,setSelectedLesson]=useState<Lesson|null>(null);
  const [storage,setStorage]=useState({used_bytes:0,limit_bytes:5*1024**3,per_file_bytes:100*1024**2});
  const [newSubject,setNewSubject]=useState(''),[creating,setCreating]=useState(false),[uploading,setUploading]=useState(false),[addingLink,setAddingLink]=useState(false),[explaining,setExplaining]=useState(false),[imageLoading,setImageLoading]=useState(false),[imageMessage,setImageMessage]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState(''),[preview,setPreview]=useState<{name:string;url:string}|null>(null);
+ const [plan,setPlan]=useState<Plan|null>(null),[minutes,setMinutes]=useState(45),[focusInput,setFocusInput]=useState(''),[savingPlan,setSavingPlan]=useState(false);
+ const [exercise,setExercise]=useState<Exercise|null>(null),[exerciseTopic,setExerciseTopic]=useState(''),[exerciseAnswer,setExerciseAnswer]=useState(''),[grade,setGrade]=useState<Grade|null>(null),[exerciseBusy,setExerciseBusy]=useState(false);
  const input=useRef<HTMLInputElement>(null),pdfInput=useRef<HTMLInputElement>(null),reader=useRef<HTMLDivElement>(null);
  const currentSubject=subjects.find(item=>item.id===subjectId)||null;
 
@@ -59,10 +65,11 @@ export default function StudyWorkspace({active,onMinimize,onClose}:Props){
  const loadSubject=async(id:string)=>{
   if(!id){setSources([]);setLessons([]);setSelectedLesson(null);return;}
   setSubjectId(id);setSelectedLesson(null);
-  try{const data=await(await api(`/studies/subjects/${id}/sources`)).json();setSources(data.sources||[]);setLessons(data.lessons||[]);setSelectedLesson(data.lessons?.[0]||null);}
+  try{const [data,pending]=await Promise.all([(await api(`/studies/subjects/${id}/sources`)).json(),(await api(`/studies/subjects/${id}/exercise/pending`)).json()]);setSources(data.sources||[]);setLessons(data.lessons||[]);setSelectedLesson(data.lessons?.[0]||null);setExercise(pending.id?pending:null);setGrade(null);setExerciseAnswer('');}
   catch(e){setError(e instanceof Error?e.message:'Não consegui abrir esta matéria.');}
  };
  useEffect(()=>{void refresh().then(id=>{if(id)void loadSubject(id);});},[]);
+ useEffect(()=>{void api('/learning/plan').then(response=>response.json()).then((value:Plan)=>{setPlan(value);setMinutes(value.daily_minutes);setFocusInput(value.focus_subjects.join(', '));}).catch(()=>{});},[]);
  useEffect(()=>{if(active&&selectedLesson&&reader.current)reader.current.scrollTop=0;},[active,selectedLesson?.id]);
  useEffect(()=>()=>{if(preview)URL.revokeObjectURL(preview.url);},[preview?.url]);
 
@@ -97,15 +104,29 @@ export default function StudyWorkspace({active,onMinimize,onClose}:Props){
   try{const result=await(await api(`/studies/images?query=${encodeURIComponent(query)}`)).json();const image=result.images?.[0]||null;if(!image)setImageMessage(result.message||'Não encontrei uma imagem pública compatível agora. A explicação continua disponível.');return image;}
   catch{setImageMessage('A busca de imagens está indisponível agora. A explicação continua disponível.');return null;}finally{setImageLoading(false);}
  };
- const explain=async(prompt:string):Promise<boolean>=>{
+ const explain=async(prompt:string,mode:LearningMode):Promise<boolean>=>{
   if(!subjectId||prompt.trim().length<2||explaining)return false;setExplaining(true);setError('');setNotice('O Cronos está estudando os trechos mais relevantes desta matéria…');
   try{
-   const lesson=await jsonApi(`/studies/subjects/${subjectId}/lessons`,{question:prompt});
+   const lesson=await jsonApi(`/studies/subjects/${subjectId}/lessons`,{question:prompt,...(mode==='auto'?{}:{mode})});
    setSelectedLesson(lesson);setLessons(old=>[lesson,...old.filter(item=>item.id!==lesson.id)]);setNotice('Explicação pronta e salva no histórico desta matéria.');
    void findImage(prompt).then(image=>{if(image){const enriched={...lesson,image};setSelectedLesson(current=>current?.id===lesson.id?enriched:current);setLessons(old=>old.map(item=>item.id===lesson.id?enriched:item));}});
    void refresh(subjectId);return true;
   }catch(e){setError(e instanceof Error?e.message:'A explicação não terminou; seu material continua salvo.');setNotice('');return false;}
   finally{setExplaining(false);}
+ };
+ const savePlan=async()=>{
+  setSavingPlan(true);setError('');try{const focus=focusInput.split(',').map(item=>item.trim()).filter(Boolean).slice(0,12);setPlan(await jsonApi('/learning/plan',{daily_minutes:minutes,focus_subjects:focus}));setNotice('Plano de estudo salvo. Ajuste o tempo disponível quando precisar.');}
+  catch(e){setError(e instanceof Error?e.message:'Não consegui salvar o plano.');}finally{setSavingPlan(false);}
+ };
+ const makeExercise=async()=>{
+  if(!subjectId||exerciseBusy)return;setExerciseBusy(true);setError('');setGrade(null);
+  try{const value=await jsonApi(`/studies/subjects/${subjectId}/exercise`,{topic:exerciseTopic.trim()||currentSubject?.name||'assunto desta matéria'});setExercise(value);setExerciseAnswer('');setNotice('Exercício simulado criado. Responda para registrar seu progresso.');}
+  catch(e){setError(e instanceof Error?e.message:'Não consegui criar a questão.');}finally{setExerciseBusy(false);}
+ };
+ const correctExercise=async()=>{
+  if(!exercise||!exerciseAnswer.trim()||exerciseBusy)return;setExerciseBusy(true);setError('');
+  try{const value=await jsonApi(`/studies/exercises/${exercise.id}/answer`,{answer:exerciseAnswer.trim()});setGrade(value);setPlan(await jsonApi('/learning/plan'));}
+  catch(e){setError(e instanceof Error?e.message:'Não consegui corrigir a resposta.');}finally{setExerciseBusy(false);}
  };
  const openPdf=async(source:Source)=>{
   setError('');try{const blob=await(await api(`/studies/sources/${source.id}/file`)).blob();const url=URL.createObjectURL(blob);setPreview(old=>{if(old)URL.revokeObjectURL(old.url);return{name:source.filename,url};});}
@@ -129,6 +150,7 @@ export default function StudyWorkspace({active,onMinimize,onClose}:Props){
    </aside>
 
    <main className="study-main">
+    {plan&&<section className="study-learning-panel" aria-label="Meu plano PAS 2"><div className="study-learning-heading"><div><small>MEU PLANO · PAS 2</small><h2>{plan.days_left} dias até 13/12/2026</h2></div><span>Data informada pelo senhor; confira o edital</span></div><div className="study-plan-controls"><label>Minutos por dia <input type="number" min={10} max={480} value={minutes} onChange={e=>setMinutes(Number(e.target.value))}/></label><label>Matérias prioritárias <input value={focusInput} onChange={e=>setFocusInput(e.target.value)} placeholder="Ex.: Matemática, História"/></label><button disabled={savingPlan||minutes<10||minutes>480} onClick={()=>void savePlan()}>{savingPlan?'Salvando…':'Salvar plano'}</button></div><div className="study-plan-tasks">{plan.suggested_blocks.map((task,index)=><span key={index}>{task}</span>)}</div>{plan.weak_topics.length>0&&<p>Reforçar pelos exercícios: {plan.weak_topics.join(', ')}.</p>}{plan.reviews_due.length>0&&<p>{plan.reviews_due.length} revisão(ões) pendente(s) baseada(s) nas respostas dadas.</p>}<small>Confira <a href={plan.official_sources[0]} target="_blank" rel="noreferrer">Cebraspe</a> e <a href={plan.official_sources[1]} target="_blank" rel="noreferrer">matrizes da UnB</a> antes de tratar conteúdos e datas como oficiais.</small></section>}
     {!currentSubject?<div className="study-empty"><div className="study-empty-orb"><BookPlus size={30}/></div><p>SEU PRÓXIMO CAPÍTULO COMEÇA AQUI</p><h1>Organize seus estudos<br/>do seu jeito.</h1><span>Crie uma matéria para separar biologia, matemática, história e tudo o que estiver aprendendo. Depois, guarde os PDFs e peça uma explicação completa.</span><button onClick={()=>input.current?.focus()}><Plus size={17}/> Criar primeira matéria</button></div>:<>
      <div className="study-subject-header"><div><div className="study-eyebrow">SALA DE ESTUDO · {String(subjects.findIndex(item=>item.id===subjectId)+1).padStart(2,'0')}</div><h1>{currentSubject.name}</h1><p>Seus materiais e explicações ficam organizados nesta matéria.</p></div><button className="study-upload-primary" disabled={uploading} onClick={()=>pdfInput.current?.click()}><Upload size={17}/>{uploading?'Indexando PDFs…':'Adicionar PDFs'}</button></div>
      <input ref={pdfInput} type="file" accept="application/pdf,.pdf" multiple hidden onChange={e=>void upload(e.target.files)}/>
@@ -145,6 +167,7 @@ export default function StudyWorkspace({active,onMinimize,onClose}:Props){
       <div className="study-lesson-footer"><span>Essa explicação foi salva no histórico de {currentSubject.name}.</span><button onClick={()=>reader.current?.scrollTo({top:0,behavior:'smooth'})}>Voltar ao início <ChevronLeft size={15}/></button></div>
      </article>:<div className="study-first-lesson"><div className="study-first-orb"><Search size={20}/></div><h2>Aprenda a partir do que importa.</h2><p>Adicione os PDFs desta matéria ou faça uma pergunta. O Cronos vai buscar os trechos mais úteis dos arquivos e explicar com exemplos, tópicos e uma pergunta para revisar o que você entendeu.</p>{!sources.length&&<button onClick={()=>pdfInput.current?.click()}><Upload size={16}/> Guardar o primeiro PDF</button>}</div>}
      <StudyQuestionForm key={subjectId} subjectName={currentSubject.name} hasSources={sources.length>0} explaining={explaining} onExplain={explain}/>
+     <section className="study-learning-panel" aria-label="Questão e correção"><div className="study-learning-heading"><div><small>PRÁTICA ATIVA</small><h2>Exercício e correção</h2></div><span>Questão criada pelo Cronos · simulada</span></div><div className="study-exercise-actions"><input aria-label="Assunto do exercício" value={exerciseTopic} onChange={e=>setExerciseTopic(e.target.value)} placeholder={`Assunto de ${currentSubject.name}`}/><button disabled={exerciseBusy} onClick={()=>void makeExercise()}>{exerciseBusy?'Aguarde…':'Criar exercício'}</button></div>{exercise&&<div className="study-exercise-body"><small>{exercise.skill} · SIMULADA</small><p>{exercise.question}</p><label htmlFor="study-exercise-answer">Sua resposta</label><textarea id="study-exercise-answer" value={exerciseAnswer} onChange={e=>setExerciseAnswer(e.target.value)} rows={3} placeholder="Explique como pensou para eu encontrar a dificuldade exata."/><button disabled={exerciseBusy||!exerciseAnswer.trim()||Boolean(grade)} onClick={()=>void correctExercise()}>Corrigir resposta</button></div>}{grade&&<div className="study-exercise-feedback" role="status"><b>{grade.correct?'Raciocínio correto':'Vamos corrigir este ponto'}</b><p>{grade.feedback}</p>{grade.error_point&&<p>Ponto a rever: {grade.error_point}</p>}<p>Próximo passo: {grade.next_step}</p><small>Revisão sugerida: {new Date(`${grade.due_date}T12:00:00`).toLocaleDateString('pt-BR')}</small></div>}</section>
     </>}
    </main>
 
