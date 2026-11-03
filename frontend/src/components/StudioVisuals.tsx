@@ -3,7 +3,7 @@ import {Check,ImagePlus,ArrowUpRight,LoaderCircle} from 'lucide-react';
 import {api} from '../api';
 
 export type DesignDirection={id:string;name:string;concept:string;composition:string;typography:string;palette:string[];sections:string[];horizontal_image:string;vertical_image:string;interaction:string};
-export type StudioAsset={name:string;purpose:string;original_name:string;bytes:number;width?:number;height?:number;orientation?:string;source?:{url?:string|null;kind?:string;license:string;author:string}};
+export type StudioAsset={name:string;purpose:string;original_name:string;bytes:number;width?:number;height?:number;orientation?:string;linked_product?:string;source?:{url?:string|null;kind?:string;license:string;author:string}};
 export type ImageProvider={id:string;models:string[]};
 
 export function StudioAssetImage({projectId,asset}:{projectId:string;asset:StudioAsset}){

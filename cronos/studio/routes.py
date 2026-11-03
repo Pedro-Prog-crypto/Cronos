@@ -80,6 +80,10 @@ class Asset(Strict):
     data_base64: str = Field(min_length=4, max_length=MAX_BASE64_CHARS)
 
 
+class AssetLink(Strict):
+    product: str = Field(default='', max_length=40)
+
+
 class FileEdit(Strict):
     files: dict[str, str]
     base_revision: int = Field(ge=0)
@@ -346,6 +350,29 @@ def install_studio(app, authenticate):
     async def upload(identifier: str, body: Asset):
         item = mutable(identifier)
         try: return await service().add_asset(item, base64.b64decode(body.data_base64, validate=True), body.purpose, body.name)
+        except ValueError as exc: raise HTTPException(422, str(exc)) from None
+
+    @app.post('/studio/projects/{identifier}/assets/{name}/link', dependencies=auth)
+    async def link_pizza_asset(identifier: str, name: str, body: AssetLink):
+        from .pizza import PIZZAS, is_pizzeria
+        item = mutable(identifier)
+        if not is_pizzeria(item): raise HTTPException(409, 'Associe produtos apenas em projetos de pizzaria.')
+        if body.product not in {'', 'hero', *(pizza[0] for pizza in PIZZAS)}:
+            raise HTTPException(422, 'Produto desconhecido.')
+        asset = next((a for a in item['assets'] if a['name'] == name and a['purpose'] == 'image'), None)
+        if not asset: raise HTTPException(404, 'Fotografia não encontrada neste projeto.')
+        for other in item['assets']:
+            if other is not asset and other.get('linked_product') == body.product and body.product:
+                other.pop('linked_product', None)
+        if body.product: asset['linked_product'] = body.product
+        else: asset.pop('linked_product', None)
+        service().store.event(item, 'asset-link', 'Fotografia associada a ' + (body.product or 'nenhum produto') + '. Gere outra versão da pizzaria para aplicar a associação.')
+        return service().detail(identifier)
+
+    @app.post('/studio/projects/{identifier}/pizza/build', dependencies=auth)
+    async def build_pizzeria(identifier: str, body: Revision):
+        item = mutable(identifier)
+        try: return service().build_pizzeria(item, body.revision)
         except ValueError as exc: raise HTTPException(422, str(exc)) from None
 
     @app.post('/studio/projects/{identifier}/assets/{name}/remove', dependencies=auth)

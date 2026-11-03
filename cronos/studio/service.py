@@ -2,6 +2,7 @@ from cronos.upload_limits import MAX_UPLOAD_BYTES,MAX_IMAGE_PIXELS
 import asyncio
 import base64
 import io
+import hashlib
 import json
 import re
 import secrets
@@ -62,6 +63,12 @@ template_reference contém a referência completa enviada pelo senhor: siga seus
 As imagens sample_images dessa referência são autorizadas como demonstração, mas os direitos e os dados precisam ser conferidos.
 Imagens próprias e composição CSS/SVG são preferíveis a elementos sem função. Não diga que testou: o estúdio verifica depois.
 Se current_files estiver vazio, comece uma composição nova: não reproduza o exemplo do catálogo.
+Se current_files contiver uma versão salva, edite somente o que foi pedido e preserve as outras seções,
+as imagens vinculadas, o cardápio, os preços por tamanho e as funções do pedido.
+Em pizzarias, use linked_product para associar cada imagem ao sabor correto; não substitua fotos
+enviadas por imagens de terceiros ou geradas sem pedido explícito. O runtime studio-runtime.js
+já liga data-studio-collection, data-studio-cart, data-cart-add, data-cart-size e data-cart-whatsapp.
+Preserve esses atributos quando modificar o layout ou o texto do cardápio.
 Siga approved_direction quando presente. Use a proposta como critério para composição, ritmo e conteúdo.
 Quando design_policy.unique_creation for verdadeiro, planeje a disposição a partir de approved_direction.
 Compare recent_designs: mudar só cores, letras ou imagens de um trabalho anterior não atende.
@@ -289,7 +296,9 @@ class Studio:
             recent = recent_projects(self.store, project['id'])
             providers = self.provider_pool(project)
             origin = current['report'].get('origin', 'starter' if project['revision'] == 0 else 'saved')
-            unique_creation = body.mode == 'autonomous' and origin in {'starter','template'} and body.plan_first
+            from .pizza import is_pizzeria
+            unique_creation = (body.mode == 'autonomous' and origin in {'starter','template'} and body.plan_first
+                               and not (project['revision'] > 0 and is_pizzeria(project)))
             if unique_creation and not selected_direction(project):
                 plans = await self.prepare_plans(project, body, providers, recent)
                 chosen, comparison = choose_plan(plans, recent)
@@ -532,8 +541,12 @@ class Studio:
         if latest['revision'] != expected_revision or (latest['status'] == 'running' and not job):
             raise ValueError('O projeto mudou durante o envio. Reabra-o antes de adicionar o recurso.')
         if not job: project = latest
-        if len(project['assets']) >= 12:
-            raise ValueError('Até 12 recursos por projeto. Remova um recurso sem uso para adicionar outro.')
+        checksum = hashlib.sha256(raw).hexdigest()
+        duplicate = next((a for a in project['assets'] if a.get('sha256') == checksum and a['purpose'] == purpose), None)
+        if duplicate:
+            return self.detail(project['id'])
+        if len(project['assets']) >= 32:
+            raise ValueError('Até 32 recursos por projeto. Remova um recurso sem uso para adicionar outro.')
         if purpose == 'model' and any(a['purpose'] == 'model' for a in project['assets']):
             raise ValueError('Já há um GLB neste projeto. Remova-o se não estiver em uma versão salva, ou crie outro projeto para preservar o histórico.')
         name = uuid4().hex + '.' + ext
@@ -542,8 +555,28 @@ class Studio:
         if purpose != 'model':
             with Image.open(io.BytesIO(raw)) as img:
                 dimensions = {'width': img.width, 'height': img.height, 'orientation': 'horizontal' if img.width > img.height else 'vertical' if img.width < img.height else 'square'}
-        project['assets'].append({'name': name, 'purpose': purpose, 'mime': mime, 'original_name': original_name[:120], 'bytes': len(raw), 'source': source, **dimensions})
+        project['assets'].append({'name': name, 'purpose': purpose, 'mime': mime, 'original_name': original_name[:120], 'bytes': len(raw),
+                                  'sha256': checksum, 'source': source or {'kind': 'uploaded', 'author': 'Enviada pelo usuário', 'license': 'Direitos de uso pendentes de confirmação'}, **dimensions})
         self.store.save(project)
+        return self.detail(project['id'])
+
+    def build_pizzeria(self, project, base_revision):
+        from .pizza import build_pizzeria
+        if project['revision'] != base_revision:
+            raise ValueError('A versão mudou. Reabra o projeto antes de criar a pizzaria.')
+        files, report = build_pizzeria(project)
+        contract = engineering_plan(project, 'Cardápio com 12 pizzas de demonstração, busca, filtro, ordenação, carrinho e pedido por WhatsApp.')
+        contract['forms'] = []
+        contract['minimum_items'] = 12
+        report['engineering_plan'] = contract
+        report['requirements'] = engineering_review(files, contract)
+        if any(item['status'] == 'failed' for item in report['requirements']):
+            raise ValueError('O cardápio não passou nas verificações de funcionalidade.')
+        report['origin'] = 'template'
+        report['limitations'].append('Conteúdo e preços de demonstração; fotos e número de WhatsApp dependem dos dados do cliente. Inspecione a prévia no navegador antes de entregar.')
+        project.update(status='ready', error=None)
+        self.store.commit(project, files, 'Pizzaria editorial funcional: cardápio, tamanhos, carrinho, fotos enviadas e pedido configurável. Dados ilustrativos exigem confirmação.', report)
+        self.store.event(project, 'pizza', 'Pizzaria salva em nova versão. Abra a prévia, teste o fluxo e revise os dados antes de exportar.')
         return self.detail(project['id'])
 
     def preview(self, project):
@@ -604,6 +637,7 @@ class Studio:
         current = self.store.revision(project)
         procedural = procedural_kind(current['files']['index.html'])
         used_assets = self.used_assets(project, current['files'])
+        export_assets = [a for a in project['assets'] if a['purpose'] in {'image', 'model'} and ((a.get('source') or {}).get('kind') != 'demo' or a in used_assets)]
         output = io.BytesIO()
         with zipfile.ZipFile(output, 'w', compression=zipfile.ZIP_DEFLATED) as package:
             for name, content in current['files'].items():
@@ -615,8 +649,12 @@ class Studio:
             if procedural:
                 package.writestr('site/procedural-3d.js', libraries() + '\n' + scene_code(procedural))
                 package.writestr('LICENCAS-3D.txt', '\n\n'.join((THREED_ROOT/'vendor'/name).read_text() for name in ('three-LICENSE.txt','gsap-README.txt')))
-            for asset in used_assets:
+            for asset in export_assets:
                 package.write(self.store.asset_path(project, asset['name']), 'site/assets/' + asset['name'])
+            package.writestr('site/asset-manifest.json', json.dumps([
+                {k: asset.get(k) for k in ('name', 'original_name', 'purpose', 'mime', 'bytes', 'sha256', 'width', 'height', 'orientation', 'linked_product', 'source')}
+                | {'used_in_page': asset in used_assets} for asset in export_assets
+            ], ensure_ascii=False, indent=2))
             model = next((a for a in used_assets if a['purpose'] == 'model'), None)
             if model and Path(__file__).with_name('product-3d.js').exists():
                 bundle = Path(__file__).with_name('product-3d.js').read_text(encoding='utf-8')
@@ -624,7 +662,7 @@ class Studio:
             package.writestr('server.py', Path(__file__).with_name('runtime.py').read_bytes())
             package.writestr('ABRIR-SITE.bat', '@echo off\r\ncd /d "%~dp0"\r\npython server.py\r\npause\r\n')
             package.writestr('VERIFICACOES.json', json.dumps({**current['report'], 'backend_latest': project.get('checks', {}).get('backend'), 'browser_observations': project.get('browser_reports', [])}, ensure_ascii=False, indent=2))
-            package.writestr('PROJETO.json', json.dumps({k: project[k] for k in ('name', 'category', 'revision')} | {'assets': [{k: v for k, v in a.items() if k != 'analysis'} for a in used_assets]}, ensure_ascii=False, indent=2))
+            package.writestr('PROJETO.json', json.dumps({k: project[k] for k in ('name', 'category', 'revision')} | {'assets': [{k: v for k, v in a.items() if k != 'analysis'} for a in export_assets]}, ensure_ascii=False, indent=2))
             package.writestr('LEIA-ANTES-DE-PUBLICAR.txt', EXPORT_README)
         return output.getvalue()
 

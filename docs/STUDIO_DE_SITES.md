@@ -2,6 +2,14 @@
 
 Abra pelo botão **ESTÚDIO DE SITES** ou diga **“Cronos, abrir estúdio de sites”**. **“Cronos, faça um site para…”** abre o briefing com o pedido preenchido. O Cronos passa a tratar o usuário como **senhor** por uma instrução adicional; o arquivo de personalidade existente não é sobrescrito.
 
+## Pizzaria funcional — Fase 1 do Studio Pro
+
+Crie um projeto na categoria **Restaurantes** com “pizzaria” ou “pizza” no nome ou briefing. Salve o rascunho primeiro, abra **Imagens e 3D**, envie as fotos autorizadas dos produtos e associe cada foto ao sabor pelo seletor **Usar fotografia em**. O envio aceita várias fotos por vez; o servidor normaliza as imagens, remove metadados e evita cópias idênticas. A associação não altera a versão publicada: clique em **MONTAR PIZZARIA FUNCIONAL** para criar uma nova versão que use essas fotos. Fotos sem associação também aparecem na galeria e acompanham a exportação.
+
+Essa versão local contém 12 pizzas de demonstração, filtros, busca, ordenação, seleção de tamanho, carrinho com quantidades e observações, e link de pedido pelo WhatsApp **somente quando um número foi informado nos dados comerciais**. Sabores, ingredientes e preços ilustrativos estão identificados na página; substitua-os pelos dados do cliente antes de publicar. Fotos ausentes aparecem como espaços identificados, sem imagens inventadas. No campo **Pedir ao Cronos**, descreva a mudança desejada para que a integração de IA configurada gere outra versão dos três arquivos. A revisão conserva a versão anterior no histórico; refazer a pizzaria pelo botão de modelo cria outra versão a partir do modelo e pode substituir edições recentes.
+
+Abra **Prévia** para testar o site no navegador. **Exportar** entrega os arquivos editáveis, todas as fotografias de produto enviadas ao projeto, o manifesto de assets, o runtime do carrinho e um servidor local. Referências visuais não são publicadas. O arquivo ZIP do site pode ser aberto por `ABRIR-SITE.bat` no Windows. As fotos, o contato e a qualidade de um provedor de IA externo dependem dos dados e integrações reais do usuário. A verificação executada nesta fase está em `STUDIO_PRO_FASE1.md`.
+
 ## Início e oportunidades
 
 O Estúdio abre em **Início**, com atalhos para **Criar um site com IA**, **Explorar negócios** e os projetos recentes. **Modelos prontos** mostra novas composições locais por categoria, com miniaturas renderizadas das páginas reais e sem chamadas de IA. Os materiais antigos continuam na opção **Arquivos originais recebidos · legado**. Não confunda o exemplo inicial com uma versão personalizada salva.
