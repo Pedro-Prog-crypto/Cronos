@@ -19,6 +19,7 @@ _LOCK = threading.RLock()
 # generation budget to finish a detailed answer. Five seconds is a UI target,
 # not a deadline that truncates an active explanation.
 FIRST_REPLY_TIMEOUT_SECONDS = 8
+FIRST_OUTPUT_TIMEOUT_SECONDS = 30
 FALLBACK_ATTEMPT_TIMEOUT_SECONDS = 45
 FALLBACK_TOTAL_TIMEOUT_SECONDS = 300
 
@@ -185,25 +186,30 @@ class ResilientProvider:
 
         async def receive(provider, provider_id, timeout):
             route_task = asyncio.current_task()
-            async def publish(value, sink):
-                nonlocal winner
-                # wait_for creates a child task on Python 3.11, but not on
-                # 3.12+. Identify the route, never the SDK's current child.
-                task = route_task
-                if winner is None:
-                    winner = task
-                    for other in tasks:
-                        if other is not task and not other.done(): other.cancel()
-                    progress.set()
-                if winner is task and sink is not None: await sink(value)
-            async def on_reply(value): await publish(value, original_reply)
-            async def on_intro(value): await publish(value, original_intro)
-            a = reply_sink.set(on_reply); b = intro_sink.set(on_intro)
-            try:
-                mark('answer_route_requested', provider=provider_id)
-                return await asyncio.wait_for(provider.reply(system, messages), timeout)
-            finally:
-                reply_sink.reset(a); intro_sink.reset(b)
+            async with asyncio.timeout(min(timeout, FIRST_OUTPUT_TIMEOUT_SECONDS)) as first_output:
+                published = False
+                async def publish(value, sink):
+                    nonlocal winner, published
+                    # Only silence has the short deadline. Once the model starts
+                    # a real answer, allow its configured generation budget.
+                    if not published:
+                        published = True
+                        first_output.reschedule(loop.time() + timeout)
+                    task = route_task
+                    if winner is None:
+                        winner = task
+                        for other in tasks:
+                            if other is not task and not other.done(): other.cancel()
+                        progress.set()
+                    if winner is task and sink is not None: await sink(value)
+                async def on_reply(value): await publish(value, original_reply)
+                async def on_intro(value): await publish(value, original_intro)
+                a = reply_sink.set(on_reply); b = intro_sink.set(on_intro)
+                try:
+                    mark('answer_route_requested', provider=provider_id)
+                    return await provider.reply(system, messages)
+                finally:
+                    reply_sink.reset(a); intro_sink.reset(b)
 
         def start(provider, provider_id, timeout):
             task = asyncio.create_task(receive(provider, provider_id, timeout))

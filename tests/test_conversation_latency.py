@@ -127,6 +127,27 @@ def test_in_progress_answer_survives_first_reply_deadline(settings,monkeypatch):
     assert asyncio.run(run())['reply'].endswith('até o fim.')
 
 
+def test_silent_provider_expires_before_the_conversation_recovery_deadline(settings, monkeypatch):
+    monkeypatch.setattr(evolution, 'FIRST_REPLY_TIMEOUT_SECONDS', .01)
+    monkeypatch.setattr(evolution, 'FIRST_OUTPUT_TIMEOUT_SECONDS', .03)
+    monkeypatch.setattr(evolution, 'read', lambda _settings: {'routing': {'enabled': False, 'fallbacks': []}})
+    class Silent:
+        async def reply(self, *_args):
+            await asyncio.sleep(10)
+    with pytest.raises(ProviderError, match='demorou demais'):
+        asyncio.run(evolution.ResilientProvider(replace(settings, provider_timeout=180), Silent()).reply('', []))
+
+
+def test_started_answer_keeps_its_generation_budget(settings, monkeypatch):
+    monkeypatch.setattr(evolution, 'FIRST_OUTPUT_TIMEOUT_SECONDS', .02)
+    class Streaming:
+        async def reply(self, *_args):
+            await deliver_intro('A explicação começou. ')
+            await asyncio.sleep(.06)
+            return {'reply': 'A explicação começou. E terminou.', 'topics': [], 'tool_calls': []}
+    assert asyncio.run(evolution.ResilientProvider(replace(settings, provider_timeout=.2), Streaming()).reply('', []))['reply'].endswith('terminou.')
+
+
 @pytest.mark.parametrize(('text','expected'),[
     ('E aí, Kronos, de boa? Como é que você tá, mano?',True),
     ('Bom dia, Cronos!',True),
@@ -169,6 +190,32 @@ def test_background_memory_scan_does_not_lock_a_greeting(settings,monkeypatch):
             assert json.loads(result.text.splitlines()[-1])['type']=='result'
             assert not release.is_set()
         finally:release.set();thread.join(5)
+
+
+def test_presence_answer_is_not_blocked_by_another_silent_turn(settings, monkeypatch):
+    started, release = threading.Event(), threading.Event()
+    class Provider:
+        async def reply(self, _system, messages):
+            if messages[-1]['content'] == 'Pergunta longa':
+                started.set()
+                await asyncio.to_thread(release.wait, 8)
+            return {'reply': 'Resposta normal.', 'topics': [], 'tool_calls': []}
+    monkeypatch.setattr(transport, 'conversation_provider', lambda _settings: Provider())
+    with TestClient(create_app(settings)) as client:
+        thread = threading.Thread(target=lambda:client.post('/chat/stream', headers=AUTH,
+                                  json={'message':'Pergunta longa'}))
+        thread.start()
+        try:
+            assert started.wait(2)
+            response = client.post('/chat/stream', headers=AUTH,
+                                   json={'message':'Cronos, você está me escutando?'})
+            result = json.loads(response.text.splitlines()[-1])
+            assert result['type'] == 'result'
+            assert 'na escuta' in result['result']['reply'].lower()
+            assert not release.is_set()
+        finally:
+            release.set()
+            thread.join(3)
 
 
 def test_indexing_uses_short_transactions_and_cached_recall(settings,monkeypatch):

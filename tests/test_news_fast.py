@@ -1,4 +1,6 @@
 import asyncio
+import json
+import threading
 from dataclasses import replace
 from types import SimpleNamespace
 from uuid import uuid4
@@ -9,6 +11,7 @@ from cronos.app import create_app
 from cronos import engine as engine_module
 from cronos.news import current_news_query
 from cronos.tools import Tool,Query
+from cronos.reply_stream import deliver_intro
 from test_backend import settings,AUTH
 
 
@@ -123,3 +126,77 @@ def test_news_does_not_repeat_search_with_different_arguments(settings):
         r=client.post('/chat',headers=AUTH,json={'message':'Notícias do dia'})
         assert r.status_code==200 and len(searches)==1
         assert r.json()['tool_results'][1]['status']=='failed'
+
+
+def test_silent_news_model_returns_only_sourced_search_results(settings, monkeypatch):
+    monkeypatch.setattr(engine_module, 'NEWS_MODEL_TIMEOUT_SECONDS', .03)
+    class Silent:
+        async def reply(self, *_args):
+            await asyncio.sleep(10)
+    with TestClient(create_app(settings, Silent())) as client:
+        client.app.state.registry.tools['web_news'] = Tool('web_news', 'Noticias', Query,
+            lambda args: {'articles': [{'title': 'Resultado confirmado',
+                                        'url': 'https://example.org/noticia',
+                                        'source': 'Fonte pública', 'published': 'Hoje'}]})
+        response = client.post('/chat/stream', headers=AUTH, json={'message': 'Quais são as notícias do dia?'})
+        events = [json.loads(line) for line in response.text.splitlines()]
+        assert events[-1]['type'] == 'result'
+        assert 'Resultado confirmado' in events[-1]['result']['reply']
+        assert 'https://example.org/noticia' in events[-1]['result']['reply']
+        assert 'Não consegui iniciar a resposta' not in response.text
+
+
+def test_silent_news_model_with_failed_search_does_not_invent_headlines(settings, monkeypatch):
+    monkeypatch.setattr(engine_module, 'NEWS_MODEL_TIMEOUT_SECONDS', .03)
+    class Silent:
+        async def reply(self, *_args):
+            await asyncio.sleep(10)
+    with TestClient(create_app(settings, Silent())) as client:
+        client.app.state.registry.tools['web_news'] = Tool('web_news', 'Noticias', Query,
+            lambda args: (_ for _ in ()).throw(ValueError('Busca indisponível')))
+        response = client.post('/chat/stream', headers=AUTH, json={'message': 'Notícias de hoje'})
+        event = json.loads(response.text.splitlines()[-1])
+        assert event['type'] == 'result'
+        assert 'não vou inventar manchetes' in event['result']['reply']
+        assert event['result']['tool_results'][0]['status'] == 'failed'
+
+
+def test_news_is_not_queued_behind_an_unrelated_silent_question(settings):
+    started, release = threading.Event(), threading.Event()
+    class Provider:
+        async def reply(self, _system, messages):
+            if messages[-1]['content'] == 'Pergunta presa':
+                started.set()
+                await asyncio.to_thread(release.wait, 8)
+            return {'reply': 'Notícias verificadas.', 'topics': [], 'tool_calls': []}
+    with TestClient(create_app(settings, Provider())) as client:
+        client.app.state.registry.tools['web_news'] = Tool('web_news', 'Noticias', Query,
+            lambda args: {'articles': [{'title': 'Notícia', 'url': 'https://example.org/noticia'}]})
+        thread = threading.Thread(target=lambda: client.post('/chat/stream', headers=AUTH,
+                                  json={'message': 'Pergunta presa'}))
+        thread.start()
+        try:
+            assert started.wait(2)
+            response = client.post('/chat/stream', headers=AUTH,
+                                   json={'message': 'Quais são as notícias do dia?'})
+            assert json.loads(response.text.splitlines()[-1])['result']['reply'] == 'Notícias verificadas.'
+            assert not release.is_set()
+        finally:
+            release.set()
+            thread.join(3)
+
+
+def test_news_timeout_never_speaks_a_discarded_model_draft(settings, monkeypatch):
+    monkeypatch.setattr(engine_module, 'NEWS_MODEL_TIMEOUT_SECONDS', .03)
+    class Partial:
+        async def reply(self, *_args):
+            await deliver_intro('Rascunho ainda não verificado. ')
+            await asyncio.sleep(10)
+    with TestClient(create_app(settings, Partial())) as client:
+        client.app.state.registry.tools['web_news'] = Tool('web_news', 'Noticias', Query,
+            lambda args: {'articles': [{'title': 'Fonte conferível', 'url': 'https://example.org/news'}]})
+        events = [json.loads(line) for line in client.post('/chat/stream', headers=AUTH,
+                  json={'message': 'Notícias do dia'}).text.splitlines()]
+    assert [event['type'] for event in events] == ['reply', 'result']
+    assert 'Fonte conferível' in events[0]['reply']
+    assert 'Rascunho' not in str(events)

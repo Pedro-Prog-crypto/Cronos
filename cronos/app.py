@@ -93,6 +93,18 @@ def first_reply_deadline(message: str) -> int:
     return CONVERSATION_FIRST_REPLY_TIMEOUT_SECONDS
 
 
+def conversation_lock(request, message: str, audio=None):
+    """Keep lightweight checks and news outside a stalled general turn."""
+    if audio is None:
+        from cronos.memory_policy import presence_only
+        from cronos.news import current_news_query
+        if presence_only(message):
+            return request.app.state.presence_lock
+        if current_news_query(message):
+            return request.app.state.news_lock
+    return request.app.state.lock
+
+
 async def voice_deadline(operation, seconds):
     try:
         async with asyncio.timeout(seconds):
@@ -146,6 +158,8 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         app.state.delivery=delivery.DeliveryLog()
         app.state.memory = Memory(settings.vault)
         app.state.lock = asyncio.Lock()
+        app.state.presence_lock = asyncio.Lock()
+        app.state.news_lock = asyncio.Lock()
         app.state.monitor = Monitor(settings, app.state.memory)
         app.state.windows = WindowsSystem(windows_runner, app.state.monitor, windows_platform, settings.privacy_mode)
         app.state.missions = Missions(app.state.memory)
@@ -359,7 +373,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
             raise HTTPException(422, "A mensagem não pode ser vazia.")
         session = body.session_id or uuid4()
         # Uma instância/worker: protege ordem das conversas e arquivos compartilhados.
-        async with request.app.state.lock:
+        async with conversation_lock(request, body.message):
             try:
                 result = await chat_until_disconnect(request.app.state.engine,session,body.message,request,screen_context=body.screen_context,page_context=body.page_context,visual_context=body.visual_context)
             except TurnError as exc:
@@ -407,7 +421,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                     try:
                         async with asyncio.timeout(first_reply_deadline(message)) as deadline:
                             first_response_deadline=deadline
-                            async with request.app.state.lock:
+                            async with conversation_lock(request, message, audio):
                                 try:
                                     try:
                                         options={'audio':audio,**({'wake_confirmed':True} if wake_confirmed else {})} if audio is not None else {}
