@@ -34,7 +34,7 @@ def test_loopback_host_client_origin_and_auth(settings):
 
 def test_request_size_before_json_parser(settings):
     with TestClient(create_app(settings)) as client:
-        response = client.post('/chat', content=b'x'*(256*1024+1), headers={'authorization':'Bearer test-token'})
+        response = client.post('/chat', content=b'x'*(1024*1024+1), headers={'authorization':'Bearer test-token'})
         assert response.status_code == 413
 
 
@@ -42,8 +42,8 @@ def test_chunked_size_guard(settings):
     reached = []
     async def app(scope, receive, send):
         reached.append(True)
-    events = iter([{'type':'http.request', 'body':b'x'*200000, 'more_body':True},
-                   {'type':'http.request', 'body':b'x'*100000, 'more_body':False}])
+    events = iter([{'type':'http.request', 'body':b'x'*600000, 'more_body':True},
+                   {'type':'http.request', 'body':b'x'*500000, 'more_body':False}])
     sent = []
     async def receive():
         return next(events)

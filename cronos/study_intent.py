@@ -10,6 +10,17 @@ def normalize(text: str) -> str:
     return "".join(char for char in value if not unicodedata.combining(char))
 
 
+def asks_visual_capability(text: str) -> bool:
+    """An operational question about Cronos's own mural has a local answer."""
+    value = normalize(text)
+    return bool(re.search(
+        r"\b(?:voce|cronos|kronos|chronos)\b.{0,70}"
+        r"\b(?:consegue|pode|sabe|tem capacidade de)\b.{0,100}"
+        r"\b(?:mostrar|exibir|buscar|pesquisar|procurar)\b.{0,45}"
+        r"\b(?:imagens?|fotos?|fotografias)\b", value,
+    ))
+
+
 def is_study_request(text: str) -> bool:
     value = normalize(text)
     explicit = re.search(

@@ -100,6 +100,41 @@ def test_explanation_responds_with_gemini_route_when_ollama_is_offline(tmp_path,
     assert used==['gemini']
 
 
+def test_detailed_explanation_skips_council_and_keeps_large_output_budget(tmp_path, monkeypatch):
+    settings=setup(tmp_path,monkeypatch)
+    personality=tmp_path/'personality.md';personality.write_text('Responda com clareza.',encoding='utf-8')
+    settings=replace(settings,personality=personality,providers_file=tmp_path/'missing.json')
+    used=[]
+    class Reply:
+        async def reply(self,system,messages):
+            assert 'CONSELHO DE IAs' not in system
+            assert 'PROFUNDIDADE PADRÃO' in system
+            return {'reply':'Explicação completa.','topics':[],'tool_calls':[]}
+    def provider(route):
+        used.append((route.provider,route.output_tokens))
+        return Reply()
+    monkeypatch.setattr('cronos.conversation_transport.conversation_provider',provider)
+    monkeypatch.setattr(evolution,'explanation_providers',lambda current:['gemini','mistral'])
+    with TestClient(create_app(settings)) as client:
+        response=client.post('/chat/stream',headers={'Authorization':'Bearer test'},json={'message':'Explique a Primeira Guerra Mundial em detalhes.'})
+    assert response.status_code==200
+    assert 'Explicação completa.' in response.text
+    assert used==[('gemini',3600)]
+
+
+def test_visual_capability_question_uses_real_local_mural_contract(tmp_path, monkeypatch):
+    settings=setup(tmp_path,monkeypatch)
+    personality=tmp_path/'personality.md';personality.write_text('Responda com clareza.',encoding='utf-8')
+    settings=replace(settings,personality=personality)
+    def unexpected(_route):
+        raise AssertionError('A capacidade local não depende de um palpite do modelo')
+    monkeypatch.setattr('cronos.conversation_transport.conversation_provider',unexpected)
+    with TestClient(create_app(settings)) as client:
+        response=client.post('/chat/stream',headers={'Authorization':'Bearer test'},json={'message':'Cronos, você consegue buscar e mostrar imagens?'})
+    assert response.status_code==200
+    assert 'Posso buscar e mostrar imagens' in response.text
+
+
 def test_offline_primary_ollama_uses_configured_gemini_for_regular_question(tmp_path, monkeypatch):
     settings=setup(tmp_path,monkeypatch)
     personality=tmp_path/'personality.md';personality.write_text('Responda com clareza.',encoding='utf-8')

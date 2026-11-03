@@ -7,7 +7,7 @@ from pypdf import PdfWriter
 
 from cronos.app import create_app
 from cronos.studies import LAYOUTS, MAX_LIBRARY_BYTES, MAX_PDF_BYTES, StudyStore, _PageText, _dedupe_study_images, _filter_philosopher_images, _filter_visual_subject, _media_search_terms, _public_http_url, _wikipedia_portraits
-from cronos.study_intent import is_study_request, is_visual_request, requests_exhaustive_lookup
+from cronos.study_intent import asks_visual_capability, is_study_request, is_visual_request, requests_exhaustive_lookup
 from test_backend import AUTH, settings
 
 
@@ -98,6 +98,8 @@ def test_study_intent_prefers_deep_explanation_and_allows_requested_complete_web
 
 
 def test_visual_explanation_intent_covers_people_processes_and_events_without_grabbing_small_talk():
+    assert asks_visual_capability('Cronos, você consegue buscar e mostrar imagens?')
+    assert not asks_visual_capability('Cronos, explique visualmente a Primeira Guerra Mundial.')
     assert is_study_request('Quem foi Sócrates?')
     assert is_study_request('Quem você considera uma das pessoas mais importantes da história?')
     assert is_study_request('Como funciona um avião a jato?')

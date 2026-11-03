@@ -12,6 +12,28 @@ from test_backend import settings,AUTH
 app_module=importlib.import_module('cronos.app')
 
 
+def test_long_question_limit_and_recovery_deadline():
+    from cronos.app import ChatInput, first_reply_deadline
+    question='Explique a história deste assunto. '+('detalhe ' * 12000)
+    assert len(question)>16000
+    assert ChatInput(message=question).message==question
+    assert first_reply_deadline(question)>first_reply_deadline('Oi')
+
+
+def test_long_question_reaches_model_and_is_saved_without_truncation(settings):
+    question='Explique a Primeira Guerra Mundial em detalhes. '+('Inclua este detalhe. ' * 2500)
+    class Provider:
+        async def reply(self, _system, messages):
+            assert messages[-1]['content']==question
+            return {'reply':'Explicação recebida.','topics':[],'tool_calls':[]}
+    with TestClient(create_app(settings,Provider())) as client:
+        response=client.post('/chat/stream',headers=AUTH,json={'message':question})
+        result=json.loads(response.text.splitlines()[-1])['result']
+        history=client.app.state.engine.memory.history(result['session_id'],2)
+    assert result['reply']=='Explicação recebida.'
+    assert history[0]['content']==question
+
+
 def test_silent_conversation_is_cancelled_and_next_question_can_run(settings,monkeypatch):
     monkeypatch.setattr(app_module,'CONVERSATION_FIRST_REPLY_TIMEOUT_SECONDS',.025)
     cancelled=[]

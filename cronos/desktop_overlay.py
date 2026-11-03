@@ -19,6 +19,9 @@ class Overlay:
         dot=tk.Toplevel(root);dot.overrideredirect(True);dot.attributes('-topmost',True)
         width,height=root.winfo_screenwidth(),root.winfo_screenheight()
         dot.geometry(f'26x26+{width-40}+{height-80}')
+        # Keep the listener's Tk event loop and optional cards, but do not
+        # leave a floating status square over other applications.
+        dot.withdraw()
         canvas=tk.Canvas(dot,width=26,height=26,bg='#06131e',highlightthickness=0);canvas.pack()
         circle=canvas.create_oval(6,6,20,20,fill='#f8bf6c',outline='#baf8ff')
         label=tk.StringVar(value='Cronos · iniciando microfone')

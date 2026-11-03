@@ -46,7 +46,7 @@ class VisualContext(BaseModel):
 
 
 class ChatInput(BaseModel):
-    message: str = Field(min_length=1, max_length=16000)
+    message: str = Field(min_length=1, max_length=200000)
     session_id: UUID | None = None
     heard_context: str | None = Field(default=None, max_length=10000)
     screen_context: bool = True
@@ -83,6 +83,16 @@ ASR_HEDGE_SECONDS = 2
 CONVERSATION_FIRST_REPLY_TIMEOUT_SECONDS = 120
 
 
+def first_reply_deadline(message: str) -> int:
+    """Allow large inputs/model explanations time to start without limiting playback."""
+    from cronos.study_intent import is_study_request
+    if len(message) > 30000:
+        return CONVERSATION_FIRST_REPLY_TIMEOUT_SECONDS * 2.5
+    if len(message) > 6000 or is_study_request(message):
+        return CONVERSATION_FIRST_REPLY_TIMEOUT_SECONDS * 1.5
+    return CONVERSATION_FIRST_REPLY_TIMEOUT_SECONDS
+
+
 async def voice_deadline(operation, seconds):
     try:
         async with asyncio.timeout(seconds):
@@ -104,7 +114,7 @@ async def chat_until_disconnect(engine,session,message,request,screen_context=Tr
             await asyncio.sleep(.1)
     watcher=asyncio.create_task(watch())
     try:
-        done,_=await asyncio.wait({task,watcher},return_when=asyncio.FIRST_COMPLETED,timeout=CONVERSATION_FIRST_REPLY_TIMEOUT_SECONDS)
+        done,_=await asyncio.wait({task,watcher},return_when=asyncio.FIRST_COMPLETED,timeout=first_reply_deadline(message))
         if not done:raise HTTPException(504,'A conversa não concluiu dentro do prazo de recuperação. Sua pergunta permanece disponível para tentar novamente.')
         if task in done:return await task
         task.cancel()
@@ -395,7 +405,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                     nonlocal first_response_deadline
                     token=reply_sink.set(ready);intro_token=intro_sink.set(intro);transcript_token=transcript_sink.set(transcript)
                     try:
-                        async with asyncio.timeout(CONVERSATION_FIRST_REPLY_TIMEOUT_SECONDS) as deadline:
+                        async with asyncio.timeout(first_reply_deadline(message)) as deadline:
                             first_response_deadline=deadline
                             async with request.app.state.lock:
                                 try:
