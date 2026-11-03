@@ -207,6 +207,27 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
     if ui.is_dir():
         app.mount("/ui", StaticFiles(directory=ui), name="ui")
 
+    @app.get("/capture.worklet.js", include_in_schema=False)
+    async def capture_worklet():
+        # A stable, uncached URL prevents an open UI from pointing at a removed
+        # hashed worklet after an in-place update. The manifest names this build.
+        import json
+        manifest = Path(__file__).resolve().parents[1] / 'tools/interface_update_manifest.json'
+        selected = None
+        try:
+            files = json.loads(manifest.read_text(encoding='utf-8'))['files']
+            names = [name for name in files if name.startswith('cronos/ui/assets/capture.worklet-') and name.endswith('.js')]
+            if len(names) == 1:
+                selected = ui / 'assets' / Path(names[0]).name
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+        if selected is None or not selected.is_file():
+            candidates = list((ui / 'assets').glob('capture.worklet-*.js'))
+            selected = max(candidates, key=lambda path: path.stat().st_mtime) if candidates else None
+        if selected is None or not selected.is_file():
+            raise HTTPException(503, 'O módulo de captura não está instalado. A gravação alternativa permanece disponível.')
+        return FileResponse(selected, media_type='text/javascript', headers={'Cache-Control':'no-store'})
+
     @app.get("/", include_in_schema=False)
     async def interface():
         return FileResponse(ui / "index.html" if (ui / "index.html").is_file() else static / "index.html", headers={"Cache-Control": "no-store"})

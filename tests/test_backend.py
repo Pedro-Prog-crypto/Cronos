@@ -35,6 +35,10 @@ def test_interface_and_assets(settings):
         assert 'id="chat-form"' in client.get('/tests').text
         assert client.get("/static/app.js").status_code == 200
         assert client.get("/static/styles.css").status_code == 200
+        worklet = client.get('/capture.worklet.js')
+        assert worklet.status_code == 200
+        assert worklet.headers['cache-control'] == 'no-store'
+        assert 'registerProcessor' in worklet.text
         # Interface pública não concede acesso ao histórico.
         assert client.get(f"/conversations/{uuid4()}").status_code == 401
 
