@@ -219,7 +219,12 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
   const audioLevelSource=useRef(0),enabled=useRef(false),opening=useRef(false),processing=useRef(false),mounted=useRef(true);
   const latest=useRef({onTranscript,onError,local,blocked,preferences,onAudio,interrupt,onRecognitionStart,onPartial,collecting});latest.current={onTranscript,onError,local,blocked,preferences,onAudio,interrupt,onRecognitionStart,onPartial,collecting};
   const preview=useRef<ReturnType<typeof createLiveSpeechPreview>>(null);
-  const beginPreview=()=>{preview.current?.abort();latest.current.onPartial?.('');preview.current=createLiveSpeechPreview(text=>latest.current.onPartial?.(text));};
+  const previewVersion=useRef(0),activePartial=useRef(''),pendingPartials=useRef<string[]>([]);
+  const showPartial=()=>latest.current.onPartial?.([...pendingPartials.current,activePartial.current].filter(Boolean).join(' ').trim());
+  const beginPreview=()=>{
+    preview.current?.abort();const version=++previewVersion.current;activePartial.current='';showPartial();
+    preview.current=createLiveSpeechPreview(text=>{if(version!==previewVersion.current)return;activePartial.current=text;showPartial();});
+  };
   const keywordSocket=useRef<WebSocket|null>(null),keywordReady=useRef(false),keywordError=useRef(false);
   const [wakeOpen,setWakeOpen]=useState(false),wakeUntil=useRef(0),turnWake=useRef(false);
   const captureVersion=useRef(0),resumeAfter=useRef(0);
@@ -246,9 +251,8 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
         setTranscribing(false);
         await submission;return;
       }
-      if(latest.current.collecting)preview.current?.abort();
       const previewText=latest.current.collecting?null:await preview.current?.finish(durationSeconds);
-      preview.current=null;
+      if(!latest.current.collecting)preview.current=null;
       if(previewText){
         acknowledge();
         latest.current.onTranscript(previewText,{recognition_ms:Math.round(performance.now()-recognitionStarted),endpoint_ms,wake_confirmed});
@@ -260,9 +264,11 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
       if(version!==captureVersion.current||abort.signal.aborted||!mounted.current)return;
       if(typeof result.text!=='string'||!result.text.trim())throw new Error('Não consegui entender a gravação. Use Reenviar gravação para tentar sem repetir sua fala.');
       acknowledge();
+      if(latest.current.collecting){pendingPartials.current.shift();showPartial();}
       latest.current.onTranscript(result.text,{recognition_ms:Math.round(performance.now()-recognitionStarted),endpoint_ms,wake_confirmed});
     }catch(error){
       if(version===captureVersion.current&&!abort.signal.aborted&&mounted.current){
+        if(latest.current.collecting){pendingPartials.current.shift();showPartial();}
         setRetryAvailable(Boolean(lastRecording.current));
         latest.current.onError(error instanceof Error?error.message:'Não consegui reconhecer a gravação.');
       }
@@ -277,8 +283,13 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
     }
   },[acknowledge]);
   const deliverOrQueue=useCallback(async(audio:Blob,endpoint_ms:number,durationSeconds:number)=>{
+    if(processing.current&&latest.current.collecting&&pendingSegments.current.length>=16){latest.current.onError('O serviço de transcrição está atrasado e a fila do ditado encheu. Confira o texto antes de continuar.');return;}
+    if(latest.current.collecting){
+      const segmentPreview=preview.current;preview.current=null;previewVersion.current++;
+      pendingPartials.current.push(activePartial.current);activePartial.current='';showPartial();
+      void segmentPreview?.finish(durationSeconds);
+    }
     if(processing.current&&latest.current.collecting){
-      if(pendingSegments.current.length>=16){latest.current.onError('O serviço de transcrição está atrasado e a fila do ditado encheu. Confira o texto antes de continuar.');return;}
       pendingSegments.current.push({audio,endpoint_ms,durationSeconds});return;
     }
     await deliverRecording(audio,endpoint_ms,undefined,durationSeconds);
@@ -287,9 +298,9 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
     const saved=lastRecording.current;if(!saved||processing.current||latest.current.blocked)return;
     await deliverRecording(saved.audio,saved.endpoint_ms,saved.wake_confirmed,saved.durationSeconds);
   },[deliverRecording]);
-  const cancelCapture=useCallback(()=>{captureVersion.current++;processing.current=false;pendingSegments.current=[];turnWake.current=false;wakeUntil.current=0;resumeAfter.current=performance.now()+250;preview.current?.abort();preview.current=null;latest.current.onPartial?.('');resources.current.abort?.abort();resources.current.node?.port.postMessage({blocked:true});if(resources.current.recorder?.state==='recording')resources.current.recorder.stop();audioLevelSource.current=0;if(mounted.current){setWakeOpen(false);setCapturing(false);setTranscribing(false);setReady(false);}},[]);
+  const cancelCapture=useCallback(()=>{captureVersion.current++;processing.current=false;pendingSegments.current=[];pendingPartials.current=[];activePartial.current='';previewVersion.current++;turnWake.current=false;wakeUntil.current=0;resumeAfter.current=performance.now()+250;preview.current?.abort();preview.current=null;latest.current.onPartial?.('');resources.current.abort?.abort();resources.current.node?.port.postMessage({blocked:true});if(resources.current.recorder?.state==='recording')resources.current.recorder.stop();audioLevelSource.current=0;if(mounted.current){setWakeOpen(false);setCapturing(false);setTranscribing(false);setReady(false);}},[]);
   const stop=useCallback(()=>{
-    enabled.current=false;captureVersion.current++;processing.current=false;pendingSegments.current=[];turnWake.current=false;preview.current?.abort();preview.current=null;latest.current.onPartial?.('');resources.current.abort?.abort();
+    enabled.current=false;captureVersion.current++;processing.current=false;pendingSegments.current=[];pendingPartials.current=[];activePartial.current='';previewVersion.current++;turnWake.current=false;preview.current?.abort();preview.current=null;latest.current.onPartial?.('');resources.current.abort?.abort();
     wakeUntil.current=0;if(mounted.current)setWakeOpen(false);resources.current.vad?.dispose();resources.current.vad=undefined;
     if(resources.current.timer)clearInterval(resources.current.timer);
     const recorder=resources.current.recorder;if(recorder?.state==='recording')recorder.stop();
@@ -332,7 +343,7 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
           if(event.data.empty){latest.current.onError('Ainda não há fala gravada para enviar. Fale perto do microfone e tente novamente.');return;}
           if(event.data.keywordPre){const socket=keywordSocket.current,frames=event.data.keywordPre as Int16Array;if(keywordReady.current&&socket?.readyState===WebSocket.OPEN&&socket.bufferedAmount<12800)for(let offset=0;offset<frames.length;offset+=1600)socket.send(frames.slice(offset,offset+1600).buffer);return;}
           if(event.data.keyword){const socket=keywordSocket.current;if(keywordReady.current&&socket?.readyState===WebSocket.OPEN&&socket.bufferedAmount<12800)socket.send(event.data.keyword.buffer);return;}
-          if(typeof event.data.active==='boolean'){if(event.data.active&&!preview.current&&!latest.current.collecting&&!latest.current.blocked&&(!latest.current.interrupt?.wakeOnly||wakeUntil.current>performance.now()))beginPreview();if(mounted.current)setCapturing(event.data.active&&(!latest.current.interrupt?.wakeOnly||wakeUntil.current>performance.now()));return;}
+          if(typeof event.data.active==='boolean'){if(event.data.active&&!preview.current&&!latest.current.blocked&&(!latest.current.interrupt?.wakeOnly||wakeUntil.current>performance.now()))beginPreview();if(mounted.current)setCapturing(event.data.active&&(!latest.current.interrupt?.wakeOnly||wakeUntil.current>performance.now()));return;}
           if(!enabled.current||latest.current.blocked||(processing.current&&!latest.current.collecting))return;
           if(latest.current.interrupt?.wakeOnly&&wakeUntil.current<performance.now())return;
           const samples=event.data.samples as Int16Array,rate=event.data.rate as number,endpoint_ms=Math.max(0,Math.min(60000,Number(event.data.endpoint_ms)||0));
@@ -405,7 +416,7 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
           &&rms>.00006&&(rms>voiceReference*.18||Math.sqrt(energyVariance)>energyMean*.25);
         if(speech){voiceLevel=voiceLevel?voiceLevel*.8+rms*.2:rms;voiceReference=Math.max(voiceReference,voiceLevel);}
         speechRun=speech?speechRun+80:0;
-        if(speechRun>=160){if(!heard){if(!latest.current.collecting)beginPreview();setCapturing(!latest.current.interrupt?.wakeOnly||wakeUntil.current>now);}heard=true;lastSpeech=now;}
+        if(speechRun>=160){if(!heard){beginPreview();setCapturing(!latest.current.interrupt?.wakeOnly||wakeUntil.current>now);}heard=true;lastSpeech=now;}
         if((heard&&now-lastSpeech>750)||(now-started>(heard||!vad?58000:3000)))recorder.stop();
       },80);
     }catch(error){const cancelled=!enabled.current;stop();if(!cancelled){const name=error instanceof DOMException?error.name:'';latest.current.onError(name==='NotAllowedError'||name==='SecurityError'?'Permita o microfone para o Cronos no navegador e tente novamente.':name==='NotReadableError'?'O Windows não liberou o microfone. Feche o aplicativo que está usando o dispositivo e tente novamente.':name==='NotFoundError'?'Nenhum microfone foi encontrado. Conecte um dispositivo e tente novamente.':error instanceof Error?error.message.slice(0,220):'Não foi possível abrir o microfone.');}}
