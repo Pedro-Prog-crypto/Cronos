@@ -90,6 +90,33 @@ def parse_bundle(result):
     return normalize(files), payload['summary']
 
 
+def remove_remote_css(files, assets=()):
+    """Drop unsupported CSS fetches while preserving the rest of a generated site.
+
+    The Studio preview/export are intentionally self-contained. A model often
+    inserts a Google Fonts @import despite being told not to; that does not
+    require discarding otherwise valid HTML, JS and layout CSS.
+    """
+    css = files['styles.css']
+    imports = 0
+    def strip_import(match):
+        nonlocal imports
+        imports += 1
+        return ''
+    css = re.sub(r'@import\b[^;{}]*;', strip_import, css, flags=re.I)
+    images = 0
+    def local_url(match):
+        nonlocal images
+        value = match.group(2).strip()
+        if value.startswith('#') or (ASSET.fullmatch(value) and value[7:] in assets):
+            return match.group(0)
+        images += 1
+        return 'none'
+    css = re.sub(r'url\(\s*([\'\"]?)(.*?)\1\s*\)', local_url, css, flags=re.I | re.S)
+    if not (imports or images): return files, []
+    return {**files, 'styles.css': css}, [f'{imports} importação(ões) externa(s) e {images} URL(s) não autorizada(s) removidas do CSS; confira a prévia.']
+
+
 def validate(files, assets=(), *, run_syntax=True, required_forms=None):
     required_forms = {'contact','booking'} if required_forms is None else set(required_forms)
     if set(files) != FILES or any(not isinstance(v, str) or len(v) > 180_000 or '\0' in v for v in files.values()):

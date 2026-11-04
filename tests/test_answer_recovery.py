@@ -45,6 +45,21 @@ def test_failed_reserve_does_not_cancel_a_primary_that_will_answer(settings, mon
     assert result['reply'] == 'A principal terminou corretamente.'
 
 
+def test_unclassified_provider_failure_uses_reserve_without_leaking_body(settings, monkeypatch):
+    monkeypatch.setattr(evolution, 'read', lambda _: {'routing': {'enabled': True, 'fallbacks': ['reserve']}})
+    monkeypatch.setattr(evolution, 'provider_catalog', lambda _: [{'id': 'reserve', 'configured': True}])
+    class Primary:
+        async def reply(self, *args):
+            raise RuntimeError('PRIVATE_PROVIDER_BODY')
+    class Reserve:
+        async def reply(self, *args):
+            return {'reply': 'A pergunta chegou à reserva.', 'topics': [], 'tool_calls': []}
+    monkeypatch.setattr('cronos.conversation_transport.conversation_provider', lambda _: Reserve())
+    result = asyncio.run(evolution.ResilientProvider(settings, Primary()).reply('', []))
+    assert result['fallback_used'] and result['reply'] == 'A pergunta chegou à reserva.'
+    assert 'PRIVATE_PROVIDER_BODY' not in str(result)
+
+
 def test_intro_route_identity_survives_python311_child_task_behavior(settings,monkeypatch):
     from cronos.reply_stream import deliver_intro,intro_sink
     original_wait=asyncio.wait_for

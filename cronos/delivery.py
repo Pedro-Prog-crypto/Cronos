@@ -15,7 +15,7 @@ class DeliveryLog:
         with self.lock:
             row=self.rows.setdefault(turn,{'turn_id':turn,'started':time.time(),'events':[]})
             if stage=='playback_started' and any(event['stage']==stage for event in row['events']):return
-            allowed={k:v for k,v in fields.items() if k in {'provider','bytes','characters','http_status','error_type','response_ms'} and isinstance(v,(str,int,float))}
+            allowed={k:v for k,v in fields.items() if k in {'provider','phase','bytes','characters','http_status','error_type','response_ms'} and isinstance(v,(str,int,float))}
             row['events'].append({'stage':stage,'elapsed_ms':round((time.time()-row['started'])*1000),**allowed})
             row['events']=row['events'][-40:]
             while len(self.rows)>40:self.rows.popitem(last=False)

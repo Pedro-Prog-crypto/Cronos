@@ -271,7 +271,8 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
         latest.current.onTranscript(previewText,{recognition_ms:Math.round(performance.now()-recognitionStarted),endpoint_ms,wake_confirmed});
         return;
       }
-      if(latest.current.onAudio&&durationSeconds<=30){
+      const interimWords=activePartial.current.trim().split(/\s+/).filter(Boolean).length;
+      if(latest.current.onAudio&&durationSeconds<=30&&(!interimWords||interimWords>=3)){
         // A long WAV can exceed Gemini Live's audio limit or consume the
         // response deadline before a transcript exists. Transcribe it as text.
         setRetryAvailable(true);

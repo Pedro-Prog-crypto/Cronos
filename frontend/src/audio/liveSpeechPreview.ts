@@ -38,7 +38,9 @@ export function createLiveSpeechPreview(onUpdate:(text:string)=>void,host:Recogn
                                              new Promise<void>(resolve=>setTimeout(resolve,350))]);
    closed=true;finished=null;
    const words=finalText.split(/\s+/).filter(Boolean);
-   return !failed&&allFinal&&minimumConfidence>=.82&&words.length>=Math.max(1,Math.floor(durationSeconds*.75))
+   // One accidental word from room noise must not replace the complete WAV
+   // with a confident but unrelated browser transcript.
+   return !failed&&allFinal&&minimumConfidence>=.82&&words.length>=Math.max(3,Math.floor(durationSeconds*.75))
     ?finalText:null;
   },
   abort(){closed=true;finished=null;try{recognition.abort();}catch{/* Already stopped. */}}

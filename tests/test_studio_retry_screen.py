@@ -36,14 +36,14 @@ class Vision:
 
 
 def test_explicit_retry_after_every_adapter_failed_keeps_request_assets_and_revision(settings,monkeypatch):
-    adapters={'gemini':Builder(),'mistral':Failing(),'ollama':Failing()}
+    adapters={'gemini':Failing(),'mistral':Builder(),'ollama':Failing()}
     settings=configured(settings,monkeypatch,adapters)
     before=settings.providers_file.read_bytes(),settings.personality.read_bytes()
     with TestClient(create_app(settings)) as c:
         p=generate(c,new(c))
         asset=c.post('/studio/projects/'+p['id']+'/assets',headers=AUTH,
             json={'name':'foto.png','purpose':'image','data_base64':capture()['image_base64']}).json()['assets'][-1]
-        adapters['gemini']=Failing(ProviderError('quota',429))
+        adapters['mistral']=Failing(ProviderError('quota',429))
         failed=generate(c,p,prompt='Corrija os formulários mantendo as fotografias.')
         assert failed['status']=='failed' and 'Nenhuma integração' in failed['error']
         assert failed['revision']==p['revision'] and failed['current']==p['current']
@@ -55,8 +55,11 @@ def test_explicit_retry_after_every_adapter_failed_keeps_request_assets_and_revi
         assert c.post(url,headers=AUTH,json={}).status_code==200
         again=wait(c,p)
         assert again['status']=='failed' and again['revision']==p['revision']
-        assert all(len(adapters[k].calls)>counts[k] for k in adapters)
+        assert counts=={k:len(v.calls) for k,v in adapters.items()} # cooldown avoids repeating 429/503
         adapters['mistral']=Builder()
+        # Simulate the quota reset or a newly valid credential. Until then a
+        # repeated click must not spend the same unavailable quota again.
+        c.app.state.studio.provider_cooldowns.pop('mistral',None)
         result=c.post(url,headers=AUTH,json={});assert result.status_code==200,result.text
         done=wait(c,p)
         assert done['status']=='ready' and done['id']==p['id'] and done['revision']==p['revision']+1

@@ -70,6 +70,21 @@ def test_canned_greeting_never_passes_integration_check(settings):
         assert not any(e['stage']=='question_received' for e in native_events)
 
 
+def test_provider_runtime_failure_reaches_voice_diagnostic_without_exposing_private_body(settings):
+    class Broken:
+        async def reply(self,*args):raise RuntimeError('PRIVATE_PROVIDER_BODY')
+    turn=str(uuid4())
+    with TestClient(create_app(settings,Broken())) as client:
+        response=client.post('/chat/stream',headers={**AUTH,'X-Cronos-Turn':turn},json={'message':'Quem foi Sócrates?'})
+        event=json.loads(response.text.splitlines()[-1])
+        assert event['type']=='error' and event['status']==500
+        assert event['detail']['phase']=='generation' and event['detail']['error_type']=='RuntimeError'
+        assert 'PRIVATE_PROVIDER_BODY' not in response.text
+        events=client.get('/voice/delivery',headers=AUTH).json()['turns'][0]['events']
+        assert any(e['stage']=='failed' and e['http_status']==500 and e['phase']=='generation' for e in events)
+        assert 'PRIVATE_PROVIDER_BODY' not in json.dumps(events)
+
+
 
 def test_delivery_memory_is_bounded_and_rejects_unlisted_payload():
     log=DeliveryLog()

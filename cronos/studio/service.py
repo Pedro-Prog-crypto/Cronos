@@ -22,7 +22,7 @@ from cronos.usage import request_scope
 from .catalog import starter, quote, catalog
 from .runtime import validated, submit, FormError
 from .store import Store
-from .validation import validate, parse_bundle, InvalidProject, InlinePreview
+from .validation import validate, parse_bundle, remove_remote_css, InvalidProject, InlinePreview
 from .directions import selected_direction, visual_review
 from .provider_pool import ProviderPool
 from .engineering import plan as engineering_plan, review as engineering_review, CONTRACT as ENGINEERING_CONTRACT
@@ -169,8 +169,7 @@ class Studio:
             if (item.get('opportunity') or {}).get('lead_id') == lead['id']:
                 return self.detail(item['id'])
         self.available()
-        chosen = body.provider or self.app.state.engine.settings.provider
-        self.check_provider(chosen)
+        chosen = self.builder_provider(body.provider or self.app.state.engine.settings.provider)
         from .catalog import CATEGORY_IDS
         category = lead.get('category', report['category'])
         if category not in CATEGORY_IDS: category = 'restaurante' if category in {'pizzaria','cafeteria','lanchonete','japones','todos'} else 'servicos'
@@ -218,7 +217,22 @@ class Studio:
         return ProviderPool(project, entries,
                             lambda identifier: self.code_provider(replace(settings, provider=identifier), use_injected=not vision),
                             self.store.event, self.vision_cooldowns if vision else self.provider_cooldowns,
-                            injected=injected, timeout=120 if vision else 600)
+                            injected=injected, timeout=120 if vision else 600,
+                            excluded_ids=() if vision else ('gemini',),
+                            preferred='gemini' if vision and not injected else None)
+
+    def builder_provider(self, chosen):
+        """Reserve Gemini for visual review, not site code or art direction."""
+        if self.app.state.engine.provider is not None:
+            return chosen
+        entries = provider_catalog(self.app.state.engine.settings)
+        builders = [entry['id'] for entry in sorted(entries, key=lambda entry: entry['id'] == 'ollama')
+                    if entry['configured'] and entry['id'] != 'gemini']
+        if chosen and chosen != 'gemini' and chosen not in builders:
+            raise ValueError('A integração de criação escolhida não está configurada ou não é permitida no modo atual.')
+        if not builders:
+            raise ValueError('Nenhuma IA de criação configurada. O Gemini está reservado à análise visual; configure outro provedor de código no painel Integrações.')
+        return chosen if chosen in builders else builders[0]
 
     def check_provider(self, chosen):
         if self.app.state.engine.provider is not None: return
@@ -231,8 +245,7 @@ class Studio:
         if project.get('archived'): raise ValueError('Reative o projeto antes de propor direções.')
         if body.mode == 'reference' and not body.reference.strip():
             raise ValueError('Descreva a referência para as propostas. A imagem pode ser usada na criação do site.')
-        chosen = body.provider or self.app.state.engine.settings.provider
-        self.check_provider(chosen)
+        chosen = self.builder_provider(body.provider or self.app.state.engine.settings.provider)
         project.update(status='running', job_kind='directions', provider=chosen, started=time.time(), finished=None, error=None,
                        mode=body.mode, reference=body.reference if body.mode == 'reference' else '', reference_asset=body.reference_asset if body.mode == 'reference' else '', last_request=body.prompt)
         self.store.event(project, 'directions', 'Preparando três propostas distintas de composição, tipografia e imagens. O código salvo permanece intacto.')
@@ -270,8 +283,7 @@ class Studio:
             raise ValueError('A imagem de referência escolhida não pertence a este projeto.')
         if len(body.prompt.strip()) < 3: raise ValueError('Descreva o que o site deve fazer.')
         settings = self.app.state.engine.settings
-        chosen = body.provider or settings.provider
-        self.check_provider(chosen)
+        chosen = self.builder_provider(body.provider or settings.provider)
         project.update(status='running', job_kind='site', research_images=body.research_images, mode=body.mode, reference=body.reference if body.mode == 'reference' else '', reference_asset=body.reference_asset if body.mode == 'reference' else '', provider=chosen, started=time.time(), finished=None, error=None, last_request=body.prompt, plan_first=body.plan_first)
         project['quote'] = quote(project['category'], project['brief'] + ' ' + body.prompt, project.get('tier', 'reference'), project.get('reference_id', ''))
         self.store.event(project, 'request', 'Pedido do senhor: ' + body.prompt)
@@ -369,12 +381,16 @@ class Studio:
                 deliveries[identifier] = deliveries.get(identifier, 0) + 1
                 try:
                     files, summary = parse_bundle(result)
+                    files, css_repairs = remove_remote_css(files, [a['name'] for a in project['assets'] if a['purpose'] != 'reference'])
+                    if css_repairs:
+                        self.store.event(project, 'css_repair', css_repairs[0])
                     self.store.event(project, 'validation', 'O código chegou. Verificando recursos, formulários, destinos, arquivos e sintaxe, sem executar código no computador.')
                     report = await asyncio.to_thread(validate, files, [a['name'] for a in project['assets'] if a['purpose'] != 'reference'], required_forms=contract['forms'])
                     report['backend'] = await asyncio.to_thread(backend_checks)
                     report['visual_content'] = visual_review(files, current['files'], allowed_assets)
                     report['composition'] = composition_review(files,recent,enabled=unique_creation)
                     report['engineering_plan'] = contract
+                    report['css_repairs'] = css_repairs
                     report['requirements'] = engineering_review(files, contract)
                     report['dependencies'] = [{'name':item['label'],'status':'unavailable','detail':item['detail']} for item in contract['dependencies']]
                     report['passed'] = report['passed'] and not any(c['status'] == 'failed' for c in [*report['backend'], *report['visual_content'], *report['composition'], *report['requirements']])
@@ -427,12 +443,9 @@ class Studio:
             raise ValueError('Para essa etapa, envie novamente a captura ou confirme uma nova geração de imagem no painel correspondente.')
         request=project.get('last_request','')
         if len(request.strip())<3:raise ValueError('Não há pedido salvo. Escreva o que deseja criar ou corrigir.')
-        chosen=provider or project.get('provider') or self.app.state.engine.settings.provider
-        self.check_provider(chosen)
-        # An explicit retry may recheck adapters that failed during the previous job.
-        # No timer or retry loop consumes quota in the background.
-        for identifier in set(project.get('provider_queue',[]))|{entry['id'] for entry in project.get('provider_attempts',[])}:
-            self.provider_cooldowns.pop(identifier,None)
+        chosen=self.builder_provider(provider or project.get('provider') or self.app.state.engine.settings.provider)
+        # Keep quota/auth cooldowns across retries; another failed request does
+        # not repair a rejected key or an exhausted paid allowance.
         body=Generate(mode=project.get('mode') or 'autonomous',prompt=request,provider=chosen,
                       reference=project.get('reference',''),reference_asset=project.get('reference_asset',''),
                       research_images=project.get('research_images',False),plan_first=project.get('plan_first',False))

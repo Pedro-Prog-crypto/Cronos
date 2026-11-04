@@ -275,7 +275,23 @@ class ResilientProvider:
                         if provider_id == self.settings.provider and not error.retryable and not self.all_configured: raise error
                         errors.append(error); load_reserves(); next_start = loop.time()
                         continue
+                    except Exception as exc:
+                        # SDKs sometimes raise an unclassified runtime error.
+                        # Preserve the type in diagnostics, never the private
+                        # provider body, and let an unused reserve answer.
+                        mark('answer_route_failed', provider=provider_id,
+                             error_type=type(exc).__name__, http_status=502)
+                        error = ProviderError('A integração falhou antes de concluir a resposta; tentando outra opção configurada.', 502)
+                        if winner is task: raise error from None
+                        errors.append(error); load_reserves(); next_start = loop.time()
+                        continue
                     if winner is not None and winner is not task: continue
+                    if not isinstance(result, dict) or not isinstance(result.get('reply'), str):
+                        error = ProviderError('A integração retornou uma resposta inválida.', 502)
+                        mark('answer_route_failed', provider=provider_id, error_type='invalid_reply', http_status=502)
+                        if winner is task: raise error
+                        errors.append(error); load_reserves(); next_start = loop.time()
+                        continue
                     # Providers validate their result before returning. One result
                     # leaves this layer; tools and persistence stay with Engine.
                     return result if provider_id == self.settings.provider else {**result, 'provider_used':provider_id, 'fallback_used':True}

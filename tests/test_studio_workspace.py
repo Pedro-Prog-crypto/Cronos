@@ -148,8 +148,9 @@ def test_same_provider_pool_continues_from_planning_to_code_and_falls_back_again
         done=wait(client,response.json())
         assert done['status']=='ready' and done['active_provider']=='groq' and done['revision']==1, (done.get('error'),done['events'])
         assert len(done['directions'])==3
-        assert len([e for e in done['events'] if e['phase']=='fallback'])==2
+        assert len([e for e in done['events'] if e['phase']=='fallback'])==1
         assert not any(e['phase']=='failed' for e in done['events'])
+        assert not adapters['gemini'].calls
         assert len(adapters['mistral'].calls)==1 and len(adapters['groq'].calls)==1
 
 

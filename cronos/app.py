@@ -423,40 +423,48 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                             first_response_deadline=deadline
                             async with conversation_lock(request, message, audio):
                                 try:
-                                    try:
-                                        options={'audio':audio,**({'wake_confirmed':True} if wake_confirmed else {})} if audio is not None else {}
-                                        if not screen_context:options['screen_context']=False
-                                        if page_context:options['page_context']=page_context
-                                        if visual_context:options['visual_context']=visual_context.model_dump()
-                                        if heard_context:options['heard_context']=heard_context
-                                        result=await request.app.state.engine.chat(session,message,**options)
-                                    except ProviderError as exc:
-                                        if audio is None or audio_fallback is None or (exc.kind!='audio_transcription_missing' and not exc.retryable) or spoken is not None or intro_text is not None:
-                                            raise
-                                        recognized=recognized_question or await transcribe_fallback(audio_fallback)
-                                        if not recognized:raise ProviderError('A gravação foi mantida, mas não consegui reconhecer a pergunta. Tente novamente ou use o botão de envio de texto.',502) from None
-                                        if not recognized_question:await transcript(recognized)
-                                        if panels.preferences.called_only and not wake_confirmed and not re.search(r'\b(?:cronos|kronos|chronos)\b',recognized,re.I):
-                                            result={'session_id':str(session),'reply':'','recognized_text':recognized,'ignored':True,'topics':[],'notes':[],'tool_results':[],'warnings':[],'timings_ms':{}}
-                                        else:
-                                            result=await request.app.state.engine.chat(session,recognized,**({'heard_context':heard_context} if heard_context else {}),**({'visual_context':visual_context.model_dump()} if visual_context else {}))
-                                            result['recognized_text']=recognized
-                                finally:request.app.state.engine.phase='idle'
+                                    options={'audio':audio,**({'wake_confirmed':True} if wake_confirmed else {})} if audio is not None else {}
+                                    if not screen_context:options['screen_context']=False
+                                    if page_context:options['page_context']=page_context
+                                    if visual_context:options['visual_context']=visual_context.model_dump()
+                                    if heard_context:options['heard_context']=heard_context
+                                    result=await request.app.state.engine.chat(session,message,**options)
+                                except ProviderError as exc:
+                                    if audio is None or audio_fallback is None or (exc.kind!='audio_transcription_missing' and not exc.retryable) or spoken is not None or intro_text is not None:
+                                        raise
+                                    recognized=recognized_question or await transcribe_fallback(audio_fallback)
+                                    if not recognized:raise ProviderError('A gravação foi mantida, mas não consegui reconhecer a pergunta. Tente novamente ou use o botão de envio de texto.',502) from None
+                                    if not recognized_question:await transcript(recognized)
+                                    if panels.preferences.called_only and not wake_confirmed and not re.search(r'\b(?:cronos|kronos|chronos)\b',recognized,re.I):
+                                        result={'session_id':str(session),'reply':'','recognized_text':recognized,'ignored':True,'topics':[],'notes':[],'tool_results':[],'warnings':[],'timings_ms':{}}
+                                    else:
+                                        result=await request.app.state.engine.chat(session,recognized,**({'heard_context':heard_context} if heard_context else {}),**({'visual_context':visual_context.model_dump()} if visual_context else {}))
+                                        result['recognized_text']=recognized
                         if not result.get('ignored') and ((spoken is not None and spoken!=result['reply']) or (intro_text is not None and not result['reply'].startswith(intro_text))):
                             raise ProviderError('A resposta transmitida não corresponde ao resultado final.',502)
                         request.app.state.features.record('language','passed','Conversa processada e salva.')
                         await queue.put({'type':'result','result':result})
                     except TimeoutError:
+                        delivery.mark('failed',phase=getattr(request.app.state.engine,'phase','unknown'),error_type='TimeoutError',http_status=504)
                         await queue.put({'type':'error','status':504,'detail':{'message':'Não consegui iniciar a resposta dentro do prazo de recuperação. Sua pergunta foi preservada; tente novamente sem repetir.'}})
                     except ProviderError as exc:
+                        delivery.mark('failed',phase=getattr(request.app.state.engine,'phase','unknown'),error_type=type(exc).__name__,http_status=exc.http_status or exc.status)
                         detail={'message':str(exc)}
                         if isinstance(exc,TurnError):detail.update(session_id=str(exc.session),tool_results=exc.results)
                         await queue.put({'type':'error','status':exc.status,'detail':detail})
-                    except (OSError,ValueError):
+                    except (OSError,ValueError) as exc:
+                        delivery.mark('failed',phase=getattr(request.app.state.engine,'phase','unknown'),error_type=type(exc).__name__,http_status=500)
                         await queue.put({'type':'error','status':500,'detail':{'message':'Não foi possível ler ou salvar personalidade/memória.'}})
-                    except Exception:
-                        await queue.put({'type':'error','status':500,'detail':{'message':'Falha ao concluir a conversa.'}})
+                    except Exception as exc:
+                        # Do not expose exception text: providers can include
+                        # private request data. Keep a diagnosable stage/type.
+                        phase=request.app.state.engine.phase
+                        safe_phase=phase if phase in {'recall','generation','tools','memory','idle'} else 'unknown'
+                        delivery.mark('failed',phase=safe_phase,error_type=type(exc).__name__,http_status=500)
+                        await queue.put({'type':'error','status':500,'detail':{'message':'Falha interna na etapa '+safe_phase+'. A pergunta foi preservada; consulte o diagnóstico de voz para identificar a falha.',
+                                                                       'phase':safe_phase,'error_type':type(exc).__name__}})
                     finally:
+                        request.app.state.engine.phase='idle'
                         reply_sink.reset(token);intro_sink.reset(intro_token);transcript_sink.reset(transcript_token)
             task=asyncio.create_task(run())
             try:

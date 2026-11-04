@@ -8,7 +8,8 @@ from cronos.providers import ProviderError
 
 
 class ProviderPool:
-    def __init__(self, project, entries, factory, event, cooldowns, *, injected=None, timeout=240):
+    def __init__(self, project, entries, factory, event, cooldowns, *, injected=None, timeout=240,
+                 excluded_ids=(), preferred=None):
         self.project = project
         self.event = event
         self.cooldowns = cooldowns
@@ -18,14 +19,15 @@ class ProviderPool:
         self.failures = []
         chosen = project['provider']
         # Keep an explicitly supplied test/custom adapter isolated from real APIs.
-        candidates = [{'id': chosen}] if injected is not None else [p for p in entries if p['configured'] and p.get('allowed', True)]
-        candidates.sort(key=lambda p: (p['id'] != chosen, p.get('kind') == 'ollama'))
+        candidates = [{'id': chosen}] if injected is not None else [p for p in entries if p['configured'] and p.get('allowed', True) and p['id'] not in excluded_ids]
+        preferred = preferred or chosen
+        candidates.sort(key=lambda p: (p['id'] != preferred, p.get('kind') == 'ollama'))
         self.ids = [p['id'] for p in candidates]
         project['provider_queue'] = self.ids
         project['provider_attempts'] = []
         project['active_provider'] = None
         for identifier in self.ids:
-            if cooldowns.get(identifier, 0) > time.monotonic():
+            if injected is None and cooldowns.get(identifier, 0) > time.monotonic():
                 self.failures.append((identifier, 'pausa após falha recente'))
                 continue
             try:
@@ -36,7 +38,7 @@ class ProviderPool:
 
     def exhausted(self):
         details = '; '.join(identifier + ': ' + reason for identifier, reason in self.failures)
-        raise ProviderError('Nenhuma integração disponível conseguiu concluir esta etapa. '
+        raise ProviderError('Nenhuma integração de criação disponível conseguiu concluir esta etapa. Confira as chaves e os limites de uso dos provedores de código. '
                             'Pedido, recursos e última versão preservados.' + (' ' + details if details else ''))
 
     @property
@@ -75,7 +77,9 @@ class ProviderPool:
                 if getattr(exc,'kind',None)=='output_limit':reason='código interrompido pelo limite de saída do modelo'
                 elif getattr(exc,'kind',None)=='format':reason='resposta incompleta ou formato JSON inválido'
                 elif isinstance(exc,(TimeoutError,httpx.TimeoutException)):reason='tempo de resposta esgotado'
-                self.reject(reason, cooldown=0 if isinstance(exc, ValueError) else 60)
+                status = getattr(exc,'http_status',None) or getattr(exc,'status',None)
+                cooldown = 3600 if status in {401,403} else 900 if status == 429 else 0 if isinstance(exc, ValueError) else 60
+                self.reject(reason, cooldown=cooldown)
                 await asyncio.sleep(0)
                 continue
             self.cooldowns.pop(identifier, None)

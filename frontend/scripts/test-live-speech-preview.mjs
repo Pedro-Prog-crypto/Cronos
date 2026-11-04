@@ -22,6 +22,10 @@ const weak=createLiveSpeechPreview(()=>{},{SpeechRecognition:FakeRecognition});
 instance.emit('quem foi Platão',true,.4);
 assert.equal(await weak.finish(2),null);
 
+const stray=createLiveSpeechPreview(()=>{},{SpeechRecognition:FakeRecognition});
+instance.emit('Calçada.',true,.99);
+assert.equal(await stray.finish(1),null);
+
 const incomplete=createLiveSpeechPreview(()=>{},{SpeechRecognition:FakeRecognition});
 instance.emit('foi',false,0);
 assert.equal(await incomplete.finish(2),null);
