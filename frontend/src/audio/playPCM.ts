@@ -15,7 +15,7 @@ export async function playPCM(response:Response,context:AudioContext,signal:Abor
   try{
     while(!signal.aborted){
       let idleTimer:ReturnType<typeof setTimeout>|undefined;
-      const idle=new Promise<never>((_,reject)=>{idleTimer=setTimeout(()=>reject(new Error('O serviço parou de enviar a voz. A resposta escrita continua disponível.')),8000);});
+      const idle=new Promise<never>((_,reject)=>{idleTimer=setTimeout(()=>reject(new Error('O serviço parou de enviar a voz. A resposta escrita continua disponível.')),20000);});
       let next:ReadableStreamReadResult<Uint8Array>;
       try{next=await Promise.race([reader.read(),idle]);}finally{clearTimeout(idleTimer);}
       if(next.done)break;

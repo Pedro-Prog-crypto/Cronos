@@ -97,7 +97,7 @@ def test_network_deadline_covers_body_and_cleans_parent_listener():
     assert(aborted);
     assert.equal(await withRequestDeadline(parent.signal,30,async signal=>'ready'), 'ready');
     const originalTimeout=globalThis.setTimeout;
-    globalThis.setTimeout=(fn,ms,...args)=>originalTimeout(fn,ms===8000?20:ms,...args);
+        globalThis.setTimeout=(fn,ms,...args)=>originalTimeout(fn,ms===20000?20:ms,...args);
     const {playPCM}=await import(PCM_SOURCE);
     let streamCancelled=false;
     const stream=new ReadableStream({cancel(){streamCancelled=true;}});

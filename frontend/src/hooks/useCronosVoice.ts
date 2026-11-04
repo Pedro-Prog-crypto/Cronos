@@ -70,7 +70,7 @@ export function useCronosVoice({preferences,remoteEnabled=true,nativeEnabled=fal
     text=spokenText(text);stop();if(!text)return;const current=generation.current;setIsGenerating(true);
     const controller=new AbortController(),remote=new AbortController();pending.current=controller;
     const abortRemote=()=>remote.abort();controller.signal.addEventListener('abort',abortRemote,{once:true});
-    let started=false;const requested=performance.now();
+    let started=false,completedChunks=0,tailAttached=false;let chunks:string[]=[];const requested=performance.now();
     const deviceVoice=findDeviceVoice(controller.signal);
     const hedge=setTimeout(()=>{if(!started)void deviceVoice.then(voice=>{if(voice&&!started&&current===generation.current)remote.abort();});},5000);
     try {
@@ -79,7 +79,7 @@ export function useCronosVoice({preferences,remoteEnabled=true,nativeEnabled=fal
       context.current ||= new AudioContext(); await withRequestDeadline(controller.signal,2500,()=>context.current!.resume(),'O dispositivo não ativou a saída de áudio.');
       if(context.current.state!=='running')throw new Error('A saída de áudio continua suspensa. Confira a permissão de som.');
       const pcm=Boolean(callbacks.current.streaming&&!completeFile);
-      const chunks=speechChunks(text);
+      chunks=speechChunks(text);
       const fetchChunk=async(part:string)=>{
         const speed=prefs.current?.voice_speed,started=performance.now();
         let error:unknown;
@@ -150,7 +150,7 @@ export function useCronosVoice({preferences,remoteEnabled=true,nativeEnabled=fal
         player.onplaying=()=>{started=true;clearTimeout(hedge);setIsGenerating(false);setIsSpeaking(true);callbacks.current.onSpeechChunk?.(chunks[index]||'',index,turn_id);if(!index)callbacks.current.onSpeechStart?.({turn_id,speech_request_ms:Math.round(received.elapsed),playback_ms:Math.round(performance.now()-receivedAt),voice_source:received.voiceSource});frame.current=requestAnimationFrame(measure);};
         await new Promise<void>((resolve,reject)=>{
           let settled=false;
-          let timeout=setTimeout(()=>finish(new Error('O áudio chegou, mas a reprodução não iniciou. Confira a permissão de som.')),3000);
+          let timeout=setTimeout(()=>finish(new Error('O áudio chegou, mas a reprodução não iniciou. Confira a permissão de som.')),8000);
           const finish=(error?:unknown)=>{if(settled)return;settled=true;clearTimeout(timeout);controller.signal.removeEventListener('abort',aborted);player.onplaying=null;player.onended=null;player.onerror=null;player.removeEventListener('playing',playing);if(error){player.pause();reject(error);}else resolve();};
           const aborted=()=>{player.pause();finish();};controller.signal.addEventListener('abort',aborted,{once:true});
           const playing=()=>{clearTimeout(timeout);const duration=Number.isFinite(player.duration)?player.duration*1000/player.playbackRate:Math.max(30000,(chunks[index]||'').length*450);timeout=setTimeout(()=>finish(new Error('A reprodução da voz parou de responder. A resposta escrita continua disponível.')),duration+15000);};player.addEventListener('playing',playing,{once:true});
@@ -162,13 +162,33 @@ export function useCronosVoice({preferences,remoteEnabled=true,nativeEnabled=fal
         if(index===chunks.length-1&&tail){
           const remaining=await waitTail();tail=undefined;
           if(current!==generation.current)return;
-          if(remaining?.parts.length){chunks.push(...remaining.parts);next=remaining.first!;}
+          if(remaining?.parts.length){chunks.push(...remaining.parts);next=remaining.first!;tailAttached=true;}
         }
+        completedChunks=index+1;
         if(index+1<chunks.length){setIsSpeaking(false);setIsGenerating(true);}
       }
       if(current===generation.current)stop();
     } catch(error) {
       if(current!==generation.current)return;
+      // A remote PCM stream can stop after speech has already begun. Continue
+      // the unfinished chunks on the local voice instead of ending the reply.
+      if(started&&!controller.signal.aborted){
+        const selected=await deviceVoice;
+        if(selected&&current===generation.current&&!controller.signal.aborted){
+          try{
+            callbacks.current.onWarning?.('A voz online interrompeu um trecho. Continuando a resposta com a voz do dispositivo.');
+            let index=completedChunks;
+            const read=async(part:string)=>speakDeviceText(part,selected,controller.signal,{volume:prefs.current?.voice_volume??1,rate:prefs.current?.voice_speed??1,onStart:spoken=>{setIsGenerating(false);setIsSpeaking(true);callbacks.current.onSpeechChunk?.(spoken,index++,turn_id);}});
+            for(const part of chunks.slice(completedChunks))await read(part);
+            if(continuation&&!tailAttached){
+              let onAbort=()=>{};const cancelled=new Promise<string>(resolve=>{onAbort=()=>resolve('');controller.signal.addEventListener('abort',onAbort,{once:true});});
+              try{const rest=await Promise.race([continuation,cancelled]);if(rest.trim()&&!controller.signal.aborted)await read(spokenText(rest));}
+              finally{controller.signal.removeEventListener('abort',onAbort);}
+            }
+            if(current===generation.current)stop();return;
+          }catch(fallbackError){if(current!==generation.current)return;error=fallbackError;}
+        }
+      }
       if(!started&&!controller.signal.aborted&&(prefs.current?.voice_volume??1)>0){
         try{
           const selected=await deviceVoice;
@@ -242,21 +262,22 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
     const abort=new AbortController();resources.current.abort=abort;
     const recognitionStarted=performance.now();const turnId=latest.current.onRecognitionStart?.(endpoint_ms);
     try{
-      if(latest.current.onAudio){
-        preview.current?.abort();preview.current=null;
-        // Native audio is now owned by the conversation, not a pending Fish
-        // transcription. Keep the recording until a real transcript arrives.
-        setRetryAvailable(true);
-        const submission=latest.current.onAudio(audio,{recognition_ms:0,endpoint_ms,wake_confirmed});
-        setTranscribing(false);
-        await submission;return;
-      }
+      // A confirmed browser transcript already contains the actual question.
+      // Sending that text avoids a second, slower recognition pass in Gemini Live.
       const previewText=latest.current.collecting?null:await preview.current?.finish(durationSeconds);
       if(!latest.current.collecting)preview.current=null;
       if(previewText){
         acknowledge();
         latest.current.onTranscript(previewText,{recognition_ms:Math.round(performance.now()-recognitionStarted),endpoint_ms,wake_confirmed});
         return;
+      }
+      if(latest.current.onAudio&&durationSeconds<=30){
+        // A long WAV can exceed Gemini Live's audio limit or consume the
+        // response deadline before a transcript exists. Transcribe it as text.
+        setRetryAvailable(true);
+        const submission=latest.current.onAudio(audio,{recognition_ms:0,endpoint_ms,wake_confirmed});
+        setTranscribing(false);
+        await submission;return;
       }
       const result=await withRequestDeadline(abort.signal,55000,async signal=>{
         const response=await api('/voice/transcribe',{method:'POST',headers:{'Content-Type':audio.type,...(turnId?{'X-Cronos-Turn':turnId}:{})},body:audio,signal});return response.json();
@@ -358,7 +379,7 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
         resources.current.timer=setInterval(()=>{
           if(latest.current.blocked||(processing.current&&!latest.current.collecting))resumeAfter.current=performance.now()+250;
           const blocked=latest.current.blocked||(processing.current&&!latest.current.collecting)||performance.now()<resumeAfter.current;
-          node.port.postMessage({blocked,waiting:Boolean(latest.current.interrupt?.wakeOnly&&wakeUntil.current<performance.now()),keyword:keywordReady.current,sensitivity:latest.current.preferences?.microphone_sensitivity??70,gain:latest.current.preferences?.microphone_gain??2});meter.getByteTimeDomainData(values);let sum=0;for(const value of values)sum+=((value-128)/128)**2;audioLevelSource.current=blocked?0:Math.min(1,Math.sqrt(sum/values.length)*4);
+          node.port.postMessage({blocked,waiting:Boolean(latest.current.interrupt?.wakeOnly&&wakeUntil.current<performance.now()),keyword:keywordReady.current,sensitivity:latest.current.preferences?.microphone_sensitivity??70,gain:latest.current.preferences?.microphone_gain??2,silenceMs:latest.current.collecting?1900:1400});meter.getByteTimeDomainData(values);let sum=0;for(const value of values)sum+=((value-128)/128)**2;audioLevelSource.current=blocked?0:Math.min(1,Math.sqrt(sum/values.length)*4);
         },80);
         return;
         }catch(error){
@@ -417,7 +438,7 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
         if(speech){voiceLevel=voiceLevel?voiceLevel*.8+rms*.2:rms;voiceReference=Math.max(voiceReference,voiceLevel);}
         speechRun=speech?speechRun+80:0;
         if(speechRun>=160){if(!heard){beginPreview();setCapturing(!latest.current.interrupt?.wakeOnly||wakeUntil.current>now);}heard=true;lastSpeech=now;}
-        if((heard&&now-lastSpeech>750)||(now-started>(heard||!vad?58000:3000)))recorder.stop();
+        if((heard&&now-lastSpeech>(latest.current.collecting?1900:1400))||(now-started>(heard||!vad?58000:3000)))recorder.stop();
       },80);
     }catch(error){const cancelled=!enabled.current;stop();if(!cancelled){const name=error instanceof DOMException?error.name:'';latest.current.onError(name==='NotAllowedError'||name==='SecurityError'?'Permita o microfone para o Cronos no navegador e tente novamente.':name==='NotReadableError'?'O Windows não liberou o microfone. Feche o aplicativo que está usando o dispositivo e tente novamente.':name==='NotFoundError'?'Nenhum microfone foi encontrado. Conecte um dispositivo e tente novamente.':error instanceof Error?error.message.slice(0,220):'Não foi possível abrir o microfone.');}}
     finally{opening.current=false;if(mounted.current)setStarting(false);}

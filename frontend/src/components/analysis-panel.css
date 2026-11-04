@@ -10,6 +10,8 @@
 .analysis-file-list{padding:14px;display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto;font-size:12px;overflow-wrap:anywhere;color:#b2eaff}.analysis-file-list span{border-bottom:1px solid #15485d;padding:3px 0}.analysis-file-list small{color:#93b1c3}
 .cronos-quick-actions{position:fixed;left:50%;bottom:2.5%;transform:translateX(-50%);z-index:35;display:flex;align-items:center;justify-content:center;gap:12px}
 .reference-attachment{position:static;flex:0 0 36px;width:36px;height:36px;display:grid;place-items:center;border:1px solid #168bdd99;border-radius:50%;color:#86eaff;background:#031522;box-shadow:0 0 13px #006eff44;cursor:pointer}
+.studio-shortcut{border-color:#6ceaff;background:radial-gradient(circle at 50% 35%,#0b4761,#031522 72%);box-shadow:0 0 0 2px #0b648944,0 0 20px #00d5ff66}
+.studio-shortcut:hover{background:#0a3b52;box-shadow:0 0 22px #00e5ff99}
 @media(max-width:1023px){.analysis-panel{left:auto;right:12px;top:50%;width:240px;max-height:74vh}.analysis-panel~.function-tree{display:none}}
 @media(max-width:640px){.analysis-panel{right:8px;width:210px;top:46%;max-height:72vh}.analysis-viewport{min-height:130px}}
 @media(prefers-reduced-motion:reduce){.analysis-scan{animation:none;transform:translateY(-50%)}}

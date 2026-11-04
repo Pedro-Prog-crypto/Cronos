@@ -2,7 +2,7 @@ import {ResponseClock} from './components/ResponseClock';
 import {UpdateNotice} from './components/UpdateNotice';
 /** @license SPDX-License-Identifier: Apache-2.0 */
 import React,{Suspense,lazy,useCallback,useEffect,useRef,useState} from 'react';
-import {Mic,X,Send,RotateCw,ImagePlus,FileArchive,MonitorUp,BookOpen,FileText} from 'lucide-react';
+import {Mic,X,Send,RotateCw,ImagePlus,FileArchive,MonitorUp,BookOpen,FileText,PanelsTopLeft} from 'lucide-react';
 import {IntegratedNeuralStage} from './components/IntegratedNeuralStage';
 import {useCronosVoice,useMicrophone} from './hooks/useCronosVoice';
 import {api,jsonApi,getToken,onConnection,ApiError,streamChat} from './api';
@@ -464,6 +464,7 @@ export default function App(){
     {(microphone.capturing||microphone.transcribing)&&liveTranscript.trim()&&<div className="cronos-live-transcript" role="status" aria-live="polite"><span>FALA EM ANDAMENTO</span><p>{liveTranscript}</p></div>}
     <div className="cronos-quick-actions" aria-label="Ações rápidas">
       {!eyeActive&&!moduleActive&&!studyActive&&<><button className="reference-attachment" aria-label="Abrir área de estudos" title="Abrir área de estudos" onClick={()=>{restoreWindow('study');setStudyOpen(true);setEyeOpen(false);setModule(null);setChatOpen(false);}}><BookOpen size={16}/></button><button className="reference-attachment" aria-label="Analisar imagem" title="Analisar imagem" onClick={()=>openAnalysis('image')}><ImagePlus size={16}/></button><button className="reference-attachment" aria-label="Analisar ZIP ou código" title="Analisar ZIP ou código" onClick={()=>openAnalysis('document')}><FileArchive size={16}/></button></>}
+      <button className="reference-attachment studio-shortcut" aria-label="Abrir Estúdio de Sites" title="Abrir Estúdio de Sites" onClick={()=>{restoreWindow('studio');if(!studio)setStudio({brief:'',request:Date.now()});setEyeOpen(false);setModule(null);setChatOpen(false);}}><PanelsTopLeft size={18}/></button>
       <HandControl/>
       <button className="reference-attachment" aria-pressed={longDictation} aria-label={longDictation?'Finalizar ditado longo':'Iniciar ditado longo'} title={longDictation?'Finalizar ditado e revisar a pergunta':'Juntar vários trechos de fala antes de enviar uma pergunta longa'} onClick={toggleLongDictation}><FileText size={16}/></button>
       {microphone.recording&&<button className="reference-send-audio" aria-label="Enviar fala agora" title={microphone.transcribing&&!longDictation?'Transcrevendo a fala':busy?'Aguarde a resposta atual':!microphone.ready?'Aguardando o microfone captar sua fala':longDictation?'Concluir o trecho atual do ditado; a escuta continua':'Enviar agora sem esperar a detecção de silêncio'} disabled={(microphone.transcribing&&!longDictation)||busy||!microphone.ready} onClick={()=>microphone.submit()}><Send size={15}/></button>}

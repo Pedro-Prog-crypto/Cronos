@@ -55,7 +55,7 @@ async def main():
               return destination.stream;
             }};
         """)
-        await page.route('**/status', lambda route: route.fulfill(json={'fish_configured': False, 'fish_speech_configured': False, 'transcription_provider': 'vosk'}))
+        await page.route('**/status', lambda route: route.fulfill(json={'fish_configured': False, 'fish_speech_configured': False, 'transcription_provider': 'vosk', 'direct_audio_chat': '--direct' in sys.argv}))
         await page.route('**/panels', lambda route: route.fulfill(json={'preferences': {'device_auto_connect': False}}))
         await page.route('**/monitor?*', lambda route: route.fulfill(json={'cursor': 0, 'alerts': [], 'events': []}))
         await page.route('**/memory/**', lambda route: route.fulfill(json={'nodes': [], 'edges': [], 'total': 0, 'next_offset': None}))
@@ -81,6 +81,8 @@ async def main():
             await route.fulfill(body=body, content_type='application/x-ndjson')
 
         await page.route('**/chat/stream', chat)
+        if '--direct' in sys.argv:
+            await page.route('**/chat/audio/stream*', lambda route: route.abort())
         await page.goto(f'http://127.0.0.1:{server.server_port}/ui/index.html')
         normal_mode = '--normal' in sys.argv
         if not normal_mode:
@@ -105,6 +107,8 @@ async def main():
             await expect(page.locator('#chat-input')).to_have_value('quem foi Aristóteles', timeout=10000)
             assert len(uploads) == 1 and len(uploads[0]) > 1000, (len(uploads), [len(audio) for audio in uploads])
         assert await page.get_by_role('button', name='Desligar microfone').get_attribute('aria-pressed') == 'true'
+        await page.get_by_role('button', name='Abrir Estúdio de Sites').click()
+        await expect(page.get_by_role('dialog', name='Estúdio de Sites')).to_be_visible(timeout=10000)
         await browser.close()
         print('PASS:', 'MediaRecorder fallback' if recorder_fallback else 'AudioWorklet',
               'shows interim speech;', 'normal turn submitted' if normal_mode else 'long dictation corrected by final audio;',
