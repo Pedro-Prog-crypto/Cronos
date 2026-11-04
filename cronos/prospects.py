@@ -30,6 +30,13 @@ CATEGORIES = {
     'educacao': ('school|college|language_school|music_school', None, 'escolas e cursos'),
     'eventos': ('events_venue|conference_centre', None, 'espaços de eventos'),
     'servicos': ('lawyer|accountant|insurance|consulting', None, 'serviços profissionais'),
+    'pet_shop': ('pet', None, 'pet shops'),
+    'oficina': ('car_repair', None, 'oficinas mecânicas'),
+    'roupas': ('clothes', None, 'lojas de roupas'),
+    'fotografia': ('photography', None, 'estúdios fotográficos'),
+    'sorveteria': ('ice_cream', None, 'sorveterias'),
+    'pousada': ('guest_house|hostel', None, 'pousadas e hostels'),
+    'idiomas': ('language_school', None, 'escolas de idiomas'),
 }
 DIRECTORIES = {'google.com', 'google.com.br', 'maps.google.com', 'instagram.com', 'facebook.com', 'tiktok.com', 'ifood.com.br', 'tripadvisor.com', 'tripadvisor.com.br', 'restaurantguru.com', 'restaurantguru.com.br', 'linktr.ee', 'wa.me', 'whatsapp.com', 'youtube.com', 'waze.com', 'foursquare.com', 'apontador.com.br', 'solutudo.com.br', 'econodata.com.br', 'cnpj.biz', '99food.com.br', 'yelp.com', 'reclameaqui.com.br'}
 
@@ -185,7 +192,9 @@ class Prospector:
                         elif osm_type=='way':region=f'area({2400000000+osm_id})->.city;';area='(area.city)'
                         else:
                             region='';area=f'(around:15000,{float(place["lat"])},{float(place["lon"])})'
-                        tag={'hotel':'tourism','loja':'shop','barbearia':'shop','academia':'leisure','imobiliaria':'office','servicos':'office'}.get(args.category,'amenity')
+                        tag={'hotel':'tourism','pousada':'tourism','loja':'shop','pet_shop':'shop','oficina':'shop',
+                             'roupas':'shop','fotografia':'shop','barbearia':'shop','academia':'leisure',
+                             'imobiliaria':'office','servicos':'office'}.get(args.category,'amenity')
                         cuisine_filter=f'["cuisine"~"{cuisine}"]' if cuisine else ''
                         query=f'[out:json][timeout:8];{region}nwr["{tag}"~"^({amenity})$"]["name"]{cuisine_filter}{area};out tags center 100;'
                         raw=None

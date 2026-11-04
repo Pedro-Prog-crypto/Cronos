@@ -93,6 +93,8 @@ class Studio:
     def __init__(self, app):
         self.app = app
         self.store = Store(app.state.engine.settings.vault)
+        from .commercial import CommercialStore
+        self.commercial = CommercialStore(self.store)
         self.task = None
         self.tickets = {}
         self.forms = []
@@ -120,6 +122,8 @@ class Studio:
             return {'projects': [{k: p.get(k) for k in ('id', 'name', 'category', 'status', 'revision')} for p in self.store.list()[:20]],
                     'note': 'Dados reais salvos no estúdio. A interface abre com abrir estúdio de sites; criação e edição precisam do briefing e da direção escolhida pelo senhor.', 'catalog': catalog()}
         app.state.registry.register(Tool('studio_status', 'Consulta projetos e etapas reais do Estúdio de Sites. Use technical=true somente para uma solicitação explícita de detalhes dos testes. Não gera, altera ou publica código.', StatusArgs, status))
+        from .commercial_tools import register_business_tools
+        register_business_tools(app, self)
 
     async def close(self):
         if self.task and not self.task.done():
@@ -167,6 +171,9 @@ class Studio:
         # Stable public source identifier: repeated clicks reopen, never pay twice.
         for item in self.store.list():
             if (item.get('opportunity') or {}).get('lead_id') == lead['id']:
+                card = self.commercial.from_report(report, lead)
+                if card.get('project_id') != item['id']:
+                    self.commercial.link_project(card['id'], item['id'])
                 return self.detail(item['id'])
         self.available()
         chosen = self.builder_provider(body.provider or self.app.state.engine.settings.provider)
@@ -185,6 +192,8 @@ class Studio:
         project['opportunity'] = {'lead_id':lead['id'],'city':report['city'],'source':report['source'],
                                   'evidence':lead.get('evidence',[])[:11], 'public':public}
         self.store.save(project)
+        card = self.commercial.from_report(report, lead)
+        self.commercial.link_project(card['id'], project['id'])
         return self.start(project, Generate(mode='autonomous',provider=chosen,prompt=brief[:6000],research_images=body.research_images,plan_first=True))
 
     async def prepare_plans(self, project, body, providers, recent):

@@ -137,6 +137,7 @@ class DirectionPick(Strict):
 class PageSummary(HTMLParser):
     def __init__(self):
         super().__init__(); self.title = ''; self.in_title = False; self.images = []; self.forms = 0; self.viewport = False; self.h1 = 0; self.scripts = 0
+        self.nav = 0; self.description = False; self.contact_links = 0; self.lang = False
     def handle_starttag(self, tag, attrs):
         a = dict(attrs)
         if tag == 'title': self.in_title = True
@@ -145,6 +146,10 @@ class PageSummary(HTMLParser):
         if tag == 'h1': self.h1 += 1
         if tag == 'script': self.scripts += 1
         if tag == 'meta' and a.get('name') == 'viewport': self.viewport = True
+        if tag == 'meta' and a.get('name') == 'description' and str(a.get('content') or '').strip(): self.description = True
+        if tag == 'nav': self.nav += 1
+        if tag == 'html' and str(a.get('lang') or '').strip(): self.lang = True
+        if tag == 'a' and str(a.get('href', '')).lower().startswith(('mailto:', 'tel:', 'https://wa.me/', 'http://wa.me/')): self.contact_links += 1
     def handle_endtag(self, tag):
         if tag == 'title': self.in_title = False
     def handle_data(self, text):
@@ -488,6 +493,7 @@ def install_studio(app, authenticate):
         return {'url': page['url'], 'status': page['status'], 'elapsed_ms': round((time.perf_counter() - started) * 1000),
                 'title': doc.title[:300], 'https': page['url'].startswith('https:'), 'viewport': doc.viewport, 'h1': doc.h1,
                 'images_without_alt': sum('alt' not in a for a in doc.images), 'forms': doc.forms, 'scripts': doc.scripts,
+                'nav': doc.nav, 'description': doc.description, 'lang': doc.lang, 'contact_links': doc.contact_links,
                 'checked_at': time.time(), 'html': is_html,
                 'limits': 'Leitura pública do HTML, sem executar scripts nem contornar login. Não prova interesse em contratar, orçamento, segurança ou desempenho real no celular.'}
 

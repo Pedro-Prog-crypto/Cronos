@@ -38,6 +38,31 @@ def test_backup_failure_never_applies_code_or_writes_success_marker(tmp_path):
     assert all((root/name).read_bytes()==data for name,data in private.items())
 
 
+def test_newer_one_file_launcher_updates_an_existing_install_once_without_losing_data(tmp_path):
+    source,root,private=installation(tmp_path)
+    manifest=source/'tools/interface_update_manifest.json'
+    value=json.loads(manifest.read_text());value['revision']='studio-zod-voice-2026-11-04-r34';manifest.write_text(json.dumps(value))
+    backups=[]
+    def backup(path):
+        backups.append(path)
+        folder=tmp_path/('backup-'+str(len(backups)));folder.mkdir()
+        return folder,{'complete':True}
+    launcher.prepare(root,source,updater,backup)
+    (source/'cronos/app.py').write_text('newer=True\n')
+    value['files']['cronos/app.py']=hashlib.sha256((source/'cronos/app.py').read_bytes()).hexdigest()
+    value['revision']='studio-zod-voice-2026-11-04-r35';manifest.write_text(json.dumps(value))
+    launcher.prepare(root,source,updater,backup)
+    assert (root/'cronos/app.py').read_text()=='newer=True\n'
+    assert len(backups)==2 and all((root/name).read_bytes()==data for name,data in private.items())
+    (root/'cronos/app.py').write_text('later_manual_fix=True\n')
+    assert launcher.prepare(root,source,updater,backup) is None
+    assert (root/'cronos/app.py').read_text()=='later_manual_fix=True\n'
+    value['revision']='studio-zod-voice-2026-11-04-r34';manifest.write_text(json.dumps(value))
+    assert launcher.prepare(root,source,updater,backup) is None
+    assert (root/'cronos/app.py').read_text()=='later_manual_fix=True\n'
+    assert len(backups)==2
+
+
 def test_new_launcher_ignores_an_old_updater_runner_and_always_uses_selected_root(tmp_path):
     _,root,_=installation(tmp_path)
     old=root/'.cronos-local/updater/runner.py';old.parent.mkdir(parents=True);old.write_text('raise RuntimeError()')

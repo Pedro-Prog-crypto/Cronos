@@ -862,6 +862,8 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
 
     from cronos.studio.routes import install_studio
     install_studio(app, authenticate)
+    from cronos.studio.commercial_routes import install_commercial
+    install_commercial(app, authenticate)
     from cronos.documents import install_documents
     install_documents(app, authenticate)
     from cronos.studies import install_studies

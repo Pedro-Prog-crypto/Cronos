@@ -10,6 +10,7 @@ import io
 import json
 import os
 from pathlib import Path, PurePosixPath
+import re
 import subprocess
 import sys
 import tempfile
@@ -17,6 +18,11 @@ import zipfile
 
 PAYLOAD_SHA256 = '__PAYLOAD_SHA256__'
 PAYLOAD_BASE64 = '''__PAYLOAD_BASE64__'''
+
+
+def release_order(revision):
+    match = re.search(r'(\d{4}-\d{2}-\d{2})-r(\d+)$', str(revision or ''))
+    return (match[1], int(match[2])) if match else None
 
 
 def load(name, path):
@@ -70,15 +76,28 @@ def ensure_environment(root, run=subprocess.run):
 
 
 def prepare(root, source, updater, backup):
-    """Only the first successful use overlays code; no secrets/path settings edited."""
+    """Apply each newer version once; never roll code back or edit private data."""
     root=Path(root).absolute()
     updater.regular(root)
     if not (root/'.env').is_file() or not (root/'cronos/app.py').is_file():raise ValueError('Escolha a pasta do Cronos que contem .env e a pasta cronos.')
     marker=updater.regular(root/'.cronos-local/data-launcher/installed.json')
+    revision=json.loads((source/'tools/interface_update_manifest.json').read_text(encoding='utf-8')).get('revision','unversioned')
     if marker.exists():
         saved=json.loads(marker.read_text(encoding='utf-8'))
         if saved.get('installed_once') is not True:raise ValueError('O registro do iniciador esta incompleto; seus dados foram preservados.')
-        return None
+        previous=saved.get('revision')
+        if previous==revision:return None
+        older,newer=release_order(previous),release_order(revision)
+        if older and newer:
+            if older>=newer:return None
+        else:
+            raise ValueError('Nao foi possivel comparar as versoes da instalacao. Seus dados foram preservados; use uma atualizacao mais recente identificada no GitHub.')
+    installed=root/'tools/interface_update_manifest.json'
+    if installed.is_file():
+        try: current=json.loads(installed.read_text(encoding='utf-8')).get('revision')
+        except (OSError,ValueError):current=None
+        current_order,new_order=release_order(current),release_order(revision)
+        if current_order and new_order and current_order>new_order:return None
     files=updater.entries(source)
     changed=any(not (root/name).is_file() or updater.digest(root/name)!=digest for name,digest in files.items())
     snapshot=None
@@ -89,7 +108,7 @@ def prepare(root, source, updater, backup):
         print('Esse backup contem dados privados; nao compartilhe.',flush=True)
         updater.apply(source,root)
     marker.parent.mkdir(parents=True,exist_ok=True)
-    document={'installed_once':True,'revision':json.loads((source/'tools/interface_update_manifest.json').read_text())['revision'],
+    document={'installed_once':True,'revision':revision,
               'data_backup':str(snapshot) if snapshot else None,
               'note':'Novas memorias usam o cofre da instalacao escolhida. Este iniciador nao reaplica uma versao antiga.'}
     temporary=marker.with_suffix('.tmp');temporary.write_text(json.dumps(document,ensure_ascii=True,indent=2),encoding='utf-8');os.replace(temporary,marker)
