@@ -176,7 +176,7 @@ class ResilientProvider:
         from cronos.conversation_transport import conversation_provider
         from cronos.delivery import mark
         original_reply, original_intro = reply_sink.get(), intro_sink.get()
-        tasks = {}; winner = None; errors = []; policy_loaded = False
+        tasks = {}; winner = None; errors = []; policy_loaded = False; attempted = []
         reserves = []; next_start = 0.; reserve_deadline = None
         # All registered conversation adapters encode the shared image format.
         # Raw Live microphone audio still cannot be replayed to text-only APIs.
@@ -212,6 +212,7 @@ class ResilientProvider:
                     reply_sink.reset(a); intro_sink.reset(b)
 
         def start(provider, provider_id, timeout):
+            attempted.append(provider_id)
             task = asyncio.create_task(receive(provider, provider_id, timeout))
             tasks[task] = provider_id
             return task
@@ -286,7 +287,8 @@ class ResilientProvider:
                         errors.append(error); load_reserves(); next_start = loop.time()
                         continue
                     if winner is not None and winner is not task: continue
-                    if not isinstance(result, dict) or not isinstance(result.get('reply'), str):
+                    if (not isinstance(result, dict) or not isinstance(result.get('reply'), str)
+                            or not result['reply'].strip() and not result.get('tool_calls')):
                         error = ProviderError('A integração retornou uma resposta inválida.', 502)
                         mark('answer_route_failed', provider=provider_id, error_type='invalid_reply', http_status=502)
                         if winner is task: raise error
@@ -294,7 +296,9 @@ class ResilientProvider:
                         continue
                     # Providers validate their result before returning. One result
                     # leaves this layer; tools and persistence stay with Engine.
-                    return result if provider_id == self.settings.provider else {**result, 'provider_used':provider_id, 'fallback_used':True}
+                    return {**result, 'provider_used':provider_id,
+                            'fallback_used':provider_id != self.settings.provider,
+                            'provider_calls':len(attempted), 'routes_attempted':attempted.copy()}
                 while not tasks and reserves and winner is None and loop.time() < reserve_deadline:
                     provider_id = reserves.pop(0)
                     timeout = min(FALLBACK_ATTEMPT_TIMEOUT_SECONDS, reserve_deadline-loop.time())

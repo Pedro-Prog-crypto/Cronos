@@ -113,6 +113,32 @@ def test_network_deadline_covers_body_and_cleans_parent_listener():
     assert r.returncode==0,r.stderr
 
 
+def test_final_browser_transcript_without_confidence_skips_slow_second_asr():
+    source=Path('frontend/src/audio/liveSpeechPreview.ts').resolve().as_uri()
+    script='''import assert from 'node:assert/strict';
+    import {createLiveSpeechPreview} from SOURCE;
+    class BrowserRecognition {
+      lang='';continuous=false;interimResults=false;maxAlternatives=0;
+      onresult=null;onerror=null;onend=null;
+      start(){}
+      stop(){this.onend?.();}
+      abort(){}
+      finish(text,confidence){this.onresult?.({results:[{0:{transcript:text,confidence},length:1,isFinal:true}]});}
+    }
+    let instance;
+    const host={SpeechRecognition:class extends BrowserRecognition{constructor(){super();instance=this;}}};
+    const preview=()=>createLiveSpeechPreview(()=>{},host);
+    let speech=preview();instance.finish('Cronos você está me escutando',0);
+    assert.equal(await speech.finish(2),'Cronos você está me escutando');
+    speech=preview();instance.finish('Calçada',0);
+    assert.equal(await speech.finish(2),null);
+    speech=preview();instance.finish('Cronos você está me escutando',.3);
+    assert.equal(await speech.finish(2),null);
+    '''.replace('SOURCE',json.dumps(source))
+    r=subprocess.run(['node','--experimental-strip-types','--input-type=module','-e',script],capture_output=True,text=True,timeout=5)
+    assert r.returncode==0,r.stderr
+
+
 def test_nonstreaming_chat_also_releases_a_stalled_request(settings,monkeypatch):
     monkeypatch.setattr(app_module,'CONVERSATION_FIRST_REPLY_TIMEOUT_SECONDS',.025)
     cancelled=[]

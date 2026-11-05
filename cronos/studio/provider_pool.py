@@ -23,18 +23,19 @@ class ProviderPool:
         preferred = preferred or chosen
         candidates.sort(key=lambda p: (p['id'] != preferred, p.get('kind') == 'ollama'))
         self.ids = [p['id'] for p in candidates]
-        project['provider_queue'] = self.ids
         project['provider_attempts'] = []
         project['active_provider'] = None
         for identifier in self.ids:
-            if injected is None and cooldowns.get(identifier, 0) > time.monotonic():
-                self.failures.append((identifier, 'pausa após falha recente'))
-                continue
+            # A fresh request from the user gets a fresh attempt. A cooldown
+            # left by an earlier job must not silently empty the whole pool.
+            # Each provider is still tried at most once in this job.
             try:
                 self.adapters[identifier] = injected if injected is not None else factory(identifier)
             except (ProviderError, ValueError, OSError):
                 self.failures.append((identifier, 'configuração indisponível'))
+                self.record_attempt(identifier, 'unavailable', 'configuração indisponível')
         self.ids = [identifier for identifier in self.ids if identifier in self.adapters]
+        project['provider_queue'] = self.ids
 
     def exhausted(self):
         details = '; '.join(identifier + ': ' + reason for identifier, reason in self.failures)
@@ -46,11 +47,19 @@ class ProviderPool:
         if self.index >= len(self.ids): self.exhausted()
         return self.ids[self.index]
 
+    def record_attempt(self, identifier, status, reason=None):
+        attempts = self.project['provider_attempts']
+        if attempts and attempts[-1]['id'] == identifier and attempts[-1]['status'] in {'requested', 'responded', 'partial'}:
+            attempts[-1].update(status=status, **({'reason': reason} if reason else {}))
+        else:
+            attempts.append({'id': identifier, 'status': status, 'at': time.time(),
+                             **({'reason': reason} if reason else {})})
+
     def reject(self, reason, *, cooldown=0):
         identifier = self.current
         self.failures.append((identifier, reason))
         if cooldown: self.cooldowns[identifier] = time.monotonic() + cooldown
-        self.project['provider_attempts'].append({'id': identifier, 'status': 'unavailable', 'reason': reason, 'at': time.time()})
+        self.record_attempt(identifier, 'unavailable', reason)
         self.index += 1
         self.project['active_provider'] = None
         if self.index < len(self.ids):
@@ -60,7 +69,7 @@ class ProviderPool:
         while True:
             identifier = self.current
             self.project['active_provider'] = identifier
-            self.event(self.project, 'provider', 'IA ativa: ' + identifier + '. As demais integrações configuradas permanecem de reserva, sem chamadas paralelas.')
+            self.event(self.project, 'provider', 'Tentando integração de criação: ' + identifier + '. As demais ficam na fila de reserva.')
             try:
                 result = await self.receive(identifier,system,messages)
                 if transform is not None: result = transform(result)
@@ -68,7 +77,7 @@ class ProviderPool:
                 raise  # Explicit cancellation never starts another provider.
             except (ProviderError, TimeoutError, httpx.HTTPError, OSError, ValueError) as exc:
                 if allow_partial and getattr(exc,'kind',None) in {'output_limit','output_interrupted','format'} and (getattr(exc,'partial_output',None) or '').lstrip().startswith(('{','```json')):
-                    self.project['provider_attempts'].append({'id':identifier,'status':'partial','reason':'parte recebida; continuação necessária','at':time.time()})
+                    self.record_attempt(identifier,'partial','parte recebida; continuação necessária')
                     self.event(self.project,'checkpoint',identifier+' entregou parte do código. Preservando esse trecho para continuar sem reiniciar o projeto.')
                     return {'reply':exc.partial_output,'incomplete':True,'tool_calls':[],'topics':[]}
                 # No raw server response, prompt or credential reaches the event log.
@@ -83,7 +92,7 @@ class ProviderPool:
                 await asyncio.sleep(0)
                 continue
             self.cooldowns.pop(identifier, None)
-            self.project['provider_attempts'].append({'id': identifier, 'status': 'responded', 'at': time.time()})
+            self.record_attempt(identifier, 'validated' if transform is not None else 'responded')
             return result
 
     async def receive(self,identifier,system,messages):
@@ -101,6 +110,7 @@ class ProviderPool:
                 last_event=now;last_size=size
         token=progress_sink.set(progress)
         task=asyncio.create_task(getattr(self.adapters[identifier],'reply_structured',self.adapters[identifier].reply)(system,messages))
+        self.project['provider_attempts'].append({'id':identifier,'status':'requested','at':time.time()})
         try:
             while True:
                 remaining=self.timeout-(time.monotonic()-started)

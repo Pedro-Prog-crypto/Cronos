@@ -15,6 +15,34 @@ from cronos.app import create_app
 from test_backend import settings,AUTH
 
 
+def test_normal_question_reaches_a_third_configured_reserve_without_a_council_round(settings, monkeypatch):
+    ids = ['gemini', 'reserve1', 'reserve2', 'reserve3']
+    monkeypatch.setattr('cronos.integrations.provider_catalog',
+                        lambda _: [{'id': name, 'configured': True} for name in ids])
+    monkeypatch.setattr(evolution, 'explanation_providers', lambda _: ids)
+    calls = []
+
+    class Route:
+        def __init__(self, name): self.name = name
+        async def reply(self, _system, _messages):
+            calls.append(self.name)
+            if self.name == 'gemini': raise ProviderError('key rejected', 401)
+            if self.name == 'reserve1': raise ProviderError('quota', 429)
+            if self.name == 'reserve2': return {'reply': ' ', 'topics': [], 'tool_calls': []}
+            return {'reply': 'A quarta integração respondeu à pergunta.', 'topics': [], 'tool_calls': []}
+
+    monkeypatch.setattr('cronos.conversation_transport.conversation_provider',
+                        lambda route: Route(route.provider))
+    with TestClient(create_app(settings)) as client:
+        response = client.post('/chat/stream', headers=AUTH, json={'message': 'Você prefere azul ou verde?'})
+    assert response.status_code == 200
+    result = json.loads(response.text.splitlines()[-1])['result']
+    assert result['reply'] == 'A quarta integração respondeu à pergunta.'
+    assert result['provider_used'] == 'reserve3' and result['fallback_used']
+    assert result['routes_attempted'] == calls == ids
+    assert result['timings_ms']['provider_calls'] == 4
+
+
 def test_slow_complete_answer_is_not_discarded_without_a_reserve(settings, monkeypatch):
     monkeypatch.setattr(evolution, 'FIRST_REPLY_TIMEOUT_SECONDS', .005)
     monkeypatch.setattr(evolution, 'read', lambda _: {'routing': {'enabled': False, 'fallbacks': []}})

@@ -85,7 +85,7 @@ def test_timeout_advances_to_next_provider_without_waiting_for_quota():
     assert project['active_provider'] == 'mistral' and len(backup.calls) == 1
 
 
-def test_recent_service_failure_is_skipped_and_retried_after_pause(monkeypatch):
+def test_explicit_new_job_retries_a_provider_even_after_recent_failure(monkeypatch):
     clock = [100]
     monkeypatch.setattr('cronos.studio.provider_pool.time.monotonic', lambda: clock[0])
     first, backup = Failing(), VisualBuilder()
@@ -95,11 +95,43 @@ def test_recent_service_failure_is_skipped_and_retried_after_pause(monkeypatch):
     assert cooldowns['gemini'] == 160
     pool, _, _ = pool_for({'gemini': first, 'mistral': backup}, cooldowns=cooldowns)
     asyncio.run(pool.reply('EXATAMENTE três direções', []))
-    assert len(first.calls) == 1
+    assert len(first.calls) == 2
     clock[0] = 161
     pool, _, _ = pool_for({'gemini': first, 'mistral': backup}, cooldowns=cooldowns)
     asyncio.run(pool.reply('EXATAMENTE três direções', []))
-    assert len(first.calls) == 2
+    assert len(first.calls) == 3
+
+
+def test_fixed_studio_queue_reaches_a_third_reserve_and_records_real_attempts():
+    adapters = {'primary': Failing(ProviderError('private key error', 401)),
+                'reserve1': Failing(ProviderError('quota', 429)),
+                'reserve2': Failing(ProviderError('offline', 503)),
+                'reserve3': VisualBuilder()}
+    pool, project, events = pool_for(adapters)
+    result = asyncio.run(pool.reply('Proponha EXATAMENTE três direções', [{'role': 'user', 'content': 'pizzaria'}]))
+    assert result['reply'] and project['provider_queue'] == list(adapters)
+    assert [(item['id'], item['status']) for item in project['provider_attempts']] == [
+        ('primary', 'unavailable'), ('reserve1', 'unavailable'),
+        ('reserve2', 'unavailable'), ('reserve3', 'responded')]
+    assert all(len(adapter.calls) == 1 for adapter in adapters.values())
+    assert 'private key error' not in str(events)
+
+
+def test_studio_marks_adapter_that_cannot_start_without_claiming_it_was_called():
+    project = {'provider': 'primary'}
+    backup = VisualBuilder()
+    def factory(identifier):
+        if identifier == 'primary': raise ProviderError('private initialization detail', 503)
+        return backup
+    pool = ProviderPool(project, [{'id': 'primary', 'configured': True},
+                                  {'id': 'backup', 'configured': True}], factory,
+                        lambda *_: None, {}, timeout=1)
+    assert project['provider_queue'] == ['backup']
+    assert [(item['id'], item['status'], item['reason']) for item in project['provider_attempts']] == [
+        ('primary', 'unavailable', 'configuração indisponível')]
+    asyncio.run(pool.reply('EXATAMENTE três direções', []))
+    assert len(backup.calls) == 1
+    assert 'private initialization detail' not in str(project)
 
 
 def configured(settings, monkeypatch, adapters):

@@ -79,11 +79,14 @@ def test_chat_reports_real_council_and_voice_uses_text_route(settings, monkeypat
     with TestClient(create_app(replace(settings,direct_audio_chat=True,gemini_transport='live'))) as client:
         status=client.get('/status',headers=AUTH).json()
         assert status['council_enabled'] and not status['direct_audio_chat']
-        response=client.post('/chat/stream',headers=AUTH,json={'message':'Você prefere azul ou verde?'})
+        response=client.post('/chat/stream',headers=AUTH,json={'message':'Consulte o conselho de IAs: você prefere azul ou verde?'})
         result=json.loads(response.text.splitlines()[-1])['result']
         assert result['council']['contributed']==['gemini','other']
         assert result['reply']=='Resposta conjunta e coerente.'
         assert result['timings_ms']['provider_calls']==3
+        response=client.post('/chat/stream',headers=AUTH,json={'message':'Você prefere azul ou verde?'})
+        direct=json.loads(response.text.splitlines()[-1])['result']
+        assert 'council' not in direct and direct['timings_ms']['provider_calls']==1
         response=client.post('/chat/stream',headers=AUTH,json={'message':'Oi Cronos'})
         greeting=json.loads(response.text.splitlines()[-1])['result']
         assert greeting['reply']=='Resposta conjunta e coerente.'

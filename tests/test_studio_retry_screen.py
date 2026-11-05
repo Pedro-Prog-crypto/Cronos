@@ -55,11 +55,13 @@ def test_explicit_retry_after_every_adapter_failed_keeps_request_assets_and_revi
         assert c.post(url,headers=AUTH,json={}).status_code==200
         again=wait(c,p)
         assert again['status']=='failed' and again['revision']==p['revision']
-        assert counts=={k:len(v.calls) for k,v in adapters.items()} # cooldown avoids repeating 429/503
+        # A user-triggered retry genuinely tries the configured queue again;
+        # cooldowns from an earlier job must not claim the IAs were activated.
+        assert {k:len(v.calls) for k,v in adapters.items()} == {
+            'gemini': counts['gemini'], 'mistral': counts['mistral']+1,
+            'ollama': counts['ollama']+1}
         adapters['mistral']=Builder()
-        # Simulate the quota reset or a newly valid credential. Until then a
-        # repeated click must not spend the same unavailable quota again.
-        c.app.state.studio.provider_cooldowns.pop('mistral',None)
+        # Simulate a reset quota or valid credential for the next explicit retry.
         result=c.post(url,headers=AUTH,json={});assert result.status_code==200,result.text
         done=wait(c,p)
         assert done['status']=='ready' and done['id']==p['id'] and done['revision']==p['revision']+1

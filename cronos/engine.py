@@ -1,6 +1,7 @@
 """Orquestração de conversa/ferramentas, independente da interface."""
 import asyncio
 import json
+import re as regex
 import sqlite3
 import time
 from dataclasses import replace
@@ -31,7 +32,6 @@ class Engine:
         self.settings, self.memory, self.registry, self.provider = settings, memory, registry, provider
         self.screen_observations = {}
         self.memory_refresh = None
-        self._explanation_index = 0
         self._learning = None
 
     def learning(self):
@@ -208,14 +208,20 @@ class Engine:
         results, used = [], set()
         from cronos.conversation_transport import conversation_provider
         from cronos.council import CouncilProvider, council_ids
+        from cronos.memory_policy import normalized as normalized_message
         route_settings = self.settings
         available_ids = council_ids(self.settings) if self.provider is None and not presence else []
-        # Explanations should reach a speaking model directly. A serial
-        # council synthesis can consume the entire reply recovery deadline.
-        council_active = self.provider is None and audio is None and not greeting and not presence and not explanation and not visual_request and not visual_capability and not prefetch_news and len(available_ids) > 1
+        # Ask every model only when the user explicitly requests a council.
+        # Ordinary questions take one answer route with configured reserves;
+        # a mandatory multi-model round adds latency and can fail with quotas.
+        council_requested = bool(regex.search(r'\b(?:conselho de ias?|compare as ias|consulte todas as ias)\b',
+                                           normalized_message(message)))
+        council_active = (self.provider is None and audio is None and council_requested
+                          and not greeting and not presence and not visual_capability
+                          and not prefetch_news and len(available_ids) > 1)
         if prefetch_news:
             route_settings = replace(route_settings, provider_timeout=min(route_settings.provider_timeout, NEWS_MODEL_TIMEOUT_SECONDS))
-        if self.provider is None and not presence and self.settings.provider == 'ollama' and 'ollama' not in available_ids and available_ids:
+        if self.provider is None and not presence and self.settings.provider not in available_ids and available_ids:
             chosen = available_ids[0]
             route_settings = replace(self.settings, provider=chosen,
                                      gemini_transport='rest' if chosen == 'gemini' else self.settings.gemini_transport)
@@ -226,8 +232,8 @@ class Engine:
                 # Large dictations need the widest configured text context.
                 # Gemini accepts these inputs; rotation can choose a smaller
                 # provider whose context fails before generation even begins.
-                chosen = 'gemini' if len(message) > 30000 and 'gemini' in routes else routes[self._explanation_index % len(routes)]
-                self._explanation_index += 1
+                chosen = ('gemini' if len(message) > 30000 and 'gemini' in routes else
+                          route_settings.provider if route_settings.provider in routes else routes[0])
                 route_settings = replace(self.settings, provider=chosen,
                                          gemini_transport='rest' if chosen == 'gemini' else self.settings.gemini_transport,
                                          output_tokens=max(3600, self.settings.output_tokens or 0),
@@ -247,7 +253,7 @@ class Engine:
             provider = self.provider or (CouncilProvider(route_settings) if council_active else conversation_provider(route_settings))
         if self.provider is None and audio is None and not council_active and not greeting and not presence and not visual_capability:
             from cronos.evolution import ResilientProvider
-            provider = ResilientProvider(route_settings, provider, all_configured=explanation or visual_request or prefetch_news)
+            provider = ResilientProvider(route_settings, provider, all_configured=True)
         if learning_action:
             from cronos.learning import LearningConversationProvider
             provider = LearningConversationProvider(provider, self.learning(), str(session),
@@ -398,5 +404,6 @@ class Engine:
                 "notes": notes, "tool_results": results, "warnings": list(self.memory.warnings),
                 "provider_used":final.get("provider_used", route_settings.provider),
                 "fallback_used":final.get("fallback_used", False), "timings_ms":timings,
+                **({"routes_attempted":final['routes_attempted']} if final.get('routes_attempted') else {}),
                 **({"council":final['council']} if final.get('council') else {}),
                 **({"recognized_text":recognized_text} if recognized_text is not None else {})}

@@ -183,8 +183,7 @@ def install_studio(app, authenticate):
         for entry in entries:
             if entry['id'] == 'gemini': entry['model'] = settings.gemini_model
             entry['studio_role'] = 'visual_review' if entry['id'] == 'gemini' else 'builder'
-            entry['ready_for_attempt'] = entry['configured'] and (
-                entry['id'] == 'gemini' or app.state.studio.provider_cooldowns.get(entry['id'], 0) <= time.monotonic())
+            entry['ready_for_attempt'] = entry['configured']
         builders = [entry for entry in sorted(entries, key=lambda entry: entry['id'] == 'ollama')
                     if entry['studio_role'] == 'builder' and entry['configured']]
         selected = settings.provider if any(entry['id'] == settings.provider for entry in builders) else (builders[0]['id'] if builders else '')
