@@ -52,6 +52,14 @@ class LocalRecognizer:
     def prepare(self):
         with self.lock:self._load()
 
+    def live_listener(self):
+        """A private recognizer for one live microphone turn."""
+        with self.lock:
+            factory=self._load()
+            listener=factory(self.model,16000)
+        if hasattr(listener,'SetWords'):listener.SetWords(True)
+        return LiveListener(listener)
+
     def keyword_listener(self):
         with self.lock:
             factory=self._load()
@@ -89,6 +97,34 @@ class LocalRecognizer:
             if not text or (confidences and sum(confidences)/len(confidences)<.55):
                 raise ValueError('Não consegui reconhecer a fala com segurança. Repita a pergunta mais perto do microfone; ela não foi enviada à IA.')
             return text
+
+
+class LiveListener:
+    """Accumulate confirmed Vosk phrases and expose the current hypothesis."""
+    def __init__(self,recognizer):
+        self.recognizer=recognizer
+        self.parts=[]
+        self.confidences=[]
+
+    def _collect(self,data):
+        text=data.get('text','').strip()
+        if text:self.parts.append(text)
+        self.confidences.extend(word['conf'] for word in data.get('result',[])
+                                if isinstance(word,dict) and isinstance(word.get('conf'),(float,int)))
+
+    def feed(self,frames):
+        if self.recognizer.AcceptWaveform(frames):
+            self._collect(json.loads(self.recognizer.Result()))
+            partial=''
+        else:
+            partial=json.loads(self.recognizer.PartialResult()).get('partial','').strip()
+        return ' '.join([*self.parts,*([partial] if partial else [])]).strip()[:16000]
+
+    def finish(self):
+        self._collect(json.loads(self.recognizer.FinalResult()))
+        text=' '.join(self.parts).strip()[:16000]
+        valid=bool(text) and (not self.confidences or sum(self.confidences)/len(self.confidences)>=.55)
+        return text if valid else ''
 
 
 class KeywordListener:

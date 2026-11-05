@@ -8,7 +8,7 @@ import {spokenText} from '../audio/spokenText';
 import captureWorkletUrl from '../audio/capture.worklet.js?worker&url';
 import vadWasmUrl from '@echogarden/fvad-wasm/fvad.wasm?url';
 import {createSpeechDetector} from '../audio/speechDetector.js';
-import {createLiveSpeechPreview} from '../audio/liveSpeechPreview';
+import {createReliableSpeechPreview} from '../audio/reliableSpeechPreview';
 
 let vadBinary:Promise<ArrayBuffer>|null=null;
 function loadVad(){
@@ -238,22 +238,22 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
   const [ready,setReady]=useState(false);
   const audioLevelSource=useRef(0),enabled=useRef(false),opening=useRef(false),processing=useRef(false),mounted=useRef(true);
   const latest=useRef({onTranscript,onError,local,blocked,preferences,onAudio,interrupt,onRecognitionStart,onPartial,collecting});latest.current={onTranscript,onError,local,blocked,preferences,onAudio,interrupt,onRecognitionStart,onPartial,collecting};
-  const preview=useRef<ReturnType<typeof createLiveSpeechPreview>>(null);
+  const preview=useRef<ReturnType<typeof createReliableSpeechPreview>|null>(null);
   const previewVersion=useRef(0),activePartial=useRef(''),pendingPartials=useRef<string[]>([]);
   const showPartial=()=>latest.current.onPartial?.([...pendingPartials.current,activePartial.current].filter(Boolean).join(' ').trim());
   const beginPreview=()=>{
     preview.current?.abort();const version=++previewVersion.current;activePartial.current='';showPartial();
-    preview.current=createLiveSpeechPreview(text=>{if(version!==previewVersion.current)return;activePartial.current=text;showPartial();});
+    preview.current=createReliableSpeechPreview(text=>{if(version!==previewVersion.current)return;activePartial.current=text;showPartial();},getToken());
   };
   const keywordSocket=useRef<WebSocket|null>(null),keywordReady=useRef(false),keywordError=useRef(false);
   const [wakeOpen,setWakeOpen]=useState(false),wakeUntil=useRef(0),turnWake=useRef(false);
   const captureVersion=useRef(0),resumeAfter=useRef(0);
-  const resources=useRef<{stream?:MediaStream;recorded?:MediaStream;context?:AudioContext;recorder?:MediaRecorder;node?:AudioWorkletNode;timer?:ReturnType<typeof setInterval>;abort?:AbortController;vad?:Awaited<ReturnType<typeof createSpeechDetector>>;submit?:()=>void}>({});
+  const resources=useRef<{stream?:MediaStream;recorded?:MediaStream;context?:AudioContext;recorder?:MediaRecorder;node?:AudioWorkletNode;processor?:ScriptProcessorNode;timer?:ReturnType<typeof setInterval>;abort?:AbortController;vad?:Awaited<ReturnType<typeof createSpeechDetector>>;submit?:()=>void}>({});
   const lastRecording=useRef<{audio:Blob;endpoint_ms:number;wake_confirmed:boolean;durationSeconds:number}|null>(null);
-  const pendingSegments=useRef<Array<{audio:Blob;endpoint_ms:number;durationSeconds:number}>>([]);
+  const pendingSegments=useRef<Array<{audio:Blob;endpoint_ms:number;durationSeconds:number;previewText:Promise<string|null>|null}>>([]);
   const [retryAvailable,setRetryAvailable]=useState(false);
   const acknowledge=useCallback(()=>{lastRecording.current=null;setRetryAvailable(false);},[]);
-  const deliverRecording=useCallback(async(audio:Blob,endpoint_ms:number,retryWake?:boolean,durationSeconds=0)=>{
+  const deliverRecording=useCallback(async(audio:Blob,endpoint_ms:number,retryWake?:boolean,durationSeconds=0,liveText:Promise<string|null>|null=null)=>{
     const version=captureVersion.current;
     const wake_confirmed=retryWake??turnWake.current;turnWake.current=false;
     lastRecording.current={audio,endpoint_ms,wake_confirmed,durationSeconds};setRetryAvailable(false);
@@ -264,10 +264,11 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
     try{
       // A confirmed browser transcript already contains the actual question.
       // Sending that text avoids a second, slower recognition pass in Gemini Live.
-      const previewText=latest.current.collecting?null:await preview.current?.finish(durationSeconds);
+      const previewText=liveText?await liveText:latest.current.collecting?null:await preview.current?.finish(durationSeconds);
       if(!latest.current.collecting)preview.current=null;
       if(previewText){
         acknowledge();
+        if(latest.current.collecting){pendingPartials.current.shift();showPartial();}
         latest.current.onTranscript(previewText,{recognition_ms:Math.round(performance.now()-recognitionStarted),endpoint_ms,wake_confirmed});
         return;
       }
@@ -299,22 +300,23 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
         processing.current=false;
         if(!latest.current.collecting)resumeAfter.current=performance.now()+250;
         const next=latest.current.collecting?pendingSegments.current.shift():undefined;
-        if(next&&enabled.current)void deliverRecording(next.audio,next.endpoint_ms,undefined,next.durationSeconds);
+        if(next&&enabled.current)void deliverRecording(next.audio,next.endpoint_ms,undefined,next.durationSeconds,next.previewText);
         else if(mounted.current)setTranscribing(false);
       }
     }
   },[acknowledge]);
   const deliverOrQueue=useCallback(async(audio:Blob,endpoint_ms:number,durationSeconds:number)=>{
     if(processing.current&&latest.current.collecting&&pendingSegments.current.length>=16){latest.current.onError('O serviço de transcrição está atrasado e a fila do ditado encheu. Confira o texto antes de continuar.');return;}
+    let previewText:Promise<string|null>|null=null;
     if(latest.current.collecting){
       const segmentPreview=preview.current;preview.current=null;previewVersion.current++;
       pendingPartials.current.push(activePartial.current);activePartial.current='';showPartial();
-      void segmentPreview?.finish(durationSeconds);
+      previewText=segmentPreview?.finish(durationSeconds)||null;
     }
     if(processing.current&&latest.current.collecting){
-      pendingSegments.current.push({audio,endpoint_ms,durationSeconds});return;
+      pendingSegments.current.push({audio,endpoint_ms,durationSeconds,previewText});return;
     }
-    await deliverRecording(audio,endpoint_ms,undefined,durationSeconds);
+    await deliverRecording(audio,endpoint_ms,undefined,durationSeconds,previewText);
   },[deliverRecording]);
   const retry=useCallback(async()=>{
     const saved=lastRecording.current;if(!saved||processing.current||latest.current.blocked)return;
@@ -327,6 +329,7 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
     if(resources.current.timer)clearInterval(resources.current.timer);
     const recorder=resources.current.recorder;if(recorder?.state==='recording')recorder.stop();
     if(resources.current.node){resources.current.node.port.onmessage=null;try{resources.current.node.disconnect();}catch{}resources.current.node=undefined;}
+    if(resources.current.processor){resources.current.processor.onaudioprocess=null;try{resources.current.processor.disconnect();}catch{}resources.current.processor=undefined;}
     resources.current.recorded?.getTracks().forEach(track=>track.stop());resources.current.recorded=undefined;
     resources.current.stream?.getTracks().forEach(track=>{track.onended=null;track.stop();});const closing=resources.current.context;if(closing&&closing.state!=='closed')void closing.close().catch(()=>{});
     resources.current.stream=undefined;resources.current.context=undefined;resources.current.submit=undefined;audioLevelSource.current=0;
@@ -365,6 +368,7 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
           if(event.data.empty){latest.current.onError('Ainda não há fala gravada para enviar. Fale perto do microfone e tente novamente.');return;}
           if(event.data.keywordPre){const socket=keywordSocket.current,frames=event.data.keywordPre as Int16Array;if(keywordReady.current&&socket?.readyState===WebSocket.OPEN&&socket.bufferedAmount<12800)for(let offset=0;offset<frames.length;offset+=1600)socket.send(frames.slice(offset,offset+1600).buffer);return;}
           if(event.data.keyword){const socket=keywordSocket.current;if(keywordReady.current&&socket?.readyState===WebSocket.OPEN&&socket.bufferedAmount<12800)socket.send(event.data.keyword.buffer);return;}
+          if(event.data.liveFrames){if(event.data.rate===16000)preview.current?.push(event.data.liveFrames as Int16Array);return;}
           if(typeof event.data.active==='boolean'){if(event.data.active&&!preview.current&&!latest.current.blocked&&(!latest.current.interrupt?.wakeOnly||wakeUntil.current>performance.now()))beginPreview();if(mounted.current)setCapturing(event.data.active&&(!latest.current.interrupt?.wakeOnly||wakeUntil.current>performance.now()));return;}
           if(!enabled.current||latest.current.blocked||(processing.current&&!latest.current.collecting))return;
           if(latest.current.interrupt?.wakeOnly&&wakeUntil.current<performance.now())return;
@@ -397,11 +401,25 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
       if(typeof MediaRecorder==='undefined')throw new Error('Esta versão do WebView2 não oferece captura de áudio. Atualize o WebView2 para usar o microfone.');
       const recorded=context.createMediaStreamDestination(),gain=context.createGain();recorded.channelCount=1;resources.current.recorded=recorded.stream;context.createMediaStreamSource(stream).connect(gain);gain.connect(recorded);
       meter.fftSize=512;const values=new Float32Array(512),vadSamples=new Int16Array(320);let heard=false,lastSpeech=0,started=0,discard=false,speechRun=0,voiceReference=0,voiceLevel=0,energyMean=0,energyVariance=0;
+      const recent:Int16Array[]=[];
+      // The recorder path is used when AudioWorklet is absent. Copy its PCM to
+      // the same live recognizer without waiting for the encoded file to end.
+      try{
+        const processor=context.createScriptProcessor(2048,1,1);resources.current.processor=processor;
+        context.createMediaStreamSource(stream).connect(processor);processor.connect(context.destination);
+        processor.onaudioprocess=event=>{
+          if(!enabled.current||latest.current.blocked||resources.current.recorder?.state!=='recording')return;
+          const input=event.inputBuffer.getChannelData(0),part=new Int16Array(input.length),gainValue=latest.current.preferences?.microphone_gain??2;
+          for(let i=0;i<input.length;i++){const value=Math.max(-1,Math.min(1,input[i]*gainValue));part[i]=value<0?value*32768:value*32767;}
+          if(heard)preview.current?.push(part);
+          else{recent.push(part);if(recent.length>8)recent.shift();}
+        };
+      }catch{/* Browser recognition and the saved recording still work. */}
       const begin=()=>{
         const version=captureVersion.current;
         const type=['audio/webm;codecs=opus','audio/mp4','audio/ogg;codecs=opus'].find(type=>MediaRecorder.isTypeSupported(type));
         const recorder=new MediaRecorder(recorded.stream,type?{mimeType:type}:undefined);resources.current.recorder=recorder;
-        const parts:BlobPart[]=[];let bytes=0;heard=false;discard=false;speechRun=0;voiceReference=0;voiceLevel=0;energyMean=0;energyVariance=0;started=performance.now();lastSpeech=started;
+        const parts:BlobPart[]=[];let bytes=0;heard=false;recent.length=0;discard=false;speechRun=0;voiceReference=0;voiceLevel=0;energyMean=0;energyVariance=0;started=performance.now();lastSpeech=started;
         recorder.ondataavailable=event=>{parts.push(event.data);bytes+=event.data.size;if(bytes>10*1024*1024){discard=true;recorder.stop();}};
         recorder.onerror=()=>{discard=true;latest.current.onError('Falha na gravação do microfone.');stop();};
         recorder.onstop=async()=>{
@@ -438,7 +456,7 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
           &&rms>.00006&&(rms>voiceReference*.18||Math.sqrt(energyVariance)>energyMean*.25);
         if(speech){voiceLevel=voiceLevel?voiceLevel*.8+rms*.2:rms;voiceReference=Math.max(voiceReference,voiceLevel);}
         speechRun=speech?speechRun+80:0;
-        if(speechRun>=160){if(!heard){beginPreview();setCapturing(!latest.current.interrupt?.wakeOnly||wakeUntil.current>now);}heard=true;lastSpeech=now;}
+        if(speechRun>=160){if(!heard){beginPreview();for(const part of recent)preview.current?.push(part);recent.length=0;setCapturing(!latest.current.interrupt?.wakeOnly||wakeUntil.current>now);}heard=true;lastSpeech=now;}
         if((heard&&now-lastSpeech>(latest.current.collecting?1900:1400))||(now-started>(heard||!vad?58000:3000)))recorder.stop();
       },80);
     }catch(error){const cancelled=!enabled.current;stop();if(!cancelled){const name=error instanceof DOMException?error.name:'';latest.current.onError(name==='NotAllowedError'||name==='SecurityError'?'Permita o microfone para o Cronos no navegador e tente novamente.':name==='NotReadableError'?'O Windows não liberou o microfone. Feche o aplicativo que está usando o dispositivo e tente novamente.':name==='NotFoundError'?'Nenhum microfone foi encontrado. Conecte um dispositivo e tente novamente.':error instanceof Error?error.message.slice(0,220):'Não foi possível abrir o microfone.');}}

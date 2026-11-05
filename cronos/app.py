@@ -224,7 +224,9 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
     app = FastAPI(title="Cronos", version="0.5.0", lifespan=lifespan, docs_url=None, redoc_url=None)
     from cronos.live_screen import install as install_live_screen
     from cronos.voice_interrupt import install_interrupt
+    from cronos.live_transcription import install as install_live_transcription
     install_interrupt(app,settings,local_recognizer)
+    install_live_transcription(app,settings,local_recognizer)
     static = Path(__file__).parent / "static"
     app.mount("/static", StaticFiles(directory=static), name="static")
     ui = Path(__file__).parent / "ui"
