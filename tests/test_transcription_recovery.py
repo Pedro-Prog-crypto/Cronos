@@ -32,6 +32,28 @@ def test_prepared_local_recognizer_handles_microphone_check_without_cloud(settin
     assert result.status_code==200 and result.json()['text']=='Cronos, está me escutando?'
 
 
+def test_online_cloud_asr_does_not_lose_to_a_fast_wrong_local_guess(settings, monkeypatch):
+    calls=[]
+    class Local:
+        model=object()
+        def prepare(self):pass
+        def transcribe(self, audio):
+            calls.append('local')
+            return 'Calçada de matemática'
+    class Fish:
+        def __init__(self):self.asr=self
+        async def __aenter__(self):return self
+        async def __aexit__(self,*args):pass
+        async def transcribe(self,**kwargs):
+            await asyncio.sleep(.03)
+            return type('Result',(),{'text':'Quem foi Platão e sua academia?'})()
+    monkeypatch.setattr('cronos.recognition.LocalRecognizer',Local)
+    with TestClient(create_app(replace(settings,fish_key='fixture',transcription_provider='fish'),fish_factory=Fish)) as client:
+        result=client.post('/voice/transcribe',headers={**AUTH,'Content-Type':'audio/wav'},content=wav())
+    assert result.status_code==200 and result.json()['text']=='Quem foi Platão e sua academia?'
+    assert calls==[]
+
+
 def test_slow_model_preparation_does_not_block_cloud_transcription(settings, monkeypatch):
     started, release = threading.Event(), threading.Event()
     class SlowRecognizer:

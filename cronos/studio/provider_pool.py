@@ -39,8 +39,19 @@ class ProviderPool:
 
     def exhausted(self):
         details = '; '.join(identifier + ': ' + reason for identifier, reason in self.failures)
+        reasons = ' '.join(reason for _, reason in self.failures)
+        actions = []
+        if 'HTTP 401' in reasons or 'HTTP 403' in reasons:
+            actions.append('Atualize a chave rejeitada em Integrações.')
+        if 'HTTP 429' in reasons:
+            actions.append('Aguarde a cota do provedor voltar ou escolha outro com cota.')
+        if 'Ollama' in reasons:
+            actions.append('Para usar Ollama, inicie o serviço e instale o modelo escolhido.')
+        if not self.ids:
+            actions.append('Configure uma IA de código em Integrações; o Gemini está reservado à análise visual.')
         raise ProviderError('Nenhuma integração de criação disponível conseguiu concluir esta etapa. Confira as chaves e os limites de uso dos provedores de código. '
-                            'Pedido, recursos e última versão preservados.' + (' ' + details if details else ''))
+                            'Pedido, recursos e última versão preservados.' + (' ' + details if details else '') +
+                            (' ' + ' '.join(actions) if actions else ''))
 
     @property
     def current(self):
@@ -83,7 +94,10 @@ class ProviderPool:
                 # No raw server response, prompt or credential reaches the event log.
                 quota = isinstance(exc, ProviderError) and exc.status == 429
                 reason = 'limite de uso (HTTP 429)' if quota else {400:'requisição rejeitada (HTTP 400)',401:'chave rejeitada (HTTP 401)',403:'acesso negado (HTTP 403)',404:'modelo ou endereço indisponível (HTTP 404)',422:'parâmetros incompatíveis (HTTP 422)'}.get(getattr(exc,'http_status',None) or getattr(exc,'status',None),'sem resposta utilizável nesta tentativa')
-                if getattr(exc,'kind',None)=='output_limit':reason='código interrompido pelo limite de saída do modelo'
+                if identifier == 'ollama' and isinstance(exc,ProviderError) and exc.http_status is None:
+                    reason='Ollama indisponível (serviço desligado ou modelo local ausente)'
+                elif getattr(exc,'kind',None)=='configuration':reason='chave ou modelo não configurado'
+                elif getattr(exc,'kind',None)=='output_limit':reason='código interrompido pelo limite de saída do modelo'
                 elif getattr(exc,'kind',None)=='format':reason='resposta incompleta ou formato JSON inválido'
                 elif isinstance(exc,(TimeoutError,httpx.TimeoutException)):reason='tempo de resposta esgotado'
                 status = getattr(exc,'http_status',None) or getattr(exc,'status',None)

@@ -183,9 +183,9 @@ def install_studio(app, authenticate):
         for entry in entries:
             if entry['id'] == 'gemini': entry['model'] = settings.gemini_model
             entry['studio_role'] = 'visual_review' if entry['id'] == 'gemini' else 'builder'
-            entry['ready_for_attempt'] = entry['configured']
+            entry['ready_for_attempt'] = entry['configured'] and (entry['id'] != 'ollama' or service().ollama_ready())
         builders = [entry for entry in sorted(entries, key=lambda entry: entry['id'] == 'ollama')
-                    if entry['studio_role'] == 'builder' and entry['configured']]
+                    if entry['studio_role'] == 'builder' and entry['ready_for_attempt']]
         selected = settings.provider if any(entry['id'] == settings.provider for entry in builders) else (builders[0]['id'] if builders else '')
         photos = settings.privacy_mode == 'online' and app.state.panels.preferences.web_enabled
         categories = [{**entry, 'remote_images': photos, 'references': [{**ref, 'remote_images': photos} for ref in entry['references']]} for entry in catalog()]

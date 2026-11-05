@@ -4,6 +4,7 @@ import base64
 import io
 import json
 from dataclasses import replace
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -14,6 +15,7 @@ from cronos.app import create_app
 from cronos.providers import ProviderError, Ollama
 from cronos.integrations import CompatibleProvider, ProviderSpec
 from cronos.studio.provider_pool import ProviderPool
+from cronos.studio.service import Studio
 from test_backend import settings, AUTH
 from test_studio import Builder, new, generate, get
 from test_studio_visuals import VisualBuilder, wait
@@ -60,6 +62,34 @@ def test_all_registered_alternatives_are_attempted_serially_without_fixed_cap():
     assert project['active_provider'] == 'last'
     assert all(len(adapter.calls) == 1 for adapter in adapters.values())
     assert len(project['provider_queue']) == 36
+
+
+def test_no_site_builder_reports_real_blockers_and_next_actions():
+    adapters = {'openai': Failing(ProviderError('private key must stay private', 401)),
+                'mistral': Failing(ProviderError('private quota detail', 429)),
+                'ollama': Failing(ProviderError('private local address'))}
+    pool, project, _ = pool_for(adapters)
+    with pytest.raises(ProviderError) as caught:
+        asyncio.run(pool.reply('Crie o site', [{'role': 'user', 'content': 'pizzaria'}]))
+    message = str(caught.value)
+    assert 'HTTP 401' in message and 'HTTP 429' in message
+    assert 'Atualize a chave' in message and 'Aguarde a cota' in message
+    assert 'inicie o serviço' in message and 'private' not in message
+    assert [item['id'] for item in project['provider_attempts']] == list(adapters)
+
+
+def test_studio_does_not_offer_ollama_without_its_local_model(settings, monkeypatch):
+    studio = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(engine=SimpleNamespace(settings=settings))))
+    monkeypatch.setattr(httpx, 'get', lambda *args, **kwargs: httpx.Response(200, json={'models': []}))
+    assert Studio.ollama_ready(studio) is False
+    monkeypatch.setattr(httpx, 'get', lambda *args, **kwargs: httpx.Response(200, json={'models': [{'name': settings.ollama_model}]}))
+    assert Studio.ollama_ready(studio) is True
+    monkeypatch.setattr(Studio, 'ollama_ready', lambda self: False)
+    with TestClient(create_app(settings)) as client:
+        listing = client.get('/studio/catalog', headers=AUTH).json()
+    ollama = next(item for item in listing['providers'] if item['id'] == 'ollama')
+    assert ollama['configured'] and not ollama['ready_for_attempt']
+    assert listing['selected'] == ''
 
 
 def test_cancelling_an_inflight_call_does_not_launch_a_reserve():

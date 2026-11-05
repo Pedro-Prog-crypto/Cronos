@@ -50,10 +50,13 @@ export function createLocalSpeechPreview(onUpdate:(text:string)=>void,token:stri
   async finish(durationSeconds:number){
    if(closed)return null;
    finishRequested=true;flush();
-   if(!complete&&!failed)await Promise.race([
-    new Promise<void>(resolve=>{finished=resolve;}),
-    new Promise<void>(resolve=>setTimeout(resolve,2500)),
-   ]);
+   if(!complete&&!failed){
+    let timeout:ReturnType<typeof setTimeout>|undefined;
+    try{await Promise.race([
+     new Promise<void>(resolve=>{finished=resolve;}),
+     new Promise<void>(resolve=>{timeout=setTimeout(resolve,2500);}),
+    ]);}finally{clearTimeout(timeout);}
+   }
    closed=true;finished=null;pending=[];socket.close();
    const words=finalText.split(/\s+/).filter(Boolean);
    return !failed&&complete&&words.length>=Math.max(3,Math.floor(durationSeconds*.75))?finalText:null;

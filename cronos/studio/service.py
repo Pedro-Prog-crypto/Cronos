@@ -243,6 +243,27 @@ class Studio:
             raise ValueError('Nenhuma IA de criação configurada. O Gemini está reservado à análise visual; configure outro provedor de código no painel Integrações.')
         return chosen if chosen in builders else builders[0]
 
+    def ollama_ready(self):
+        """Check the local service/model before the Studio offers it as ready."""
+        from urllib.parse import urlsplit
+        from cronos.integrations import checked_url
+        import httpx
+        settings = self.app.state.engine.settings
+        try:
+            base = checked_url(settings.ollama_url)
+            host = urlsplit(base).hostname
+            # Remote Ollama is verified only by an explicit generation attempt.
+            if host not in {'127.0.0.1', 'localhost', '::1'}:
+                return True
+            response = httpx.get(base + '/api/tags', timeout=.6, trust_env=False)
+            if response.status_code != 200:
+                return False
+            wanted = settings.ollama_model if ':' in settings.ollama_model else settings.ollama_model + ':latest'
+            models = response.json().get('models', [])
+            return isinstance(models, list) and any(isinstance(item, dict) and item.get('name') == wanted for item in models)
+        except (ValueError, TypeError, KeyError, httpx.HTTPError):
+            return False
+
     def check_provider(self, chosen):
         if self.app.state.engine.provider is not None: return
         entries = provider_catalog(self.app.state.engine.settings)

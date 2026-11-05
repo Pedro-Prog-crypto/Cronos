@@ -232,18 +232,18 @@ async function localWave(blob:Blob){
   return new Blob([bytes],{type:'audio/wav'});
 }
 
-export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms:number;endpoint_ms:number;wake_confirmed?:boolean})=>void,onError:(message:string)=>void,local=false,blocked=false,preferences?:any,onAudio?:(audio:Blob,metrics:{recognition_ms:number;endpoint_ms:number;wake_confirmed?:boolean})=>Promise<void>,interrupt?:{active:boolean;onKeyword:()=>void;wakeOnly?:boolean},onRecognitionStart?:(endpoint_ms:number)=>string|void,onPartial?:(text:string)=>void,collecting=false) {
+export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms:number;endpoint_ms:number;wake_confirmed?:boolean})=>void,onError:(message:string)=>void,local=false,blocked=false,preferences?:any,onAudio?:(audio:Blob,metrics:{recognition_ms:number;endpoint_ms:number;wake_confirmed?:boolean})=>Promise<void>,interrupt?:{active:boolean;onKeyword:()=>void;wakeOnly?:boolean},onRecognitionStart?:(endpoint_ms:number)=>string|void,onPartial?:(text:string)=>void,collecting=false,allowLocalFinal=false) {
   const [recording,setRecording]=useState(false),[capturing,setCapturing]=useState(false),[starting,setStarting]=useState(false),[transcribing,setTranscribing]=useState(false);
   const [manualOnly,setManualOnly]=useState(false);
   const [ready,setReady]=useState(false);
   const audioLevelSource=useRef(0),enabled=useRef(false),opening=useRef(false),processing=useRef(false),mounted=useRef(true);
-  const latest=useRef({onTranscript,onError,local,blocked,preferences,onAudio,interrupt,onRecognitionStart,onPartial,collecting});latest.current={onTranscript,onError,local,blocked,preferences,onAudio,interrupt,onRecognitionStart,onPartial,collecting};
+  const latest=useRef({onTranscript,onError,local,blocked,preferences,onAudio,interrupt,onRecognitionStart,onPartial,collecting,allowLocalFinal});latest.current={onTranscript,onError,local,blocked,preferences,onAudio,interrupt,onRecognitionStart,onPartial,collecting,allowLocalFinal};
   const preview=useRef<ReturnType<typeof createReliableSpeechPreview>|null>(null);
   const previewVersion=useRef(0),activePartial=useRef(''),pendingPartials=useRef<string[]>([]);
   const showPartial=()=>latest.current.onPartial?.([...pendingPartials.current,activePartial.current].filter(Boolean).join(' ').trim());
   const beginPreview=()=>{
     preview.current?.abort();const version=++previewVersion.current;activePartial.current='';showPartial();
-    preview.current=createReliableSpeechPreview(text=>{if(version!==previewVersion.current)return;activePartial.current=text;showPartial();},getToken());
+    preview.current=createReliableSpeechPreview(text=>{if(version!==previewVersion.current)return;activePartial.current=text;showPartial();},getToken(),latest.current.allowLocalFinal);
   };
   const keywordSocket=useRef<WebSocket|null>(null),keywordReady=useRef(false),keywordError=useRef(false);
   const [wakeOpen,setWakeOpen]=useState(false),wakeUntil=useRef(0),turnWake=useRef(false);

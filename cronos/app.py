@@ -186,7 +186,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         async def warm_recognition():
             # A full model integrity check hashes every file. Run it once in a
             # worker at startup, never on the HTTP event loop for each utterance.
-            if settings.transcription_provider!='vosk' and not app.state.panels.preferences.called_only:
+            if settings.transcription_provider!='vosk':
                 from cronos.wake import root, MODEL_NAME, model_present
                 if not model_present(root()/MODEL_NAME):return
             try:await asyncio.to_thread(local_recognizer.prepare)
@@ -778,9 +778,19 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
             from cronos.wake import root, MODEL_NAME, model_present
             local_ready = local_recognizer.model is not None or model_present(root()/MODEL_NAME)
         async def cloud_recognition():
-            return await first_valid_transcription(primary,alternative if current.gemini_key.strip() else None,
-                                                   hedge_after=ASR_HEDGE_SECONDS,
-                                                   local=local if local_ready else None)
+            # The small local model is useful for live provisional captions,
+            # but its first plausible phrase can be a wrong proper name. Do
+            # not let it win a race against the configured cloud recognizers.
+            cloud = ([primary] if current.fish_key.strip() else []) + ([alternative] if current.gemini_key.strip() else [])
+            if cloud:
+                try:
+                    return await first_valid_transcription(cloud[0],cloud[1] if len(cloud)>1 else None,
+                                                           hedge_after=ASR_HEDGE_SECONDS)
+                except Exception:
+                    if not local_ready: raise
+            if local_ready:
+                return await local()
+            raise ProviderError('Não há transcrição configurada. Confira Fish ou Gemini em Integrações.',503)
         try:
             async with asyncio.timeout(TRANSCRIPTION_TOTAL_TIMEOUT_SECONDS):
                 if current.transcription_provider=='vosk':

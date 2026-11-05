@@ -14,7 +14,7 @@ export function createLiveSpeechPreview(onUpdate:(text:string)=>void,host:Recogn
  let recognition:Recognition;
  try{recognition=new Constructor();}catch{return null;}
  recognition.lang='pt-BR';recognition.continuous=true;recognition.interimResults=true;recognition.maxAlternatives=1;
- let finalText='',allFinal=false,minimumConfidence=1,confidenceReported=false,failed=false,closed=false;
+ let finalText='',allFinal=false,minimumConfidence=1,confidenceReported=false,failed=false,closed=false,ended=false;
  let finished:(()=>void)|null=null;
  recognition.onresult=event=>{
   const parts:string[]=[];let complete=true,confidence=1,reported=false,finals=0;
@@ -36,18 +36,22 @@ export function createLiveSpeechPreview(onUpdate:(text:string)=>void,host:Recogn
   if(allFinal)finished?.();
  };
  recognition.onerror=()=>{failed=true;finished?.();};
- recognition.onend=()=>finished?.();
+ recognition.onend=()=>{ended=true;finished?.();};
  try{recognition.start();}catch{return null;}
  return {
   async finish(durationSeconds:number){
    try{recognition.stop();}catch{/* The browser already ended recognition. */}
-   if(!allFinal&&!failed)await Promise.race([new Promise<void>(resolve=>{finished=resolve;}),
-                                             new Promise<void>(resolve=>setTimeout(resolve,700))]);
+   if(!allFinal&&!failed&&!ended){
+    let timeout:ReturnType<typeof setTimeout>|undefined;
+    try{await Promise.race([new Promise<void>(resolve=>{finished=resolve;}),
+                            new Promise<void>(resolve=>{timeout=setTimeout(resolve,700);})]);}
+    finally{clearTimeout(timeout);}
+   }
    closed=true;finished=null;
    const words=finalText.split(/\s+/).filter(Boolean);
    // One accidental word from room noise must not replace the complete WAV
    // with a confident but unrelated browser transcript.
-   return !failed&&allFinal&&(!confidenceReported||minimumConfidence>=.82)&&words.length>=Math.max(3,Math.floor(durationSeconds*.75))
+   return !failed&&allFinal&&(!confidenceReported||minimumConfidence>=.7)&&words.length>=Math.max(3,Math.floor(durationSeconds*.75))
     ?finalText:null;
   },
   abort(){closed=true;finished=null;try{recognition.abort();}catch{/* Already stopped. */}}
