@@ -143,6 +143,8 @@ def test_fixed_studio_queue_reaches_a_third_reserve_and_records_real_attempts():
     assert [(item['id'], item['status']) for item in project['provider_attempts']] == [
         ('primary', 'unavailable'), ('reserve1', 'unavailable'),
         ('reserve2', 'unavailable'), ('reserve3', 'responded')]
+    assert all(isinstance(item.get('elapsed_ms'), int) and item['elapsed_ms'] >= 0
+               for item in project['provider_attempts'])
     assert all(len(adapter.calls) == 1 for adapter in adapters.values())
     assert 'private key error' not in str(events)
 

@@ -4,7 +4,7 @@ from dataclasses import replace
 from types import SimpleNamespace as NS
 from fastapi.testclient import TestClient
 import pytest
-from cronos.app import create_app
+from cronos.app import create_app,transcription_deadline
 from cronos import gemini_live
 from cronos.reply_stream import transcript_sink
 from cronos.providers import ProviderError
@@ -46,9 +46,33 @@ def test_audio_permission_format_and_validation(settings):
         assert client.post('/chat/audio/stream',headers=AUTH,content=wav()).status_code==415
         headers={**AUTH,'Content-Type':'audio/wav'}
         assert client.post('/chat/audio/stream',headers=headers,content=b'broken').status_code==422
-        assert client.post('/chat/audio/stream',headers=headers,content=b'\0'*(2*1024*1024+1)).status_code==413
+        assert client.post('/chat/audio/stream',headers=headers,content=b'\0'*(10*1024*1024+1)).status_code==413
     with TestClient(create_app(replace(settings,privacy_mode='local'),Provider())) as client:
         assert client.post('/chat/audio/stream',headers=headers,content=wav()).status_code==503
+
+
+def test_three_minute_pcm_reaches_the_answer_provider(settings):
+    frames=b'\x00\x02'*(180*16000)
+    output=io.BytesIO()
+    with wave.open(output,'wb') as recorder:
+        recorder.setnchannels(1);recorder.setsampwidth(2);recorder.setframerate(16000)
+        recorder.writeframes(frames)
+    class Provider:
+        async def reply(self,system,messages):
+            assert messages[-1]['audio_pcm']==frames
+            return {'recognized_text':'Explique o tema longo.','reply':'Resposta preservada.','topics':[],'tool_calls':[]}
+    with TestClient(create_app(replace(settings,gemini_transport='live'),Provider())) as client:
+        response=client.post('/chat/audio/stream',headers={**AUTH,'Content-Type':'audio/wav'},content=output.getvalue())
+        assert response.status_code==200
+        events=[json.loads(line) for line in response.text.splitlines()]
+        assert events[-1]['result']['reply']=='Resposta preservada.'
+
+
+def test_long_pcm_gets_a_longer_recognition_budget_without_slowing_short_audio():
+    assert transcription_deadline(wav(),'audio/wav')==40
+    assert transcription_deadline(b'0'*(180*32000+44),'audio/wav')>100
+    assert transcription_deadline(b'0'*(180*32000+44),'audio/webm')==40
+    assert transcription_deadline(b'encoded','audio/webm',180)>100
 
 
 @pytest.mark.parametrize(('transcription_provider','fish_key','expected_direct'),[

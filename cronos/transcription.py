@@ -8,7 +8,7 @@ import httpx
 from cronos.providers import ProviderError
 
 
-async def gemini_transcribe(settings, audio, mime_type):
+async def gemini_transcribe(settings, audio, mime_type, *, timeout_seconds=30):
     if settings.privacy_mode!='online' or not settings.gemini_key.strip():
         raise ProviderError('Não há reconhecimento alternativo configurado.',503)
     model=settings.gemini_model
@@ -26,8 +26,8 @@ async def gemini_transcribe(settings, audio, mime_type):
              'generationConfig':{'responseMimeType':'application/json','maxOutputTokens':4096,
                  **({'thinkingConfig':{'thinkingBudget':0}} if model.startswith('gemini-2.5-flash') else {})}}
     try:
-        async with asyncio.timeout(30):
-            async with httpx.AsyncClient(timeout=httpx.Timeout(30,connect=5)) as client:
+        async with asyncio.timeout(timeout_seconds):
+            async with httpx.AsyncClient(timeout=httpx.Timeout(timeout_seconds,connect=5)) as client:
                 from cronos.delivery import mark
                 mark('recognition_requested',provider='gemini',bytes=len(audio))
                 response=await client.post(f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent',

@@ -1,10 +1,17 @@
 CRONOS COMPLETO — INSTALACAO AUTONOMA
 
+SE BAIXOU INSTALAR-CRONOS-COMPLETO-R39.bat
+Execute o BAT uma vez. Ele instala o programa em %USERPROFILE%\Cronos-R39 e o abre.
+Para encontrar a pasta: Win+R, cole %USERPROFILE%\Cronos-R39 e pressione Enter.
+Nas proximas vezes, abra ABRIR-CRONOS.bat dentro dessa pasta. A versao antiga
+permanece intacta. Para trazer .env, memoria e integracoes da versao antiga,
+siga o passo 3 abaixo. O download publico nao inclui chaves nem conversas.
+
 ESTA PASTA E A NOVA INSTALACAO
 O Cronos sera executado a partir desta pasta. APIs, integracoes, memoria e projetos
 que voce migrar ficam guardados aqui; ele nao precisa abrir outra instalacao.
 
-PRIMEIRA INSTALACAO
+PRIMEIRA INSTALACAO POR ZIP
 1. Extraia o ZIP inteiro para uma pasta permanente, por exemplo Documentos\Cronos.
 2. Encerre o Cronos antigo. Se houver indicador na tela, use o menu Encerrar assistente.
 3. Para importar dados, copie a pasta antiga completa para Dados-Para-Importar e

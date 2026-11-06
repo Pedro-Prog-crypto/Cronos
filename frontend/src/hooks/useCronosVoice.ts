@@ -281,8 +281,9 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
         setTranscribing(false);
         await submission;return;
       }
-      const result=await withRequestDeadline(abort.signal,55000,async signal=>{
-        const response=await api('/voice/transcribe',{method:'POST',headers:{'Content-Type':audio.type,...(turnId?{'X-Cronos-Turn':turnId}:{})},body:audio,signal});return response.json();
+      const asrDeadline=Math.max(55000,Math.min(135000,30000+durationSeconds*600));
+      const result=await withRequestDeadline(abort.signal,asrDeadline,async signal=>{
+        const response=await api('/voice/transcribe',{method:'POST',headers:{'Content-Type':audio.type,'X-Cronos-Audio-Duration':String(Math.max(0,Math.min(180,durationSeconds))),...(turnId?{'X-Cronos-Turn':turnId}:{})},body:audio,signal});return response.json();
       },'Não consegui reconhecer a gravação a tempo. Use Reenviar gravação para tentar sem repetir sua fala.');
       if(version!==captureVersion.current||abort.signal.aborted||!mounted.current)return;
       if(typeof result.text!=='string'||!result.text.trim())throw new Error('Não consegui entender a gravação. Use Reenviar gravação para tentar sem repetir sua fala.');
@@ -372,8 +373,8 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
           if(typeof event.data.active==='boolean'){if(event.data.active&&!preview.current&&!latest.current.blocked&&(!latest.current.interrupt?.wakeOnly||wakeUntil.current>performance.now()))beginPreview();if(mounted.current)setCapturing(event.data.active&&(!latest.current.interrupt?.wakeOnly||wakeUntil.current>performance.now()));return;}
           if(!enabled.current||latest.current.blocked||(processing.current&&!latest.current.collecting))return;
           if(latest.current.interrupt?.wakeOnly&&wakeUntil.current<performance.now())return;
-          const samples=event.data.samples as Int16Array,rate=event.data.rate as number,endpoint_ms=Math.max(0,Math.min(60000,Number(event.data.endpoint_ms)||0));
-          if(rate!==16000||samples.length>61*rate)return;
+          const samples=event.data.samples as Int16Array,rate=event.data.rate as number,endpoint_ms=Math.max(0,Math.min(180000,Number(event.data.endpoint_ms)||0));
+          if(rate!==16000||samples.length>180*rate)return;
           await deliverOrQueue(pcmWav(samples,rate),endpoint_ms,samples.length/rate);
         };
         const binary=(await loadVad()).slice(0);
@@ -457,7 +458,9 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
         if(speech){voiceLevel=voiceLevel?voiceLevel*.8+rms*.2:rms;voiceReference=Math.max(voiceReference,voiceLevel);}
         speechRun=speech?speechRun+80:0;
         if(speechRun>=160){if(!heard){beginPreview();for(const part of recent)preview.current?.push(part);recent.length=0;setCapturing(!latest.current.interrupt?.wakeOnly||wakeUntil.current>now);}heard=true;lastSpeech=now;}
-        if((heard&&now-lastSpeech>(latest.current.collecting?1900:1400))||(now-started>(heard||!vad?58000:3000)))recorder.stop();
+        const normalPause=latest.current.collecting?1900:1400;
+        const pauseLimit=now-started>8000?Math.max(normalPause,2500):normalPause;
+        if((heard&&now-lastSpeech>pauseLimit)||(now-started>(heard||!vad?180000:3000)))recorder.stop();
       },80);
     }catch(error){const cancelled=!enabled.current;stop();if(!cancelled){const name=error instanceof DOMException?error.name:'';latest.current.onError(name==='NotAllowedError'||name==='SecurityError'?'Permita o microfone para o Cronos no navegador e tente novamente.':name==='NotReadableError'?'O Windows não liberou o microfone. Feche o aplicativo que está usando o dispositivo e tente novamente.':name==='NotFoundError'?'Nenhum microfone foi encontrado. Conecte um dispositivo e tente novamente.':error instanceof Error?error.message.slice(0,220):'Não foi possível abrir o microfone.');}}
     finally{opening.current=false;if(mounted.current)setStarting(false);}

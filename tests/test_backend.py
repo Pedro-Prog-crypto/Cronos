@@ -100,6 +100,18 @@ def test_provider_failure_does_not_write_memory(settings):
     assert not list((settings.vault / "Temas").glob("*.md"))
 
 
+def test_long_text_reaches_the_answer_provider_without_truncation(settings):
+    message='Explique esta anotação longa: ' + ('história e contexto; ' * 5000)
+    class Provider:
+        async def reply(self, system, messages):
+            assert messages[-1]['content'] == message
+            return {'reply':'Recebi o texto completo.','topics':[],'tool_calls':[]}
+    with TestClient(create_app(settings,Provider())) as client:
+        response=client.post('/chat',headers=AUTH,json={'message':message})
+        assert response.status_code==200
+        assert response.json()['reply']=='Recebi o texto completo.'
+
+
 def test_model_output_validation():
     assert parse_reply('{"reply":"Olá","topics":[]}')["reply"] == "Olá"
     for bad in ("texto", '[]', '{"reply":"ok","topics":["Sócrates"]}', '{"reply":"","topics":[]}'):

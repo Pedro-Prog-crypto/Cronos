@@ -193,7 +193,7 @@ export default function App(){
   const connectBackend=useCallback(async()=>{
     setConnected(false);
     try{
-      const status=await jsonApi('/status');setConfig(status);try{const panel=await jsonApi('/panels');updatePreferences(panel.preferences);}catch{/* Older backend keeps the existing defaults. */}setConnected(true);if(status.privacy_mode!=='local'&&!status.fish_speech_configured)tell('A voz não está configurada nesta instalação. Feche o Cronos, abra Importar-Voz-Original.bat nesta pasta e selecione o .env da versão em que a voz funcionava. Depois reabra o Cronos.',true);else setNotice('');
+      const status=await jsonApi('/status');setConfig(status);try{const panel=await jsonApi('/panels');updatePreferences(panel.preferences);}catch{/* Older backend keeps the existing defaults. */}setConnected(true);if(status.privacy_mode!=='local'&&!status.fish_speech_configured)tell('A voz Fish online não está configurada nesta instalação. Se já usava essa voz, abra Importar-Voz-Original.bat na pasta do Cronos e escolha o .env da versão antiga. Você também pode configurar Fish em Integrações. Depois feche e abra o Cronos.',true);else setNotice('');
 
       // Compartilha só com a bancada da própria origem, nunca por URL/storage.
       iframe.current?.contentWindow?.postMessage({type:'cronos:connect',token:getToken()},window.location.origin);

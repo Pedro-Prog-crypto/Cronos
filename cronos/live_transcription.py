@@ -43,7 +43,9 @@ def install(app, settings, recognizer):
             await socket.send_json({'type': 'ready'})
             last_text = ''
             last_time = time.monotonic()
-            deadline = last_time + 65
+            # The recognizer also serves long dictation. A 65-second socket
+            # deadline silently removed progressive captions mid-sentence.
+            deadline = last_time + 190
             # Allow pre-roll and a short backlog while the model opens, then
             # replenish at the actual 16 kHz PCM rate (32 kB/s).
             credit = 256000

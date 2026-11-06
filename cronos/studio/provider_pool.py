@@ -124,7 +124,8 @@ class ProviderPool:
                 last_event=now;last_size=size
         token=progress_sink.set(progress)
         task=asyncio.create_task(getattr(self.adapters[identifier],'reply_structured',self.adapters[identifier].reply)(system,messages))
-        self.project['provider_attempts'].append({'id':identifier,'status':'requested','at':time.time()})
+        attempt={'id':identifier,'status':'requested','at':time.time()}
+        self.project['provider_attempts'].append(attempt)
         try:
             while True:
                 remaining=self.timeout-(time.monotonic()-started)
@@ -138,6 +139,7 @@ class ProviderPool:
             if last_raw:raise ProviderError('A integração excedeu o tempo desta parte. O trecho recebido pode ser continuado.',504,kind='output_interrupted',partial_output=last_raw) from None
             raise
         finally:
+            attempt['elapsed_ms']=round((time.monotonic()-started)*1000)
             progress_sink.reset(token)
             if not task.done():task.cancel()
             await asyncio.gather(task,return_exceptions=True)

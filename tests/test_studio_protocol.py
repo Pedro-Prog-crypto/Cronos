@@ -40,6 +40,19 @@ def test_http_json_mode_is_negotiated_only_on_an_explicit_parameter_rejection(mo
  assert '"topics"' not in seen[0]['messages'][0]['content']
 
 
+def test_ordinary_chat_negotiates_explicit_json_mode_rejection(monkeypatch):
+ seen=[]
+ def handle(request):
+  payload=json.loads(request.content);seen.append(payload)
+  if 'response_format' in payload:
+   return httpx.Response(400,json={'error':{'message':'Unsupported parameter response_format'}})
+  return httpx.Response(200,json={'choices':[{'finish_reason':'stop','message':{'content':'{"reply":"Resposta confirmada.","topics":[],"tool_calls":[]}'}}]})
+ provider=compatible(monkeypatch,handle)
+ answer=asyncio.run(provider.reply('Responda normalmente.',[{'role':'user','content':'Pergunta'}]))
+ assert answer['reply']=='Resposta confirmada.' and len(seen)==2
+ assert 'response_format' not in seen[1]
+
+
 def test_new_token_parameter_does_not_disable_json_mode(monkeypatch):
  seen=[]
  def handle(r):

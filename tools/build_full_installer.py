@@ -14,18 +14,19 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 ARCHIVE = ROOT / 'releases/CRONOS-Completo-Um-Arquivo.zip'
-OUTPUT = ROOT / 'releases/INSTALAR-CRONOS-COMPLETO-R38.bat'
+OUTPUT = ROOT / 'releases/INSTALAR-CRONOS-COMPLETO-R39.bat'
+INSTALL_FOLDER = 'Cronos-R39'
 OFFSET_MARKER = '0000000000'
 
-# No data migration or replacement is performed. A complete existing R38 folder
+# No data migration or replacement is performed. A complete existing release folder
 # is opened as-is, so running an older download cannot overwrite newer work.
 POWERSHELL = r"""$ErrorActionPreference='Stop';
-$target=Join-Path $env:USERPROFILE 'Cronos-R38';
+$target=Join-Path $env:USERPROFILE '__INSTALL_FOLDER__';
 if (Test-Path -LiteralPath $target) {
   $manifest=Join-Path $target 'tools\interface_update_manifest.json';
-  if (-not (Test-Path -LiteralPath (Join-Path $target 'cronos\app.py')) -or -not (Test-Path -LiteralPath (Join-Path $target 'ABRIR-CRONOS.bat')) -or -not (Test-Path -LiteralPath $manifest)) { throw 'A pasta Cronos-R38 ja existe, mas esta incompleta. Renomeie-a antes de instalar uma copia nova.' };
+  if (-not (Test-Path -LiteralPath (Join-Path $target 'cronos\app.py')) -or -not (Test-Path -LiteralPath (Join-Path $target 'ABRIR-CRONOS.bat')) -or -not (Test-Path -LiteralPath $manifest)) { throw 'A pasta __INSTALL_FOLDER__ ja existe, mas esta incompleta. Renomeie-a antes de instalar uma copia nova.' };
   $version=(Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json).revision;
-  if ($version -ne '__REVISION__') { throw 'A pasta Cronos-R38 ja contem outra versao. Ela nao foi substituida.' };
+  if ($version -ne '__REVISION__') { throw 'A pasta __INSTALL_FOLDER__ ja contem outra versao. Ela nao foi substituida.' };
   Write-Host ('Abrindo o Cronos existente em '+$target);
   exit 0;
 };
@@ -60,7 +61,7 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-call "%USERPROFILE%\Cronos-R38\ABRIR-CRONOS.bat"
+call "%USERPROFILE%\__INSTALL_FOLDER__\ABRIR-CRONOS.bat"
 exit /b %errorlevel%
 """
 
@@ -68,10 +69,10 @@ exit /b %errorlevel%
 def make_header(offset: int, checksum: str, revision: str) -> bytes:
     script = ' '.join(line.strip() for line in POWERSHELL.splitlines())
     script = script.replace('__OFFSET__', f'{offset:010d}')
-    script = script.replace('__SHA256__', checksum).replace('__REVISION__', revision)
+    script = script.replace('__SHA256__', checksum).replace('__REVISION__', revision).replace('__INSTALL_FOLDER__', INSTALL_FOLDER)
     if any(char in script for char in '"\r\n'):
         raise ValueError('PowerShell header contains an unsafe batch delimiter.')
-    return HEADER.replace('__SCRIPT__', script).replace('\n', '\r\n').encode('ascii')
+    return HEADER.replace('__SCRIPT__', script).replace('__INSTALL_FOLDER__', INSTALL_FOLDER).replace('\n', '\r\n').encode('ascii')
 
 
 def build() -> tuple[Path, int]:
@@ -87,8 +88,8 @@ def build() -> tuple[Path, int]:
         if any(name == '.env' or name == 'config/providers.json' or name.startswith(('vault/', '.venv/', '.cronos-local/')) for name in names):
             raise ValueError('Private installation data cannot enter the GitHub installer.')
         revision = json.loads(package.read('tools/interface_update_manifest.json'))['revision']
-    if not re.fullmatch(r'[a-z0-9-]+-2026-11-04-r38', revision):
-        raise ValueError('The full archive is not the verified R38 release.')
+    if not re.fullmatch(r'[a-z0-9-]+-2026-11-05-r39', revision):
+        raise ValueError('The full archive is not the verified R39 release.')
     checksum = hashlib.sha256(ARCHIVE.read_bytes()).hexdigest()
     preliminary = make_header(0, checksum, revision)
     header = make_header(len(preliminary), checksum, revision)

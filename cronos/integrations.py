@@ -98,10 +98,11 @@ class CompatibleProvider:
         try:
             async with httpx.AsyncClient(timeout=spec.timeout_seconds) as client:
                 response = await client.post(base + path, headers=headers, json=payload)
-                # Some compatible APIs reject JSON mode or the legacy token field.
-                # Negotiate only an explicit unsupported parameter on HTTP 400/422.
+                # Some compatible APIs reject JSON mode or the legacy token field
+                # in ordinary chat as well as Studio. Negotiate only an explicit
+                # unsupported parameter on HTTP 400/422; other 400s stay errors.
                 for _ in range(2):
-                    if not structured or response.status_code not in {400,422}:break
+                    if response.status_code not in {400,422}:break
                     try:
                         error=response.json().get('error',{});error=json.dumps(error).lower()
                     except (ValueError,TypeError):break

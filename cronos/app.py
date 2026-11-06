@@ -83,6 +83,18 @@ ASR_HEDGE_SECONDS = 2
 CONVERSATION_FIRST_REPLY_TIMEOUT_SECONDS = 120
 
 
+def transcription_deadline(audio: bytes, mime_type: str, duration_seconds: float | None = None) -> float:
+    """Give a long PCM dictation time to finish without slowing short turns."""
+    if mime_type.split(';', 1)[0].lower() in {'audio/wav', 'audio/x-wav'}:
+        duration = max(0, len(audio) - 44) / 32000  # 16 kHz, mono, 16-bit PCM.
+    else:
+        import math
+        duration = duration_seconds if duration_seconds is not None and math.isfinite(duration_seconds) and 0 <= duration_seconds <= 180 else 0
+    if duration <= 30:
+        return TRANSCRIPTION_TOTAL_TIMEOUT_SECONDS
+    return min(120, max(TRANSCRIPTION_TOTAL_TIMEOUT_SECONDS, 20 + duration * .55))
+
+
 def first_reply_deadline(message: str) -> int:
     """Allow large inputs/model explanations time to start without limiting playback."""
     from cronos.study_intent import is_study_request
@@ -494,7 +506,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         chunks=[];size=0
         async for chunk in request.stream():
             size+=len(chunk)
-            if size>2*1024*1024:raise HTTPException(413,'Áudio ultrapassa o limite de 2 MiB.')
+            if size>10*1024*1024:raise HTTPException(413,'Áudio ultrapassa o limite de 10 MiB.')
             chunks.append(chunk)
         from cronos.recognition import read_pcm,check_signal
         audio_wav=b''.join(chunks)
@@ -611,7 +623,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
             raise HTTPException(404, 'Objetivo ativo não encontrado.')
         return {'updated': True}
 
-    async def fish_client():
+    async def fish_client(timeout=30.0):
         if settings.privacy_mode != 'online':
             raise HTTPException(503, "Modo local: Fish Audio está desabilitado porque envia áudio/texto a um serviço externo.")
         if not settings.fish_key:
@@ -619,7 +631,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
         if fish_factory:
             return fish_factory()
         from fishaudio import AsyncFishAudio
-        return AsyncFishAudio(api_key=settings.fish_key, timeout=30.0)
+        return AsyncFishAudio(api_key=settings.fish_key, timeout=timeout)
 
     async def transcribe_fallback(audio_wav: bytes) -> str:
         """Recover an utterance when Gemini Live fails to emit input transcription."""
@@ -739,9 +751,11 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 await client.__aexit__(None, None, None)
         return StreamingResponse(chunks(), media_type="audio/wav" if settings.fish_format == "wav" else "audio/mpeg", headers={"Cache-Control": "no-store"})
 
-    async def recognize_recording(audio, mime_type):
+    async def recognize_recording(audio, mime_type, duration_seconds=None):
         current=app.state.engine.settings
         from cronos.transcription import gemini_transcribe,first_valid_transcription
+        deadline=transcription_deadline(audio,mime_type,duration_seconds)
+        provider_deadline=TRANSCRIPTION_TIMEOUT_SECONDS if deadline<=TRANSCRIPTION_TOTAL_TIMEOUT_SECONDS else deadline-5
         async def local():
             delivery.mark('recognition_requested',provider='vosk',bytes=len(audio))
             try:
@@ -753,23 +767,23 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 raise HTTPException(503,str(exc)) from None
         if current.privacy_mode!='online':
             try:
-                async with asyncio.timeout(TRANSCRIPTION_TOTAL_TIMEOUT_SECONDS):
+                async with asyncio.timeout(deadline):
                     return await local()
             except TimeoutError:
                 raise HTTPException(504,'O reconhecimento local demorou demais. A gravação pode ser reenviada sem repetir a fala.') from None
         async def primary():
             delivery.mark('recognition_requested',provider='fish',bytes=len(audio))
             try:
-                client=await fish_client()
+                client=await fish_client(timeout=provider_deadline)
                 async with client:
-                    result=await voice_deadline(client.asr.transcribe(audio=audio,language='pt'),TRANSCRIPTION_TIMEOUT_SECONDS)
+                    result=await voice_deadline(client.asr.transcribe(audio=audio,language='pt'),provider_deadline)
                 text=getattr(result,'text','')
                 delivery.mark('recognition_response',provider='fish',characters=len(text) if isinstance(text,str) else 0)
                 return text
             except Exception as exc:
                 delivery.mark('recognition_error',provider='fish',error_type=type(exc).__name__,http_status=getattr(exc,'status_code',getattr(exc,'status',0)) or 0)
                 raise
-        async def alternative():return await gemini_transcribe(current,audio,mime_type)
+        async def alternative():return await gemini_transcribe(current,audio,mime_type,timeout_seconds=provider_deadline)
         # The prepared recognizer was fully verified in a background worker.
         # Calling verify_model here would synchronously hash the entire model
         # for every question and could block Fish, Gemini and the UI for a minute.
@@ -792,7 +806,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 return await local()
             raise ProviderError('Não há transcrição configurada. Confira Fish ou Gemini em Integrações.',503)
         try:
-            async with asyncio.timeout(TRANSCRIPTION_TOTAL_TIMEOUT_SECONDS):
+            async with asyncio.timeout(deadline):
                 if current.transcription_provider=='vosk':
                     reserve = primary if current.fish_key.strip() else alternative if current.gemini_key.strip() else None
                     second_reserve = alternative if current.fish_key.strip() and current.gemini_key.strip() else None
@@ -865,7 +879,9 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 try:check_signal(read_pcm(b''.join(chunks)))
                 except ValueError as exc:raise HTTPException(422,str(exc)) from None
             try:
-                text=await voice_operation(request,recognize_recording(b''.join(chunks),request.headers.get('content-type','audio/webm')))
+                try:duration_seconds=float(request.headers.get('x-cronos-audio-duration','0'))
+                except ValueError:duration_seconds=None
+                text=await voice_operation(request,recognize_recording(b''.join(chunks),request.headers.get('content-type','audio/webm'),duration_seconds))
                 delivery.mark('question_recognized',characters=len(text))
                 return {'text':text}
             except HTTPException as exc:
