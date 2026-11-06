@@ -24,6 +24,7 @@ from cronos.integrations import provider_catalog, available_models
 from cronos.tools import create_registry, ToolError
 from cronos.security import SecurityMiddleware
 from cronos.monitor import Monitor
+from cronos.system_metrics import SystemMetrics
 from cronos.missions import Missions
 from cronos.features import Features
 from cronos.windows_system import WindowsSystem
@@ -329,6 +330,12 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
     @app.get("/monitor", dependencies=[Depends(authenticate)])
     async def monitor(request: Request, after: int = Query(default=0, ge=0)):
         return request.app.state.monitor.snapshot(after)
+
+    system_metrics = SystemMetrics()
+
+    @app.get('/system/metrics', dependencies=[Depends(authenticate)])
+    async def system_metrics_snapshot():
+        return await asyncio.to_thread(system_metrics.snapshot)
 
     @app.post("/monitor/alerts/{alert_id}/ack", dependencies=[Depends(authenticate)])
     async def acknowledge_alert(alert_id: int, request: Request):

@@ -2,8 +2,9 @@ import {ResponseClock} from './components/ResponseClock';
 import {UpdateNotice} from './components/UpdateNotice';
 /** @license SPDX-License-Identifier: Apache-2.0 */
 import React,{Suspense,lazy,useCallback,useEffect,useRef,useState} from 'react';
-import {Mic,X,Send,RotateCw,ImagePlus,FileArchive,MonitorUp,BookOpen,FileText,PanelsTopLeft} from 'lucide-react';
+import {Mic,X,Send,RotateCw,ImagePlus,FileArchive,MonitorUp,BookOpen,FileText,PanelsTopLeft,LayoutGrid,Globe2,Activity,Settings2,UserRound} from 'lucide-react';
 import {IntegratedNeuralStage} from './components/IntegratedNeuralStage';
+import {HomeDashboard} from './components/HomeDashboard';
 import {useCronosVoice,useMicrophone} from './hooks/useCronosVoice';
 import {api,jsonApi,getToken,onConnection,ApiError,streamChat} from './api';
 
@@ -56,6 +57,8 @@ export default function App(){
   const canSpeak=Boolean(config?.fish_speech_configured||config?.native_voice_available||globalThis.speechSynthesis);
   const [notice,setNotice]=useState(''),[error,setError]=useState(false);
   const [chatOpen,setChatOpen]=useState(false),[module,setModule]=useState<string|null>(null);
+  const [dashboardMenu,setDashboardMenu]=useState(false);
+  const [homePanelRequest,setHomePanelRequest]=useState(0);
   const [draft,setDraft]=useState(''),[liveTranscript,setLiveTranscript]=useState(''),[busy,setBusy]=useState(false),[tools,setTools]=useState<ToolResult[]>([]);
   const [longDictation,setLongDictation]=useState(false),longDictationRef=useRef(false);
   const [autoVoice,setAutoVoice]=useState(true),[announceAlerts,setAnnounceAlerts]=useState(false),[monitor,setMonitor]=useState<any>(null);
@@ -265,6 +268,12 @@ export default function App(){
     if(mainBridge?.close_main&&/^(?:fechar|feche|ocultar|esconder) (?:o |a janela do )?(?:cronos|kronos|chronos)$/.test(normalizedCommand)){
       void mainBridge.close_main().catch(()=>tell('Não consegui fechar a janela.',true));return true;
     }
+    if(/^(?:abrir|abre|abra|mostrar|mostre) (?:o |a )?(?:painel|barra lateral|painel lateral)(?: (?:direito|direita))?$/.test(normalizedCommand)){
+      setModule(null);setChatOpen(false);setStudyOpen(false);setEyeOpen(false);setHomePanelRequest(value=>value+1);return true;
+    }
+    if(/^(?:abrir|abre|abra|mostrar|mostre) (?:o )?modo de digitacao$/.test(normalizedCommand)){
+      restoreWindow('chat');setChatOpen(true);return true;
+    }
     if(/^(?:(?:abrir|abre|abra|mostrar|mostre|entrar em|ir para|vamos para|vamos pra|quero abrir)\s+)?(?:[oa]\s+)?(?:area de\s+)?(?:estudo(?:s)?|caderno de estudos|ambiente de estudos|sala de estudos)(?:\s+(?:agora|por favor))?$/.test(normalizedCommand)){
       restoreWindow('study');setStudyOpen(true);setEyeOpen(false);setModule(null);setChatOpen(false);setNote(null);return true;
     }
@@ -432,7 +441,11 @@ export default function App(){
       setTools(old=>old.map(item=>item===result?outcome:item));tell(outcome.status==='completed'?'Solicitação atendida; confira seu resultado.':outcome.error||outcome.status,outcome.status==='failed');
     }catch(error){tell(error instanceof Error?error.message:'Falha na confirmação.',true);}finally{setBusy(false);inFlight.current=false;}
   };
-  const openModule=(index:number)=>{restoreWindow('module');setAnalyses(previous=>previous.filter(kind=>minimizedWindows.includes('analysis:'+kind)));setEyeOpen(false);setChatOpen(false);setNote(null);setModule(moduleIds[index]);setModuleActivity('IDLE');};
+  const openModule=(index:number)=>{setDashboardMenu(false);restoreWindow('module');setAnalyses(previous=>previous.filter(kind=>minimizedWindows.includes('analysis:'+kind)));setEyeOpen(false);setChatOpen(false);setNote(null);setModule(moduleIds[index]);setModuleActivity('IDLE');};
+  const openStudyHome=()=>{setDashboardMenu(false);restoreWindow('study');setStudyOpen(true);setEyeOpen(false);setModule(null);setChatOpen(false);};
+  const openStudioHome=()=>{setDashboardMenu(false);restoreWindow('studio');if(!studio)setStudio({brief:'',request:Date.now()});setEyeOpen(false);setModule(null);setChatOpen(false);};
+  const openEyeHome=()=>{setDashboardMenu(false);restoreWindow('eye');voice.prepare();eyeAnnouncement.current=true;setEyeOpen(true);setModule(null);setChatOpen(false);};
+  const openChatHome=()=>{setDashboardMenu(false);restoreWindow('chat');setChatOpen(true);};
   useEffect(()=>{document.documentElement.dataset.cronosPanel=moduleActive||studioActive?'true':'false';return()=>{delete document.documentElement.dataset.cronosPanel;};},[moduleActive,studioActive]);
   const closeModule=()=>{(iframe.current?.contentWindow as (Window & {cronosPanelClose?:()=>void})|null)?.cronosPanelClose?.();setModule(null);setModuleActivity('IDLE');setGraphRevision(value=>value+1);if(connected)void jsonApi('/status').then(setConfig).catch(()=>{});};
   const handlers=useRef({mic:handleMic,f4:()=>{},module:openModule});handlers.current={mic:handleMic,f4:()=>{if(microphone.recording)microphone.stop();else handleMic();},module:openModule};
@@ -441,6 +454,7 @@ export default function App(){
   const activeAlerts=monitor?.alerts||[];
   const fresh=monitor?.checked_at&&Date.now()-Date.parse(monitor.checked_at)<45000;
   const diagnostic=!connected?'DESCONECTADO':!monitor||!fresh?'DIAGNÓSTICO INDISPONÍVEL':activeAlerts.length?`${activeAlerts.length} ALERTA(S)`:'SEM ALERTAS NOS SINAIS MONITORADOS';
+  const homeActive=!eyeActive&&!moduleActive&&!studyActive&&!studioActive&&!chatOpen&&!note&&!stremio&&!prospect&&!analyses.some(kind=>!minimizedWindows.includes('analysis:'+kind));
   const shelfItems:ShelfItem[]=[];
   const addWindow=(id:string,title:string,detail?:string)=>{if(minimizedWindows.includes(id))shelfItems.push({id,title,detail,onRestore:()=>restoreWindow(id)});};
   if(studio)addWindow('studio','Estúdio de Sites',studioWindow.title+' · '+studioWindow.detail);
@@ -458,7 +472,7 @@ export default function App(){
     <UpdateNotice connected={connected} enabled={panelPrefs?.proactive_suggestions!==false} idle={!studio&&!module&&!studyOpen&&!chatOpen&&!eyeOpen&&!busy&&!microphone.capturing&&!microphone.transcribing&&!voice.isSpeaking&&!voice.isGenerating} voiceEnabled={autoVoice&&Boolean(config?.fish_speech_configured)} onSpeak={text=>void voice.speak(text)} onBusy={setUpdateBusy}/>
 
     {!eyeActive&&<main className={`absolute inset-0 ${moduleActive?'scene-under-panel':''}`}><IntegratedNeuralStage state={state} audioLevelSource={audioLevelSource} onOrbClick={stageMic} onMicToggle={stageMic} onModuleClick={stageModule}/></main>}
-    {!eyeActive&&<div className={`memory-slot ${eyeOpen?'small':''}`}><MemorySpiral graph={graph} small={eyeOpen} onSelect={selectNote}/></div>}
+    {homeActive&&<HomeDashboard connected={connected} preferences={panelPrefs} onPreferences={updatePreferences} panelOpenRequest={homePanelRequest} menuOpen={dashboardMenu} onMenuClose={()=>setDashboardMenu(false)} onModule={openModule} onStudy={openStudyHome} onStudio={openStudioHome} onEye={openEyeHome} onChat={openChatHome} onScreen={()=>{setDashboardMenu(false);screenMonitor.current?.start();}} onImage={()=>{setDashboardMenu(false);openAnalysis('image');}} onDocument={()=>{setDashboardMenu(false);openAnalysis('document');}} onMicrophone={()=>{setDashboardMenu(false);handleMic();}} microphoneOn={microphone.recording}/>}
     {eyeOpen&&<WindowSurface minimized={!eyeActive}><div className="eye-slot expanded"><MinimizeWindow label="Olho de Deus" onClick={()=>minimizeWindow('eye')}/>
       <button className="eye-close" aria-label="Fechar Olho de Deus" title="Fechar Olho de Deus · F4 controla o microfone" onClick={()=>{eyeAnnouncement.current=false;setEyeOpen(false);}}><X size={20}/></button>
       <Suspense fallback={<div className="panel-loading">Abrindo Olho de Deus…</div>}><WorldMap query={placeQuery} onError={message=>tell(message,true)} onReady={worldReady}/></Suspense>
@@ -466,8 +480,9 @@ export default function App(){
     <ResponseClock turn={latencyDisplay} onDetails={()=>openModule(0)}/>
     {(microphone.capturing||microphone.transcribing)&&liveTranscript.trim()&&<div className="cronos-live-transcript" role="status" aria-live="polite"><span>TRANSCRIÇÃO PROVISÓRIA</span><p>{liveTranscript}</p></div>}
     <div className="cronos-quick-actions" aria-label="Ações rápidas">
-      {!eyeActive&&!moduleActive&&!studyActive&&<><button className="reference-attachment" aria-label="Abrir área de estudos" title="Abrir área de estudos" onClick={()=>{restoreWindow('study');setStudyOpen(true);setEyeOpen(false);setModule(null);setChatOpen(false);}}><BookOpen size={16}/></button><button className="reference-attachment" aria-label="Analisar imagem" title="Analisar imagem" onClick={()=>openAnalysis('image')}><ImagePlus size={16}/></button><button className="reference-attachment" aria-label="Analisar ZIP ou código" title="Analisar ZIP ou código" onClick={()=>openAnalysis('document')}><FileArchive size={16}/></button></>}
-      <button className="reference-attachment studio-shortcut" aria-label="Abrir Estúdio de Sites" title="Abrir Estúdio de Sites" onClick={()=>{restoreWindow('studio');if(!studio)setStudio({brief:'',request:Date.now()});setEyeOpen(false);setModule(null);setChatOpen(false);}}><PanelsTopLeft size={18}/></button>
+      {homeActive&&<><button className="reference-attachment studio-shortcut" aria-label="Abrir Estúdio de Sites" title="Abrir Estúdio de Sites" onClick={openStudioHome}><LayoutGrid size={19}/></button><button className="reference-attachment" aria-label="Abrir área de estudos" title="Abrir área de estudos" onClick={openStudyHome}><BookOpen size={19}/></button><button className="reference-attachment" aria-label="Abrir Olho de Deus" title="Abrir Olho de Deus" onClick={openEyeHome}><Globe2 size={19}/></button><button className="reference-attachment" aria-label="Abrir monitoramento" title="Abrir monitoramento" onClick={()=>openModule(11)}><Activity size={19}/></button><button className="reference-attachment home-dock-gear" aria-expanded={dashboardMenu} aria-label="Abrir funções e configurações" title="Funções e configurações" onClick={()=>setDashboardMenu(value=>!value)}><Settings2 size={19}/></button><button className="reference-attachment" aria-label="Abrir conversa" title="Abrir conversa" onClick={openChatHome}><UserRound size={19}/></button></>}
+      {!homeActive&&!eyeActive&&!moduleActive&&!studyActive&&<><button className="reference-attachment" aria-label="Abrir área de estudos" title="Abrir área de estudos" onClick={openStudyHome}><BookOpen size={16}/></button><button className="reference-attachment" aria-label="Analisar imagem" title="Analisar imagem" onClick={()=>openAnalysis('image')}><ImagePlus size={16}/></button><button className="reference-attachment" aria-label="Analisar ZIP ou código" title="Analisar ZIP ou código" onClick={()=>openAnalysis('document')}><FileArchive size={16}/></button></>}
+      {!homeActive&&<button className="reference-attachment studio-shortcut" aria-label="Abrir Estúdio de Sites" title="Abrir Estúdio de Sites" onClick={openStudioHome}><PanelsTopLeft size={18}/></button>}
       <HandControl/>
       <button className="reference-attachment" aria-pressed={longDictation} aria-label={longDictation?'Finalizar ditado longo':'Iniciar ditado longo'} title={longDictation?'Finalizar ditado e revisar a pergunta':'Juntar vários trechos de fala antes de enviar uma pergunta longa'} onClick={toggleLongDictation}><FileText size={16}/></button>
       {microphone.recording&&<button className="reference-send-audio" aria-label="Enviar fala agora" title={microphone.transcribing&&!longDictation?'Transcrevendo a fala':busy?'Aguarde a resposta atual':!microphone.ready?'Aguardando o microfone captar sua fala':longDictation?'Concluir o trecho atual do ditado; a escuta continua':'Enviar agora sem esperar a detecção de silêncio'} disabled={(microphone.transcribing&&!longDictation)||busy||!microphone.ready} onClick={()=>microphone.submit()}><Send size={15}/></button>}

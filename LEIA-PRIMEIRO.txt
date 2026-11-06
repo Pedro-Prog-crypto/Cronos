@@ -1,8 +1,8 @@
 CRONOS COMPLETO — INSTALACAO AUTONOMA
 
-SE BAIXOU INSTALAR-CRONOS-COMPLETO-R41.bat
+SE BAIXOU INSTALAR-CRONOS-COMPLETO-R42.bat
 Execute o BAT uma vez. Ele instala o programa e o codigo-fonte em
-%USERPROFILE%\Cronos-R41. Para encontrar a pasta: Win+R, cole esse caminho e
+%USERPROFILE%\Cronos-R42. Para encontrar a pasta: Win+R, cole esse caminho e
 pressione Enter. Na primeira abertura o instalador procura os dados antigos.
 Se houver mais de uma pasta possivel, escolha a que tem suas memorias e APIs.
 Se aparecer Cronos-R39 com configuracao padrao e sem suas conversas, use
@@ -10,7 +10,13 @@ Se aparecer Cronos-R39 com configuracao padrao e sem suas conversas, use
 Ele copia .env, vault, integracoes e personalidade localmente antes de abrir.
 Se a escolha falhar ou for cancelada, execute o mesmo BAT de novo. A pasta
 antiga permanece intacta. Seus dados privados nao sao publicados no GitHub.
-Nas proximas vezes, abra ABRIR-CRONOS.bat dentro da pasta Cronos-R41.
+Nas proximas vezes, abra ABRIR-CRONOS.bat dentro da pasta Cronos-R42.
+
+REVISAO DE 06/11/2026 (R42)
+A tela inicial agora tem navegacao recolhivel, indicadores reais do sistema e
+as funcoes da antiga estrela dentro da engrenagem inferior. A posicao dos
+paineis e salva nas preferencias locais. Sensores nao disponiveis aparecem
+como indisponiveis. Esta revisao ainda precisa de verificacao visual no Windows.
 
 REVISAO DE 06/11/2026 (R41)
 Perguntas de 15 linhas foram testadas; falhas em consultas auxiliares de memoria

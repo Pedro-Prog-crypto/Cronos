@@ -25,6 +25,9 @@ from cronos.providers import ProviderError
 
 class Preferences(BaseModel):
     proactive_suggestions: bool = True
+    home_left_closed: bool = False
+    home_right_closed: bool = False
+    home_right_compact: bool = False
     model_config = ConfigDict(extra='forbid')
     context_messages: int = Field(default=40, ge=2, le=100)
     language: Literal['pt-BR', 'en-US', 'es-ES'] = 'pt-BR'
