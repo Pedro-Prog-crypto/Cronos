@@ -6,4 +6,4 @@
 4. **Latência real e experiência da interface — prioridade média.** Medir p50/p95 por etapa no notebook; não há coleta desta máquina neste ambiente. Navegador/WebView2, áudio nativo e prévia do Studio precisam de teste manual Windows.
 5. **Conclusão de projeto pelo Studio — prioridade alta após a integração.** O fluxo local e o empacotamento têm testes automatizados, mas o teste solicitado da pizzaria Forno Vivo com IA externa, imagens, carrinho e WhatsApp, seguido de uma barbearia, continua bloqueado por falta de provedor autenticado/cota e navegador Windows. Não substituir esse teste por um template ou mock.
 
-O instalador público não leva `.env`, vault, modelos locais nem arquivos pessoais. Uma instalação nova exige configurar ou migrar credenciais privadas localmente, sem publicá-las no GitHub.
+O instalador público não leva `.env`, vault, modelos locais nem arquivos pessoais. A R40 tenta localizar a instalação antiga e importar os dados localmente antes de abrir; se houver várias pastas, o usuário escolhe a correta. Essa interação precisa ser confirmada no Windows do usuário. Nenhuma chave ou conversa é publicada no GitHub.

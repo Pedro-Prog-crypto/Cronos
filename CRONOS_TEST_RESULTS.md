@@ -36,3 +36,5 @@
 | 30 | Proteção de credenciais | PASSOU | Testes de logs/erros não ecoam respostas privadas; pacote público exclui `.env` e vault. |
 
 Comandos executados nesta operação: `.venv/bin/python -m pytest -q`, `npm run lint`, `npm run build`, `npm run test:long-capture`, `npm run test:study-images`. Resultados numéricos finais devem ser confrontados com a execução da branch entregue; nenhuma linha acima afirma que Fish/Gemini/OpenAI externos ou o dispositivo Windows passaram.
+
+**Adendo R40:** o pacote completo agora contém o código-fonte público, a interface compilada e um migrador local dos dados anteriores. A suíte completa passou com **810 testes**. Testes exercem a seleção de `Cronos-Dados`, a migração de `.env`/vault e a preservação da origem. A execução do BAT e do seletor no Windows permanece sem ensaio físico nesta máquina Linux.

@@ -1,4 +1,4 @@
-"""Build one runtime ZIP from tracked code; never copy local env, vault or venv."""
+"""Build one complete public source/runtime ZIP without local user data."""
 import hashlib
 import json
 from pathlib import Path
@@ -21,14 +21,17 @@ def build_patch():
 
 def build():
     build_patch()
-    tracked=subprocess.check_output(['git','ls-files','-z','--','cronos','modelos','config/providers.example.json','.env.example','pyproject.toml'],cwd=ROOT).decode().split('\0')
+    # A "complete" download must also contain the editable frontend, tests,
+    # scripts and vendored sources. Earlier releases bundled only the runtime.
+    # Release artifacts are excluded to avoid nesting old installers in this one.
+    tracked=subprocess.check_output(['git','ls-files','-z'],cwd=ROOT).decode().split('\0')
     manifest=json.loads((ROOT/'tools/interface_update_manifest.json').read_text())
     ui_assets={p.relative_to(ROOT).as_posix() for p in (ROOT/'cronos/ui/assets').rglob('*') if p.is_file()}
-    names=sorted(name for name in set(filter(None,tracked))|set(EXTRA)|set(CURRENT_REPORTS)|ui_assets|set(manifest['files']) if (ROOT/name).is_file())
+    names=sorted(name for name in set(filter(None,tracked))|set(EXTRA)|set(CURRENT_REPORTS)|ui_assets|set(manifest['files'])|{'tools/restore_existing_data.py'} if not name.startswith('releases/') and (ROOT/name).is_file())
     names=sorted(set(names)|{p.relative_to(ROOT).as_posix() for p in (ROOT/'examples/3d-product-demo').rglob('*') if p.is_file()})
     for name in names:
         parts=Path(name).parts
-        if any(p in {'.env','.venv','vault','.cronos-local','__pycache__'} for p in parts):raise ValueError('Arquivo local privado recusado: '+name)
+        if any(p in {'.env','.venv','vault','.cronos-local','__pycache__','node_modules','.git'} for p in parts):raise ValueError('Arquivo local privado recusado: '+name)
         if name.startswith('config/') and name!='config/providers.example.json':raise ValueError('Configuracao privada recusada.')
     output=ROOT/'releases/CRONOS-Completo-Um-Arquivo.zip';output.parent.mkdir(exist_ok=True)
     with zipfile.ZipFile(output,'w',zipfile.ZIP_DEFLATED,compresslevel=6) as package:

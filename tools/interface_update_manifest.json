@@ -1,5 +1,5 @@
 {
-  "revision": "cronos-restore-2026-11-05-r39",
+  "revision": "cronos-restore-2026-11-06-r40",
   "files": {
     "cronos/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "cronos/app.py": "178b60d21190d0e1aa76472faa7846349ca989524a26be73c62d682acc9213ca",
