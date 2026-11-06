@@ -130,28 +130,23 @@ def test_recoloured_delivery_is_repaired_before_saving_and_other_clients_stay_pr
             assert 'Cliente particular' not in text and 'private@example.com' not in text
 
 
-def test_same_provider_pool_continues_from_planning_to_code_and_falls_back_again(settings,monkeypatch):
+def test_gemini_handles_planning_and_code_without_studio_reserves(settings, monkeypatch):
     import cronos.studio.service as service
-    settings=replace(settings,gemini_key='fixture-not-real')
-    monkeypatch.setenv('STUDIO_RESERVE','fixture-not-real')
-    settings.providers_file.write_text(json.dumps({'providers':[{'id':name,'kind':'openai','model':'fixture','base_url':'https://example.com/v1','key_env':'STUDIO_RESERVE'} for name in ('mistral','groq')]}))
-    class Adapter(VisualBuilder):
-        def __init__(self,name):super().__init__();self.name=name
-        async def reply(self,system,messages):
-            if self.name in {'gemini','ollama'}:raise ProviderError('quota',429)
-            if self.name=='mistral' and 'EXATAMENTE três direções' not in system:raise ProviderError('temporary',503)
-            return await super().reply(system,messages)
-    adapters={name:Adapter(name) for name in ('gemini','mistral','groq','ollama')}
-    monkeypatch.setattr(service,'make_provider',lambda configuration:adapters[configuration.provider])
+    settings = replace(settings, gemini_key='fixture-not-real')
+    monkeypatch.setenv('STUDIO_RESERVE', 'fixture-not-real')
+    settings.providers_file.write_text(json.dumps({'providers': [
+        {'id': name, 'kind': 'openai', 'model': 'fixture', 'base_url': 'https://example.com/v1', 'key_env': 'STUDIO_RESERVE'}
+        for name in ('mistral', 'groq')]}))
+    adapters = {name: VisualBuilder() for name in ('gemini', 'mistral', 'groq')}
+    monkeypatch.setattr(service, 'make_provider', lambda configuration: adapters[configuration.provider])
     with TestClient(create_app(settings)) as client:
-        response=client.post('/studio/opportunities',headers=AUTH,json=seed(client))
-        done=wait(client,response.json())
-        assert done['status']=='ready' and done['active_provider']=='groq' and done['revision']==1, (done.get('error'),done['events'])
-        assert len(done['directions'])==3
-        assert len([e for e in done['events'] if e['phase']=='fallback'])==1
-        assert not any(e['phase']=='failed' for e in done['events'])
-        assert not adapters['gemini'].calls
-        assert len(adapters['mistral'].calls)==1 and len(adapters['groq'].calls)==1
+        response = client.post('/studio/opportunities', headers=AUTH, json=seed(client))
+        done = wait(client, response.json())
+        assert done['status'] == 'ready' and done['active_provider'] == 'gemini', (done.get('error'), done['events'])
+        assert done['provider_queue'] == ['gemini'] and done['revision'] == 1
+        assert len(done['directions']) == 3 and len(adapters['gemini'].calls) == 2
+        assert not adapters['mistral'].calls and not adapters['groq'].calls
+        assert not any(e['phase'] == 'fallback' for e in done['events'])
 
 
 def test_basic_2d_requests_do_not_become_3d_just_because_they_say_without_3d():

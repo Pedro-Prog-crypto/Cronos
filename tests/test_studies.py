@@ -82,6 +82,47 @@ def test_lesson_uses_only_relevant_pages_and_saves_rotating_layouts(settings):
         assert history[0]['id'] == lesson['id']
 
 
+def test_study_source_selection_limits_what_tutor_can_cite(settings):
+    class Tutor:
+        systems = []
+        async def reply(self, system, messages):
+            self.systems.append(system)
+            return {'reply': 'A explicação foi preparada.', 'topics': [], 'tool_calls': []}
+    store = StudyStore(settings.vault / 'Estudos')
+    subject = store.create_subject('História')
+    first = store.add_link_source(subject['id'], 'Primeira fonte', 'https://example.org/a', 'O iluminismo valorizava a razão e o debate público. ' * 3)
+    other = store.add_link_source(subject['id'], 'Segunda fonte', 'https://example.org/b', 'O iluminismo valorizava a educação e a ciência. ' * 3)
+    tutor = Tutor()
+    with TestClient(create_app(settings, tutor)) as client:
+        url = f"/studies/subjects/{subject['id']}/lessons"
+        selected = client.post(url, headers=AUTH, json={'question': 'Explique o iluminismo.', 'source_ids': [first['id']]})
+        assert selected.status_code == 200, selected.text
+        assert {citation['source'] for citation in selected.json()['citations']} == {'Primeira fonte'}
+        assert 'Segunda fonte' not in tutor.systems[-1]
+        none = client.post(url, headers=AUTH, json={'question': 'Explique o iluminismo.', 'source_ids': []})
+        assert none.status_code == 200, none.text
+        assert none.json()['citations'] == []
+        assert 'Nenhuma fonte foi selecionada' in tutor.systems[-1]
+        assert other['id'] != first['id']
+
+
+def test_study_web_source_search_returns_only_https_results(settings, monkeypatch):
+    import ddgs
+    class Search:
+        def __init__(self, **kwargs): pass
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def text(self, query, max_results):
+            assert query == 'Iluminismo' and max_results == 8
+            return [{'title': 'Museu', 'href': 'https://example.org/a', 'body': 'Uma fonte pública'},
+                    {'title': 'Inseguro', 'href': 'http://example.org/b', 'body': 'Ignorar'}]
+    monkeypatch.setattr(ddgs, 'DDGS', Search)
+    with TestClient(create_app(settings)) as client:
+        response = client.get('/studies/source-search?query=Iluminismo', headers=AUTH)
+        assert response.status_code == 200
+        assert response.json()['results'] == [{'title': 'Museu', 'url': 'https://example.org/a', 'summary': 'Uma fonte pública'}]
+
+
 def test_study_limits_are_large_but_bounded():
     assert MAX_PDF_BYTES == 100 * 1024 * 1024
     assert MAX_LIBRARY_BYTES == 5 * 1024 * 1024 * 1024

@@ -35,3 +35,55 @@
 .study-exercise-actions input{flex:1;min-width:170px}.study-exercise-body{display:grid;gap:8px}.study-exercise-body small{color:#7edbdf;font-size:10px}.study-exercise-body p{margin:0;font-size:14px;line-height:1.6}.study-exercise-body label{color:#a6cad4;font-size:11px}.study-exercise-body button{justify-self:start}
 .study-exercise-feedback{padding:11px;border-left:3px solid #5bdbc0;background:#09281f}.study-exercise-feedback p{margin:7px 0;font-size:12px;line-height:1.6}.study-exercise-feedback small{color:#a8d7c7}
 @media(max-width:740px){.study-learning-heading{align-items:flex-start;flex-direction:column}.study-learning-panel{padding:12px}.study-plan-controls label,.study-plan-controls label:nth-child(2){min-width:100%}}
+
+/* Reader first: sources on the left, teaching tools on the right. */
+.study-shell{grid-template-columns:minmax(230px,19vw) minmax(0,1fr) minmax(285px,23vw)}
+.study-shell .study-sidebar{grid-column:1}
+.study-shell .study-main{grid-column:2}
+.study-shell .study-rightbar{grid-column:3}
+.study-shell.left-collapsed{grid-template-columns:0 minmax(0,1fr) minmax(285px,23vw)}
+.study-shell.right-collapsed{grid-template-columns:minmax(230px,19vw) minmax(0,1fr) 0}
+.study-shell.left-collapsed.right-collapsed,.study-shell.reader-expanded{grid-template-columns:0 minmax(0,1fr) 0}
+.study-shell.left-collapsed .study-sidebar,.study-shell.reader-expanded .study-sidebar{display:none}
+.study-shell.right-collapsed .study-rightbar,.study-shell.reader-expanded .study-rightbar{display:none}
+.study-title-actions,.study-side-heading{display:flex;align-items:center;justify-content:space-between;gap:7px}
+.study-title-actions .study-icon-button{width:30px;height:30px}
+.study-side-heading{margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #24546977}
+.study-side-heading small{font:600 10px Rajdhani,sans-serif;letter-spacing:.15em;color:#61cbe0}
+.study-side-heading h2{margin:2px 0 0;font-size:17px}
+.study-left-sources{margin-top:19px;padding-top:16px;border-top:1px solid #24546977}
+.study-source-search{display:flex;align-items:center;gap:7px;padding:8px 10px;margin-bottom:9px;color:#79cfe1;border:1px solid #24566b;border-radius:8px;background:#04131e}
+.study-source-search input{width:100%;min-width:0;border:0;outline:0;background:transparent;color:#e3f8ff;font:inherit;font-size:11px}
+.study-source-select{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;font-size:10px;color:#8bb3c4}
+.study-source-select button{padding:4px 0;background:none;border:0;color:#6ce2f4;font:inherit;font-size:10px;cursor:pointer;white-space:nowrap}
+.study-source-row{display:flex;align-items:center;gap:6px;min-width:0}
+.study-source-row>input{accent-color:#35d3ef;cursor:pointer;flex:none}
+.study-source-row .study-source{min-width:0;flex:1}
+.study-source-empty{font-size:10px;color:#8faebe}
+.study-web-search{display:grid;gap:6px;margin-top:10px;padding:10px;border:1px solid #1d657866;border-radius:9px;background:#061723aa}
+.study-web-search label{font-size:10px;font-weight:600;color:#9fcddd}
+.study-web-search>div{display:flex;gap:5px}
+.study-web-search input{flex:1;min-width:0;padding:9px 8px;color:#e8f9ff;background:#020b13;border:1px solid #235a70;border-radius:7px;font:inherit;font-size:10px}
+.study-web-search button{width:34px;display:grid;place-items:center;color:#06121b;background:#39d7f3;border:0;border-radius:7px;cursor:pointer}
+.study-web-search button:disabled{opacity:.45;cursor:default}
+.study-web-results{display:grid;gap:6px;margin-top:8px}
+.study-web-results>div{display:grid;gap:4px;padding:9px;border:1px solid #24566b;border-radius:8px;background:#081c29}
+.study-web-results b{font-size:11px;color:#d4eff8}
+.study-web-results small{font-size:10px;color:#8eafbd;line-height:1.4}
+.study-web-results button{justify-self:start;padding:5px 7px;color:#7fe8f7;background:#0c2b39;border:1px solid #277993;border-radius:5px;font-size:10px;cursor:pointer}
+.study-rightbar{display:block;padding:19px 17px;border-left:1px solid #19455a88}
+.study-rightbar .study-question-box{margin:0 0 17px}
+.study-rightbar .study-question-input{display:grid;gap:8px}
+.study-rightbar .study-question-input textarea{width:100%;min-height:90px;max-height:200px}
+.study-rightbar .study-question-input>button{justify-content:center}
+.study-rightbar .study-learning-mode{display:grid;gap:5px;margin:0 0 10px}
+.study-rightbar .study-learning-mode select{width:100%}
+.study-rightbar .study-learning-panel{margin-bottom:17px;padding:12px}
+.study-rightbar .study-learning-heading{align-items:flex-start;flex-direction:column}
+.study-main{padding:18px clamp(16px,2.1vw,38px) 18px}
+.study-lesson{min-height:0;flex:1}
+.study-prose,.study-layout-reading .study-prose{max-width:850px;font-size:17px;line-height:1.8}
+.study-inline-image img,.study-image-card img{object-fit:contain}
+@media(max-width:1100px){.study-shell{grid-template-columns:215px minmax(0,1fr) 280px}.study-shell.left-collapsed{grid-template-columns:0 minmax(0,1fr) 280px}.study-shell.right-collapsed{grid-template-columns:215px minmax(0,1fr) 0}.study-shell.left-collapsed.right-collapsed,.study-shell.reader-expanded{grid-template-columns:0 minmax(0,1fr) 0}.study-rightbar{display:block}.study-main{padding-inline:16px}}
+@media(max-width:740px){.study-top-actions{gap:4px}.study-top-actions .study-icon-button{width:30px;height:30px}.study-shell,.study-shell.left-collapsed,.study-shell.right-collapsed,.study-shell.reader-expanded{display:flex;flex-direction:column;overflow-y:auto}.study-sidebar,.study-rightbar{display:block;max-height:185px;min-height:0;overflow-y:auto;border:0;border-bottom:1px solid #19455a88}.study-sidebar{display:block;padding:12px}.study-rightbar{padding:12px}.study-main{min-height:350px;overflow:visible;padding:12px}.study-lesson{min-height:310px;flex:none}.study-source-list{display:grid;overflow:visible}.study-shell.left-collapsed .study-sidebar,.study-shell.reader-expanded .study-sidebar,.study-shell.right-collapsed .study-rightbar,.study-shell.reader-expanded .study-rightbar{display:none}}
+@media(max-width:740px){.study-prose,.study-layout-reading .study-prose{font-size:15px}}

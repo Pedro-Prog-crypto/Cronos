@@ -112,6 +112,52 @@ def test_long_text_reaches_the_answer_provider_without_truncation(settings):
         assert response.json()['reply']=='Recebi o texto completo.'
 
 
+def test_fifteen_line_question_reaches_the_answer_provider(settings):
+    message = '\n'.join(f'Linha {number}: explique como organizar o cardápio e as fotos da pizzaria.'
+                        for number in range(1, 16))
+    class Provider:
+        async def reply(self, system, messages):
+            assert messages[-1]['content'] == message
+            return {'reply': 'Recebi as quinze linhas.', 'topics': [], 'tool_calls': []}
+    with TestClient(create_app(settings, Provider())) as client:
+        response = client.post('/chat', headers=AUTH, json={'message': message})
+        assert response.status_code == 200, response.text
+        assert response.json()['reply'] == 'Recebi as quinze linhas.'
+
+
+def test_failed_recall_does_not_block_a_multiline_answer(settings, monkeypatch):
+    message = '\n'.join(f'Parte {number}: detalhe o projeto.' for number in range(1, 16))
+    class Provider:
+        async def reply(self, system, messages):
+            assert messages[-1]['content'] == message
+            return {'reply': 'A pergunta completa chegou.', 'topics': [], 'tool_calls': []}
+    with TestClient(create_app(settings, Provider())) as client:
+        def broken_recall(*args, **kwargs):
+            raise RuntimeError('índice local danificado')
+        monkeypatch.setattr(client.app.state.memory, 'recall', broken_recall)
+        response = client.post('/chat', headers=AUTH, json={'message': message})
+        assert response.status_code == 200, response.text
+        assert response.json()['reply'] == 'A pergunta completa chegou.'
+        assert any('consulta às notas falhou' in warning for warning in response.json()['warnings'])
+
+
+@pytest.mark.parametrize('broken_method', ['conversation_context', 'tool_history', 'history', 'record'])
+def test_optional_memory_failure_does_not_erase_a_multiline_answer(settings, monkeypatch, broken_method):
+    message = '\n'.join(f'Linha {number}: explique o cardápio.' for number in range(1, 16))
+    class Provider:
+        async def reply(self, system, messages):
+            assert messages[-1]['content'] == message
+            return {'reply': 'O cardápio foi explicado.', 'topics': [], 'tool_calls': []}
+    with TestClient(create_app(settings, Provider())) as client:
+        def broken(*args, **kwargs):
+            raise RuntimeError('falha simulada no armazenamento')
+        monkeypatch.setattr(client.app.state.memory, broken_method, broken)
+        response = client.post('/chat', headers=AUTH, json={'message': message})
+        assert response.status_code == 200, response.text
+        assert response.json()['reply'] == 'O cardápio foi explicado.'
+        assert response.json()['warnings']
+
+
 def test_model_output_validation():
     assert parse_reply('{"reply":"Olá","topics":[]}')["reply"] == "Olá"
     for bad in ("texto", '[]', '{"reply":"ok","topics":["Sócrates"]}', '{"reply":"","topics":[]}'):

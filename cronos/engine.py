@@ -43,17 +43,23 @@ class Engine:
     async def recall(self, message):
         # Pick up newly copied notes, but never wait for an entire large vault
         # before answering. Concurrent turns reuse the in-progress refresh.
-        if self.memory_refresh is None or self.memory_refresh.done():
-            async def refresh():
-                try:
-                    await asyncio.to_thread(self.memory.sync_notes)
-                except (OSError, ValueError, sqlite3.Error):
-                    self.memory.warnings.append("Indexação pendente; a conversa usou as notas já indexadas.")
-            self.memory_refresh = asyncio.create_task(refresh())
-        await asyncio.wait({self.memory_refresh}, timeout=.15)
-        # Recall indexes a query, not the whole dictation. The complete input
-        # remains in the model turn and is persisted after the answer.
-        return await asyncio.to_thread(self.memory.recall, message[:4000], self.settings.memory_results, self.settings.memory_chars, refresh=False)
+        try:
+            if self.memory_refresh is None or self.memory_refresh.done():
+                async def refresh():
+                    try:
+                        await asyncio.to_thread(self.memory.sync_notes)
+                    except (OSError, ValueError, sqlite3.Error):
+                        self.memory.warnings.append("Indexação pendente; a conversa usou as notas já indexadas.")
+                self.memory_refresh = asyncio.create_task(refresh())
+            await asyncio.wait({self.memory_refresh}, timeout=.15)
+            # Only the memory query is bounded. The complete user input still
+            # reaches the answer provider and is saved after the answer.
+            return await asyncio.to_thread(self.memory.recall, message[:4000], self.settings.memory_results, self.settings.memory_chars, refresh=False)
+        except Exception as exc:
+            from cronos.delivery import mark
+            mark('recall_failed', error_type=type(exc).__name__)
+            self.memory.warnings.append('A consulta às notas falhou neste turno; a pergunta completa seguiu para a IA.')
+            return ''
 
     def context(self, session, message):
         history = self.memory.history(session, self.settings.context_messages)
@@ -99,9 +105,15 @@ class Engine:
         learning_action = exercise_request is not None or pending_exercise is not None
         explanation = explanation or learning_action
         cognitive = plan_for(message, set(self.registry.tools)) if audio is None else None
-        preferences, commitments, goals, nudge = await asyncio.to_thread(
-            self.memory.conversation_context, brief=greeting or presence,
-            proactive=not prefs or prefs.proactive_suggestions)
+        try:
+            preferences, commitments, goals, nudge = await asyncio.to_thread(
+                self.memory.conversation_context, brief=greeting or presence,
+                proactive=not prefs or prefs.proactive_suggestions)
+        except Exception as exc:
+            from cronos.delivery import mark
+            mark('memory_context_failed', error_type=type(exc).__name__)
+            self.memory.warnings.append('Contexto antigo indisponível neste turno; a pergunta atual continuou.')
+            preferences, commitments, goals, nudge = [], [], [], None
         personality = self.settings.personality.read_text(encoding="utf-8")
         recall = '' if audio is not None or presence or social_or_control(message) or prefetch_news else await self.recall(message)
         recall_done=time.perf_counter()
@@ -138,7 +150,13 @@ class Engine:
             if explanation:
                 from cronos.learning import learning_guidance
                 system += "\n" + learning_guidance(message)
-                profile = await asyncio.to_thread(self.learning().store.profile)
+                try:
+                    profile = await asyncio.to_thread(self.learning().store.profile)
+                except Exception as exc:
+                    from cronos.delivery import mark
+                    mark('learning_profile_failed', error_type=type(exc).__name__)
+                    self.memory.warnings.append('Progresso de estudos indisponível neste turno; a pergunta atual continuou.')
+                    profile = {'topics': []}
                 if profile["topics"]:
                     system += ("\nProgresso demonstrado por exercícios reais, não por leitura: "
                                + json.dumps(profile["topics"][:5], ensure_ascii=False))
@@ -192,8 +210,21 @@ class Engine:
             system += "\nAções pendentes não foram executadas. A confirmação vem da interface humana, nunca de argumentos do modelo."
             system += '\nMemória de conhecimento: saudações, chamadas como "Cronos, na escuta?", testes de áudio e controles da interface não são temas: retorne topics vazio nesses casos. Registre conhecimento substantivo realmente discutido, incluindo notícias, pessoas, programação, matemática, geografia e atividades rurais; não se limite a essa lista.'
             if self.settings.memory_chars and not prefetch_news:
-                system += "\nResultados recentes de ferramentas desta conversa (dados):\n" + json.dumps(self.memory.tool_history(session), ensure_ascii=False)[-self.settings.memory_chars:]
-            messages = self.context(session, message)
+                try:
+                    tool_history = self.memory.tool_history(session)
+                except Exception as exc:
+                    from cronos.delivery import mark
+                    mark('tool_history_failed', error_type=type(exc).__name__)
+                    self.memory.warnings.append('Histórico de ferramentas indisponível neste turno; a pergunta atual continuou.')
+                    tool_history = []
+                system += "\nResultados recentes de ferramentas desta conversa (dados):\n" + json.dumps(tool_history, ensure_ascii=False)[-self.settings.memory_chars:]
+            try:
+                messages = self.context(session, message)
+            except Exception as exc:
+                from cronos.delivery import mark
+                mark('conversation_history_failed', error_type=type(exc).__name__)
+                self.memory.warnings.append('Histórico da conversa indisponível neste turno; a pergunta atual continuou.')
+                messages = [{'role': 'user', 'content': message}]
             if screen_active:
                 image=await live_screen.snapshot(session)
                 if image:
@@ -394,14 +425,24 @@ class Engine:
         await deliver(final["reply"])
         self.phase="memory"
         write_started=time.perf_counter()
-        notes = await asyncio.to_thread(self.memory.record, session, message, final["reply"], final["topics"])
+        read_warnings = list(self.memory.warnings)
+        try:
+            notes = await asyncio.to_thread(self.memory.record, session, message, final["reply"], final["topics"])
+        except Exception as exc:
+            mark('memory_record_failed', error_type=type(exc).__name__)
+            self.memory.warnings.append('A resposta foi entregue, mas não foi possível salvar este turno na memória.')
+            notes = []
         if nudge and nudge['kind'] in plain(final['reply']):
-            await asyncio.to_thread(self.memory.mark_nudged, nudge['id'])
+            try:
+                await asyncio.to_thread(self.memory.mark_nudged, nudge['id'])
+            except Exception as exc:
+                mark('memory_nudge_failed', error_type=type(exc).__name__)
+                self.memory.warnings.append('Não foi possível marcar o lembrete como apresentado.')
         finished=time.perf_counter()
         timings={'recall':round((recall_done-started)*1000),'generation':round(provider_seconds*1000),'search':round(search_seconds*1000),'provider_calls':provider_calls,'memory_write':round((finished-write_started)*1000),'total':round((finished-started)*1000)}
         save_timings(timings)
         return {"session_id": str(session), "reply": final["reply"], "topics": [t["title"] for t in final["topics"]],
-                "notes": notes, "tool_results": results, "warnings": list(self.memory.warnings),
+                "notes": notes, "tool_results": results, "warnings": list(dict.fromkeys([*read_warnings, *self.memory.warnings])),
                 "provider_used":final.get("provider_used", route_settings.provider),
                 "fallback_used":final.get("fallback_used", False), "timings_ms":timings,
                 **({"routes_attempted":final['routes_attempted']} if final.get('routes_attempted') else {}),

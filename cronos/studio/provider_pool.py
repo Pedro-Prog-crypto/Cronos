@@ -44,12 +44,12 @@ class ProviderPool:
         if 'HTTP 401' in reasons or 'HTTP 403' in reasons:
             actions.append('Atualize a chave rejeitada em Integrações.')
         if 'HTTP 429' in reasons:
-            actions.append('Aguarde a cota do provedor voltar ou escolha outro com cota.')
+            actions.append('Confira a cota do provedor e tente novamente quando estiver disponível.')
         if 'Ollama' in reasons:
             actions.append('Para usar Ollama, inicie o serviço e instale o modelo escolhido.')
         if not self.ids:
-            actions.append('Configure uma IA de código em Integrações; o Gemini está reservado à análise visual.')
-        raise ProviderError('Nenhuma integração de criação disponível conseguiu concluir esta etapa. Confira as chaves e os limites de uso dos provedores de código. '
+            actions.append('Configure o Gemini em Integrações e confira o modelo e a cota disponíveis.')
+        raise ProviderError('A integração de criação não conseguiu concluir esta etapa. Confira chave, modelo e cota. '
                             'Pedido, recursos e última versão preservados.' + (' ' + details if details else '') +
                             (' ' + ' '.join(actions) if actions else ''))
 
@@ -80,7 +80,8 @@ class ProviderPool:
         while True:
             identifier = self.current
             self.project['active_provider'] = identifier
-            self.event(self.project, 'provider', 'Tentando integração de criação: ' + identifier + '. As demais ficam na fila de reserva.')
+            self.event(self.project, 'provider', 'Tentando integração de criação: ' + identifier +
+                       ('. Outras integrações estão na fila.' if len(self.ids) > 1 else '.'))
             try:
                 result = await self.receive(identifier,system,messages)
                 if transform is not None: result = transform(result)

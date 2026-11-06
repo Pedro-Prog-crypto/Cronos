@@ -35,44 +35,40 @@ class Vision:
             'correction_request':'Amplie os campos e botões do formulário e organize os rótulos em linhas separadas.'})}
 
 
-def test_explicit_retry_after_every_adapter_failed_keeps_request_assets_and_revision(settings,monkeypatch):
-    adapters={'gemini':Failing(),'mistral':Builder(),'ollama':Failing()}
-    settings=configured(settings,monkeypatch,adapters)
-    before=settings.providers_file.read_bytes(),settings.personality.read_bytes()
-    with TestClient(create_app(settings)) as c:
-        p=generate(c,new(c))
-        asset=c.post('/studio/projects/'+p['id']+'/assets',headers=AUTH,
-            json={'name':'foto.png','purpose':'image','data_base64':capture()['image_base64']}).json()['assets'][-1]
-        adapters['mistral']=Failing(ProviderError('quota',429))
-        failed=generate(c,p,prompt='Corrija os formulários mantendo as fotografias.')
-        assert failed['status']=='failed' and 'Nenhuma integração' in failed['error']
-        assert failed['revision']==p['revision'] and failed['current']==p['current']
-        counts={k:len(v.calls) for k,v in adapters.items()}
+def test_explicit_gemini_retry_keeps_request_assets_and_revision(settings, monkeypatch):
+    adapters = {'gemini': Builder(), 'mistral': Builder(), 'ollama': Builder()}
+    settings = configured(settings, monkeypatch, adapters)
+    before = settings.providers_file.read_bytes(), settings.personality.read_bytes()
+    with TestClient(create_app(settings)) as client:
+        project = generate(client, new(client))
+        assert project['status'] == 'ready' and project['active_provider'] == 'gemini'
+        asset = client.post('/studio/projects/' + project['id'] + '/assets', headers=AUTH,
+            json={'name': 'foto.png', 'purpose': 'image', 'data_base64': capture()['image_base64']}).json()['assets'][-1]
+        adapters['gemini'] = Failing(ProviderError('private quota', 429))
+        failed = generate(client, project, prompt='Corrija os formulários mantendo as fotografias.')
+        assert failed['status'] == 'failed' and '429' in failed['error']
+        assert failed['revision'] == project['revision'] and failed['current'] == project['current']
+        assert failed['provider_queue'] == ['gemini'] and not adapters['mistral'].calls
+        counts = {key: len(value.calls) for key, value in adapters.items()}
         time.sleep(.08)
-        assert counts=={k:len(v.calls) for k,v in adapters.items()} # no automatic repeat
-        # A second failed click preserves the same request; it is not a new project.
-        url='/studio/projects/'+p['id']+'/retry'
-        assert c.post(url,headers=AUTH,json={}).status_code==200
-        again=wait(c,p)
-        assert again['status']=='failed' and again['revision']==p['revision']
-        # A user-triggered retry genuinely tries the configured queue again;
-        # cooldowns from an earlier job must not claim the IAs were activated.
-        assert {k:len(v.calls) for k,v in adapters.items()} == {
-            'gemini': counts['gemini'], 'mistral': counts['mistral']+1,
-            'ollama': counts['ollama']+1}
-        adapters['mistral']=Builder()
-        # Simulate a reset quota or valid credential for the next explicit retry.
-        result=c.post(url,headers=AUTH,json={});assert result.status_code==200,result.text
-        done=wait(c,p)
-        assert done['status']=='ready' and done['id']==p['id'] and done['revision']==p['revision']+1
-        assert done['active_provider']=='mistral' and done['last_request']==failed['last_request']
-        assert done['assets'][-1]==asset and len(done['history'])==len(p['history'])+1
-        assert len(c.get('/studio/projects',headers=AUTH).json()['projects'])==1
-        sent=json.loads(adapters['mistral'].calls[-1][1][0]['content'])
-        assert sent['request']==failed['last_request'] and sent['current_files']==p['current']['files']
-        assert sent['assets'][-1]['name']==asset['name']
-        assert c.post(url,headers=AUTH,json={}).status_code==409 # completed is not retried
-    assert before==(settings.providers_file.read_bytes(),settings.personality.read_bytes())
+        assert counts == {key: len(value.calls) for key, value in adapters.items()}
+        url = '/studio/projects/' + project['id'] + '/retry'
+        assert client.post(url, headers=AUTH, json={}).status_code == 200
+        again = wait(client, project)
+        assert again['status'] == 'failed' and again['revision'] == project['revision']
+        assert len(adapters['gemini'].calls) == counts['gemini'] + 1
+        assert not adapters['mistral'].calls and not adapters['ollama'].calls
+        adapters['gemini'] = Builder()
+        response = client.post(url, headers=AUTH, json={})
+        assert response.status_code == 200, response.text
+        done = wait(client, project)
+        assert done['status'] == 'ready' and done['revision'] == project['revision'] + 1
+        assert done['active_provider'] == 'gemini' and done['last_request'] == failed['last_request']
+        assert done['assets'][-1] == asset and len(done['history']) == len(project['history']) + 1
+        sent = json.loads(adapters['gemini'].calls[-1][1][0]['content'])
+        assert sent['request'] == failed['last_request'] and sent['assets'][-1]['name'] == asset['name']
+        assert client.post(url, headers=AUTH, json={}).status_code == 409
+    assert before == (settings.providers_file.read_bytes(), settings.personality.read_bytes())
 
 
 def test_retry_restores_reference_options_and_has_exclusive_job_lock(settings):
@@ -162,24 +158,25 @@ def test_screen_observations_drive_code_revision_and_keep_original(settings):
         assert restored['current']['files']==old
 
 
-def test_screen_vision_fallback_and_rejection_do_not_replace_site(settings,monkeypatch):
-    vision=Vision()
-    adapters={'gemini':Failing(ProviderError('quota',429)),'mistral':vision,'ollama':Failing()}
-    settings=configured(settings,monkeypatch,adapters)
-    with TestClient(create_app(settings)) as c:
-        p=new(c);url='/studio/projects/'+p['id']+'/screen-review'
-        assert c.post(url,headers=AUTH,json=capture()).status_code==200
-        done=wait(c,p)
-        assert done['status']=='draft' and done['screen_reviews'][0]['provider']=='mistral'
-        assert len(adapters['gemini'].calls)==len(vision.calls)==1
-        # Invalid image analysis moves to the reserve and ultimately fails safely.
-        adapters['mistral']=Builder([{'reply':'not a review'}]);c.app.state.studio.vision_cooldowns.clear()
-        assert c.post(url,headers=AUTH,json=capture(repair=True)).status_code==200
-        failed=wait(c,p)
-        assert failed['status']=='failed' and failed['current']==p['current'] and failed['revision']==0
-        assert failed['screen_reviews']==done['screen_reviews']
-        response=c.post('/studio/projects/'+p['id']+'/retry',headers=AUTH,json={})
-        assert response.status_code==409 and 'captura' in response.text
+def test_screen_review_uses_only_gemini_and_preserves_site_after_failure(settings, monkeypatch):
+    vision = Vision()
+    adapters = {'gemini': vision, 'mistral': Vision()}
+    settings = configured(settings, monkeypatch, adapters)
+    with TestClient(create_app(settings)) as client:
+        project = new(client)
+        url = '/studio/projects/' + project['id'] + '/screen-review'
+        assert client.post(url, headers=AUTH, json=capture()).status_code == 200
+        done = wait(client, project)
+        assert done['status'] == 'draft' and done['screen_reviews'][0]['provider'] == 'gemini'
+        assert len(vision.calls) == 1 and not adapters['mistral'].calls
+        adapters['gemini'] = Builder([{'reply': 'not a review'}])
+        assert client.post(url, headers=AUTH, json=capture(repair=True)).status_code == 200
+        failed = wait(client, project)
+        assert failed['status'] == 'failed' and failed['current'] == project['current']
+        assert failed['revision'] == 0 and failed['screen_reviews'] == done['screen_reviews']
+        assert not adapters['mistral'].calls
+        response = client.post('/studio/projects/' + project['id'] + '/retry', headers=AUTH, json={})
+        assert response.status_code == 409 and 'captura' in response.text
 
 
 def test_cancel_screen_review_does_not_launch_code_or_keep_image(settings):

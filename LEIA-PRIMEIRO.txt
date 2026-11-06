@@ -1,8 +1,8 @@
 CRONOS COMPLETO — INSTALACAO AUTONOMA
 
-SE BAIXOU INSTALAR-CRONOS-COMPLETO-R40.bat
+SE BAIXOU INSTALAR-CRONOS-COMPLETO-R41.bat
 Execute o BAT uma vez. Ele instala o programa e o codigo-fonte em
-%USERPROFILE%\Cronos-R40. Para encontrar a pasta: Win+R, cole esse caminho e
+%USERPROFILE%\Cronos-R41. Para encontrar a pasta: Win+R, cole esse caminho e
 pressione Enter. Na primeira abertura o instalador procura os dados antigos.
 Se houver mais de uma pasta possivel, escolha a que tem suas memorias e APIs.
 Se aparecer Cronos-R39 com configuracao padrao e sem suas conversas, use
@@ -10,7 +10,17 @@ Se aparecer Cronos-R39 com configuracao padrao e sem suas conversas, use
 Ele copia .env, vault, integracoes e personalidade localmente antes de abrir.
 Se a escolha falhar ou for cancelada, execute o mesmo BAT de novo. A pasta
 antiga permanece intacta. Seus dados privados nao sao publicados no GitHub.
-Nas proximas vezes, abra ABRIR-CRONOS.bat dentro da pasta Cronos-R40.
+Nas proximas vezes, abra ABRIR-CRONOS.bat dentro da pasta Cronos-R41.
+
+REVISAO DE 06/11/2026 (R41)
+Perguntas de 15 linhas foram testadas; falhas em consultas auxiliares de memoria
+nao impedem a pergunta completa de chegar a IA. A resposta pode aparecer com um
+aviso se nao for possivel salvar a memoria. O Estudio de Sites usa somente Gemini
+para planejar e criar; chave, modelo e cota validos ainda sao necessarios.
+A Area de Estudos ganhou leitura ampliada, fontes na esquerda (com busca local
+e pesquisa de links publicos na web), ferramentas na
+direita e controles para recolher laterais ou maximizar o texto. A imagem de
+apoio e carregada pela rota autenticada; fontes indisponiveis sao ignoradas.
 
 ESTA PASTA E A NOVA INSTALACAO
 O Cronos sera executado a partir desta pasta. APIs, integracoes, memoria e projetos

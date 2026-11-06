@@ -62,6 +62,21 @@ def test_stream_delivers_reply_then_final_and_saves_memory(settings):
         assert client.get('/conversations/'+result['session_id'],headers=AUTH).json()['messages'][-1]['content']==result['reply']
 
 
+def test_stream_answers_fifteen_lines_when_recall_fails(settings, monkeypatch):
+    question='\n'.join(f'Linha {number}: explique esta ideia.' for number in range(1, 16))
+    class Provider:
+        async def reply(self, system, messages):
+            assert messages[-1]['content'] == question
+            return {'tool_calls': [], 'reply': 'Recebi as quinze linhas.', 'topics': []}
+    with TestClient(create_app(settings, Provider())) as client:
+        monkeypatch.setattr(client.app.state.memory, 'recall', lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError('índice quebrado')))
+        response=client.post('/chat/stream', headers=AUTH, json={'message': question})
+        events=[json.loads(line) for line in response.text.splitlines()]
+        assert [event['type'] for event in events] == ['reply', 'result']
+        assert events[-1]['result']['reply'] == 'Recebi as quinze linhas.'
+        assert any('consulta às notas falhou' in warning for warning in events[-1]['result']['warnings'])
+
+
 def test_stream_errors_do_not_retry_or_lose_status(settings):
     class Provider:
         calls=0

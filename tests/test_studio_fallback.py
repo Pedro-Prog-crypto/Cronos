@@ -73,7 +73,7 @@ def test_no_site_builder_reports_real_blockers_and_next_actions():
         asyncio.run(pool.reply('Crie o site', [{'role': 'user', 'content': 'pizzaria'}]))
     message = str(caught.value)
     assert 'HTTP 401' in message and 'HTTP 429' in message
-    assert 'Atualize a chave' in message and 'Aguarde a cota' in message
+    assert 'Atualize a chave' in message and 'Confira a cota' in message
     assert 'inicie o serviço' in message and 'private' not in message
     assert [item['id'] for item in project['provider_attempts']] == list(adapters)
 
@@ -176,101 +176,98 @@ def configured(settings, monkeypatch, adapters):
     return settings
 
 
-def test_site_job_recovers_from_429_and_503_and_preserves_context_and_credentials(settings, monkeypatch):
-    adapters = {'gemini': Failing(ProviderError('quota', 429)), 'mistral': Failing(), 'groq': Builder(), 'ollama': Failing()}
-    settings = configured(settings, monkeypatch, adapters)
-    before = settings.providers_file.read_bytes(), settings.personality.read_bytes()
-    with TestClient(create_app(settings)) as client:
-        p = new(client)
-        done = generate(client, p, prompt='Crie uma versão exclusiva para este hotel.')
-        assert done['status'] == 'ready' and done['revision'] == 1
-        assert done['provider'] == 'mistral' and done['active_provider'] == 'groq'
-        assert not done.get('error') and not any(e['phase'] == 'failed' for e in done['events'])
-        assert [x['id'] for x in done['provider_attempts']] == ['mistral', 'groq']
-        assert not adapters['gemini'].calls
-        assert adapters['mistral'].calls[0] == adapters['groq'].calls[0]
-        assert not adapters['ollama'].calls
-        assert done['last_request'] == 'Crie uma versão exclusiva para este hotel.'
-        assert client.app.state.engine.settings.provider == 'gemini'
-        assert client.app.state.engine.settings.provider_timeout == settings.provider_timeout
-    assert before == (settings.providers_file.read_bytes(), settings.personality.read_bytes())
-
-
-def test_studio_catalog_separates_visual_review_from_code_builders(settings, monkeypatch):
-    adapters = {'gemini': Failing(), 'mistral': Builder(), 'ollama': Failing()}
+def test_studio_catalog_offers_only_gemini_for_site_creation(settings, monkeypatch):
+    adapters = {'gemini': Builder(), 'mistral': Builder(), 'ollama': Builder()}
     settings = configured(settings, monkeypatch, adapters)
     with TestClient(create_app(settings)) as client:
         catalog = client.get('/studio/catalog', headers=AUTH).json()
         roles = {entry['id']: entry['studio_role'] for entry in catalog['providers']}
-        assert catalog['selected'] == 'mistral'
-        assert roles['gemini'] == 'visual_review' and roles['mistral'] == 'builder'
+        assert catalog['selected'] == 'gemini'
+        assert roles['gemini'] == 'builder' and roles['mistral'] == roles['ollama'] == 'unavailable'
+        assert [p['id'] for p in catalog['providers'] if p['ready_for_attempt']] == ['gemini']
 
 
-def test_bad_proposals_also_yield_and_keep_the_original_request(settings, monkeypatch):
-    first = Builder([{'reply': '{"directions":[]}'}])
-    adapters = {'gemini': first, 'mistral': VisualBuilder(), 'ollama': Failing()}
+def test_gemini_creates_site_without_calling_configured_reserves(settings, monkeypatch):
+    adapters = {'gemini': Builder(), 'mistral': Failing(), 'groq': Failing(), 'ollama': Failing()}
     settings = configured(settings, monkeypatch, adapters)
+    before = settings.providers_file.read_bytes(), settings.personality.read_bytes()
     with TestClient(create_app(settings)) as client:
-        p = new(client)
-        body = {'mode': 'autonomous', 'prompt': 'Proponha três composições para o hotel.'}
-        assert client.post('/studio/projects/' + p['id'] + '/directions', headers=AUTH, json=body).status_code == 200
-        done = wait(client, p)
-        assert done['status'] == 'ideas_ready' and done['revision'] == 0
-        assert len(done['directions']) == 3 and done['active_provider'] == 'mistral'
-        assert done['last_request'] == body['prompt'] and not first.calls
-        assert len(adapters['mistral'].calls) == 1
+        done = generate(client, new(client), provider='mistral', prompt='Crie uma versão exclusiva para este hotel.')
+        assert done['status'] == 'ready' and done['revision'] == 1
+        assert done['provider'] == done['active_provider'] == 'gemini'
+        assert done['provider_queue'] == ['gemini']
+        assert len(adapters['gemini'].calls) == 1
+        assert not any(adapters[name].calls for name in ('mistral', 'groq', 'ollama'))
+        assert done['last_request'] == 'Crie uma versão exclusiva para este hotel.'
+    assert before == (settings.providers_file.read_bytes(), settings.personality.read_bytes())
 
 
-def test_invalid_code_gets_one_repair_then_yields_to_valid_reserve(settings, monkeypatch):
-    first = Builder([{'reply': 'not a complete site'}])
-    adapters = {'gemini': Failing(), 'mistral': first, 'groq': Builder(), 'ollama': Failing()}
-    settings = configured(settings, monkeypatch, adapters)
-    with TestClient(create_app(settings)) as client:
-        p = new(client)
-        done = generate(client, p)
-        assert done['status'] == 'ready' and done['active_provider'] == 'groq'
-        assert len(first.calls) == 2 and len(adapters['groq'].calls) == 1
-        assert adapters['groq'].calls[0] == first.calls[0]
-        assert not adapters['gemini'].calls
-        assert len(done['history']) == 2
-
-
-def test_failure_during_repair_uses_next_provider_without_repeating_failed_one(settings, monkeypatch):
-    first = Builder([{'reply': 'bad site'}, ProviderError('limit', 429)])
-    adapters = {'gemini': Failing(), 'mistral': first, 'groq': Builder(), 'ollama': Failing()}
-    settings = configured(settings, monkeypatch, adapters)
-    with TestClient(create_app(settings)) as client:
-        done = generate(client, new(client))
-        assert done['status'] == 'ready' and done['active_provider'] == 'groq'
-        assert len(first.calls) == 2 and len(adapters['groq'].calls) == 1
-        assert 'validation_error' in json.loads(adapters['groq'].calls[0][1][-1]['content'])
-        assert not adapters['gemini'].calls
-
-
-def test_all_failed_preserves_preexisting_revision_and_reports_one_final_failure(settings, monkeypatch):
-    adapters = {'gemini': Failing(), 'mistral': Builder(), 'ollama': Failing()}
+def test_gemini_quota_failure_preserves_site_and_never_calls_reserves(settings, monkeypatch):
+    adapters = {'gemini': Builder(), 'mistral': Builder(), 'ollama': Builder()}
     settings = configured(settings, monkeypatch, adapters)
     with TestClient(create_app(settings)) as client:
         first = generate(client, new(client))
         assert first['status'] == 'ready'
-        adapters['mistral'] = Failing(ProviderError('secret-server-body', 429))
-        done = generate(client, first, prompt='Altere o layout para uma proposta nova.')
-        assert done['status'] == 'failed' and done['revision'] == first['revision']
-        assert done['current']['files'] == first['current']['files']
-        assert done['last_request'] == 'Altere o layout para uma proposta nova.'
-        assert '429' in done['error'] and 'secret-server-body' not in json.dumps(done)
-        assert sum(e['phase'] == 'failed' for e in done['events']) == 1
-        assert not adapters['gemini'].calls
-        assert len(adapters['mistral'].calls) == 1 and len(adapters['ollama'].calls) == 1
+        adapters['gemini'] = Failing(ProviderError('private-server-body', 429))
+        failed = generate(client, first, prompt='Altere o layout e preserve os arquivos.')
+        assert failed['status'] == 'failed' and failed['revision'] == first['revision']
+        assert failed['current']['files'] == first['current']['files']
+        assert failed['last_request'] == 'Altere o layout e preserve os arquivos.'
+        assert '429' in failed['error'] and 'private-server-body' not in json.dumps(failed)
+        assert failed['provider_queue'] == ['gemini'] and len(adapters['gemini'].calls) == 1
+        assert not adapters['mistral'].calls and not adapters['ollama'].calls
+        class RevisedBuilder(Builder):
+            async def reply(self, system, messages):
+                result = await super().reply(system, messages)
+                data = json.loads(result['reply'])
+                data['files']['index.html'] = data['files']['index.html'].replace(
+                    '</main>', '<section aria-label="Hospedagem"><h2>Hospedagem planejada</h2><p>Conheça os quartos e solicite informações.</p></section></main>')
+                data['files']['styles.css'] += '\nmain{display:grid;grid-template-columns:1fr 2fr;gap:43px}'
+                return {**result, 'reply': json.dumps(data)}
+        adapters['gemini'] = RevisedBuilder()
+        response = client.post('/studio/projects/' + first['id'] + '/retry', headers=AUTH, json={})
+        assert response.status_code == 200, response.text
+        done = wait(client, first)
+        assert done['status'] == 'ready' and done['revision'] == first['revision'] + 1, done.get('error')
+        assert done['active_provider'] == 'gemini' and not adapters['mistral'].calls
 
 
-def test_local_mode_skips_every_external_integration(settings, monkeypatch):
-    adapters = {'gemini': Failing(), 'mistral': Failing(), 'ollama': Builder()}
-    settings = replace(configured(settings, monkeypatch, adapters), privacy_mode='local', provider='ollama')
+def test_bad_gemini_proposals_preserve_the_request_without_reserve(settings, monkeypatch):
+    adapters = {'gemini': Builder([{'reply': '{"directions":[]}'}]), 'mistral': VisualBuilder()}
+    settings = configured(settings, monkeypatch, adapters)
+    with TestClient(create_app(settings)) as client:
+        project = new(client)
+        body = {'mode': 'autonomous', 'prompt': 'Proponha três composições para o hotel.'}
+        assert client.post('/studio/projects/' + project['id'] + '/directions', headers=AUTH, json=body).status_code == 200
+        done = wait(client, project)
+        assert done['status'] == 'failed' and done['revision'] == 0
+        assert done['last_request'] == body['prompt'] and done['provider_queue'] == ['gemini']
+        assert len(adapters['gemini'].calls) == 1 and not adapters['mistral'].calls
+
+
+def test_gemini_repairs_invalid_code_with_same_provider(settings, monkeypatch):
+    class Repairing(Builder):
+        async def reply(self, system, messages):
+            result = await super().reply(system, messages)
+            return {'reply': 'bad site'} if len(self.calls) == 1 else result
+    adapters = {'gemini': Repairing(), 'mistral': Builder()}
+    settings = configured(settings, monkeypatch, adapters)
     with TestClient(create_app(settings)) as client:
         done = generate(client, new(client))
-        assert done['status'] == 'ready' and done['provider_queue'] == ['ollama']
-        assert not adapters['gemini'].calls and not adapters['mistral'].calls
+        assert done['status'] == 'ready' and done['active_provider'] == 'gemini'
+        assert len(adapters['gemini'].calls) == 2 and not adapters['mistral'].calls
+        assert len(done['history']) == 2
+
+
+def test_local_mode_requires_online_gemini_for_studio(settings, monkeypatch):
+    adapters = {'gemini': Builder(), 'ollama': Builder()}
+    settings = replace(configured(settings, monkeypatch, adapters), privacy_mode='local', provider='ollama')
+    with TestClient(create_app(settings)) as client:
+        project = new(client)
+        response = client.post('/studio/projects/' + project['id'] + '/generate', headers=AUTH,
+                               json={'mode': 'autonomous', 'prompt': 'Crie um site de hotel.'})
+        assert response.status_code == 409 and 'modo online' in response.text
+        assert not adapters['gemini'].calls and not adapters['ollama'].calls
 
 
 def test_remote_font_css_is_removed_without_discarding_a_valid_site(settings):
@@ -291,26 +288,26 @@ def test_remote_font_css_is_removed_without_discarding_a_valid_site(settings):
         assert done['current']['report']['passed']
 
 
-def test_reference_analysis_can_use_a_reserve_and_keeps_cached_image_description(settings, monkeypatch):
+def test_reference_analysis_uses_gemini_and_keeps_cached_description(settings, monkeypatch):
     class VisionBuilder(Builder):
         async def reply(self, system, messages):
             if messages[0].get('image'):
                 self.calls.append((system, messages))
                 return {'reply': 'Composição editorial vertical com tipografia forte e fundo claro.'}
             return await super().reply(system, messages)
-    adapters = {'gemini': Failing(ProviderError('quota', 429)), 'mistral': VisionBuilder(), 'ollama': Failing()}
+    adapters = {'gemini': VisionBuilder(), 'mistral': Failing()}
     settings = configured(settings, monkeypatch, adapters)
     with TestClient(create_app(settings)) as client:
-        p = new(client)
+        project = new(client)
         image = io.BytesIO(); Image.new('RGB', (30, 50), 'blue').save(image, 'PNG')
-        uploaded = client.post('/studio/projects/' + p['id'] + '/assets', headers=AUTH,
+        uploaded = client.post('/studio/projects/' + project['id'] + '/assets', headers=AUTH,
             json={'name': 'reference.png', 'purpose': 'reference', 'data_base64': base64.b64encode(image.getvalue()).decode()}).json()
         done = generate(client, uploaded, mode='reference', reference_asset=uploaded['assets'][-1]['name'])
-        assert done['status'] == 'ready' and done['active_provider'] == 'mistral'
+        assert done['status'] == 'ready' and done['active_provider'] == 'gemini'
         assert done['assets'][-1]['analysis'].startswith('Composição editorial')
-        payload = json.loads(adapters['mistral'].calls[-1][1][-1]['content'])
+        payload = json.loads(adapters['gemini'].calls[-1][1][-1]['content'])
         assert payload['visual_reference'] == done['assets'][-1]['analysis']
-        assert not adapters['ollama'].calls
+        assert not adapters['mistral'].calls
 
 
 @pytest.mark.parametrize('kind', ['openai', 'anthropic', 'ollama'])
@@ -334,22 +331,17 @@ def test_canonical_images_are_translated_for_each_backup_api(settings, monkeypat
     else: assert last['content'][-1]['source']['data'] == image['data']
 
 
-def test_missing_primary_key_uses_configured_reserve_without_reconfiguration(settings, monkeypatch):
-    adapters = {'gemini': Failing(), 'mistral': Builder(), 'ollama': Failing()}
+def test_missing_gemini_key_does_not_use_other_configured_apis(settings, monkeypatch):
+    adapters = {'gemini': Builder(), 'mistral': Builder(), 'ollama': Builder()}
     settings = replace(configured(settings, monkeypatch, adapters), gemini_key='')
     with TestClient(create_app(settings)) as client:
-        done = generate(client, new(client))
-        assert done['status'] == 'ready' and done['active_provider'] == 'mistral'
-        assert not adapters['gemini'].calls and not adapters['ollama'].calls
-
-
-def test_local_mode_falls_back_to_local_even_if_saved_primary_was_external(settings, monkeypatch):
-    adapters = {'gemini': Failing(), 'mistral': Failing(), 'ollama': Builder()}
-    settings = replace(configured(settings, monkeypatch, adapters), privacy_mode='local')
-    with TestClient(create_app(settings)) as client:
-        done = generate(client, new(client), provider='gemini')
-        assert done['status'] == 'ready' and done['active_provider'] == 'ollama'
-        assert not adapters['gemini'].calls and not adapters['mistral'].calls
+        catalog = client.get('/studio/catalog', headers=AUTH).json()
+        assert catalog['selected'] == ''
+        project = new(client)
+        response = client.post('/studio/projects/' + project['id'] + '/generate', headers=AUTH,
+                               json={'mode': 'autonomous', 'prompt': 'Crie um site de hotel.'})
+        assert response.status_code == 409 and 'Configure a chave Gemini' in response.text
+        assert not any(adapter.calls for adapter in adapters.values())
 
 
 def test_chosen_provider_remains_first_and_only_configured_allowed_reserves_are_prepared():

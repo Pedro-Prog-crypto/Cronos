@@ -329,6 +329,11 @@ class Memory:
         terms = list(dict.fromkeys(w for w in re.findall(r"\w+", fold(query)) if len(w) > 1 and w not in STOP_WORDS))
         if not terms:
             return []
+        # FTS is only a relevance hint. A multi-line request can contain
+        # hundreds of different words; querying all of them wastes time and
+        # may exceed a SQLite parser/index limit on an older local database.
+        if len(terms) > 64:
+            terms = list(dict.fromkeys([*terms[:32], *terms[-32:]]))
         expression = " OR ".join('"' + term.replace('"', '""') + '"' for term in terms)
         with self.connect() as db:
             rows = db.execute("""SELECT rowid AS chunk_id,path,title,body AS excerpt

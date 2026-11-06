@@ -222,26 +222,23 @@ class Studio:
     def provider_pool(self, project, *, vision=False):
         settings = self.app.state.engine.settings
         injected = self.app.state.vision_provider if vision else self.app.state.engine.provider
-        entries = [] if injected is not None else provider_catalog(settings)
+        entries = [] if injected is not None else [entry for entry in provider_catalog(settings) if entry['id'] == 'gemini']
         return ProviderPool(project, entries,
                             lambda identifier: self.code_provider(replace(settings, provider=identifier), use_injected=not vision),
                             self.store.event, self.vision_cooldowns if vision else self.provider_cooldowns,
                             injected=injected, timeout=120 if vision else 600,
-                            excluded_ids=() if vision else ('gemini',),
-                            preferred='gemini' if vision and not injected else None)
+                            preferred='gemini' if not injected else None)
 
     def builder_provider(self, chosen):
-        """Reserve Gemini for visual review, not site code or art direction."""
+        """Use only Gemini for Studio planning and code; never route to reserves."""
         if self.app.state.engine.provider is not None:
             return chosen
-        entries = provider_catalog(self.app.state.engine.settings)
-        builders = [entry['id'] for entry in sorted(entries, key=lambda entry: entry['id'] == 'ollama')
-                    if entry['configured'] and entry['id'] != 'gemini']
-        if chosen and chosen != 'gemini' and chosen not in builders:
-            raise ValueError('A integração de criação escolhida não está configurada ou não é permitida no modo atual.')
-        if not builders:
-            raise ValueError('Nenhuma IA de criação configurada. O Gemini está reservado à análise visual; configure outro provedor de código no painel Integrações.')
-        return chosen if chosen in builders else builders[0]
+        settings = self.app.state.engine.settings
+        if settings.privacy_mode != 'online':
+            raise ValueError('O Studio usa somente Gemini para criar sites; ative o modo online para essa integração.')
+        if not settings.gemini_key.strip():
+            raise ValueError('O Studio usa somente Gemini para criar sites. Configure a chave Gemini em Integrações.')
+        return 'gemini'
 
     def ollama_ready(self):
         """Check the local service/model before the Studio offers it as ready."""
@@ -387,7 +384,7 @@ class Studio:
                 reference_notes = image.get('analysis', '')
                 if not reference_notes:
                     vision = self.provider_pool(project, vision=True)
-                    self.store.event(project, 'reference', 'Analisando a referência selecionada. Se o modelo não aceitar imagem, a próxima integração configurada será tentada com essa mesma imagem.')
+                    self.store.event(project, 'reference', 'Analisando a referência selecionada com Gemini. Se a análise falhar, a versão salva permanece disponível.')
                     raw = self.store.asset_path(project, image['name']).read_bytes()
                     def reference_text(result):
                         if result.get('tool_calls') or not isinstance(result.get('reply'), str) or not result['reply'].strip():
@@ -399,7 +396,7 @@ class Studio:
                     image['analysis'] = reference_notes
             payload['visual_reference'] = reference_notes
             payload['engineering_plan'] = contract
-            self.store.event(project, 'generation', 'Solicitando os três arquivos do site. Se uma integração falhar, a próxima configurada assume esta etapa com o mesmo pedido e os recursos salvos.')
+            self.store.event(project, 'generation', 'Solicitando os três arquivos ao Gemini. Se ele falhar, o pedido e a versão salva permanecem para nova tentativa.')
             payload_text = json.dumps(payload, ensure_ascii=False)
             delivery_key_payload=payload_text
             deliveries = {}
@@ -436,7 +433,7 @@ class Studio:
                         providers.reject('código recebido, mas recusado: '+str(exc)[:450])
                         payload_text = json.dumps(payload, ensure_ascii=False)
                         continue
-                    self.store.event(project, 'repair', 'A entrega não passou. Pedindo uma correção a ' + identifier + '; se não conseguir, a próxima integração configurada assume a etapa.')
+                    self.store.event(project, 'repair', 'A entrega não passou. Pedindo uma correção a ' + identifier + '; se não conseguir, a versão anterior permanece disponível.')
                     # A large premium candidate used to be cut at 40k characters,
                     # often losing all of its CSS/JS in the repair context.
                     try:
@@ -475,12 +472,11 @@ class Studio:
         request=project.get('last_request','')
         if len(request.strip())<3:raise ValueError('Não há pedido salvo. Escreva o que deseja criar ou corrigir.')
         chosen=self.builder_provider(provider or project.get('provider') or self.app.state.engine.settings.provider)
-        # An explicit retry attempts the stable provider queue again. It still
-        # cannot repair a rejected key or a provider's exhausted allowance.
+        # A retry uses Gemini again; it cannot repair a rejected key or quota.
         body=Generate(mode=project.get('mode') or 'autonomous',prompt=request,provider=chosen,
                       reference=project.get('reference',''),reference_asset=project.get('reference_asset',''),
                       research_images=project.get('research_images',False),plan_first=project.get('plan_first',False))
-        self.store.event(project,'retry','Nova tentativa solicitada pelo senhor. Pedido, arquivos e recursos mantidos; limites dos provedores ainda podem estar ativos.')
+        self.store.event(project,'retry','Nova tentativa com Gemini solicitada. Pedido, arquivos e recursos mantidos; a cota do Gemini ainda pode estar indisponível.')
         return self.start_directions(project,body) if project.get('job_kind')=='directions' else self.start(project,body)
 
     def start_screen_review(self, project, body, image):
