@@ -72,13 +72,28 @@ def find_sources(target: Path, home: Path | None = None) -> list[Path]:
     return sorted(found.values(), key=lambda path: str(path).casefold())
 
 
-def select_source(candidates: list[Path], target: Path, home: Path | None = None) -> Path | None:
-    home = home or Path.home()
+def default_configuration(folder: Path) -> bool:
+    """A fresh R39/R40 copy is not evidence of the user's old credentials."""
+    env, example = folder / '.env', folder / '.env.example'
+    try:
+        return env.is_file() and example.is_file() and env.read_bytes() == example.read_bytes()
+    except OSError:
+        return False
+
+
+def automatic_source(candidates: list[Path], home: Path) -> Path | None:
     preferred = documents_folder(home) / 'Cronos-Dados'
     if preferred in candidates:
         return preferred
-    if len(candidates) == 1:
+    if len(candidates) == 1 and not default_configuration(candidates[0]):
         return candidates[0]
+    return None
+
+
+def select_source(candidates: list[Path], target: Path, home: Path | None = None) -> Path | None:
+    home = home or Path.home()
+    if automatic := automatic_source(candidates, home):
+        return automatic
 
     import tkinter as tk
     from tkinter import filedialog, messagebox
@@ -92,7 +107,8 @@ def select_source(candidates: list[Path], target: Path, home: Path | None = None
     selection = tk.Listbox(window, width=100, height=10)
     selection.pack(padx=18, fill='both', expand=True)
     for candidate in candidates:
-        selection.insert('end', str(candidate))
+        suffix = ' (configuração padrão; confira se tem memórias)' if default_configuration(candidate) else ''
+        selection.insert('end', str(candidate) + suffix)
     if candidates:
         selection.selection_set(0)
     selected: list[Path] = []

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from tools.restore_existing_data import find_sources, restore, select_source
+from tools.restore_existing_data import automatic_source, default_configuration, find_sources, restore, select_source
 
 
 def sample_data(path: Path, note: str) -> Path:
@@ -34,3 +34,12 @@ def test_restores_one_existing_installation_without_prompt(tmp_path):
     assert find_sources(target, home) == [source]
     assert restore(target, home) == source
     assert (target / 'vault' / 'memory.md').read_text() == 'Histórico'
+
+
+def test_fresh_empty_release_is_not_auto_selected_as_the_old_data(tmp_path):
+    home = tmp_path / 'home'
+    fresh = sample_data(home / 'Cronos-R39', 'Sem conversa anterior')
+    example = 'GEMINI_API_KEY=local-only\n'
+    (fresh / '.env.example').write_text(example, encoding='utf-8')
+    assert default_configuration(fresh)
+    assert automatic_source([fresh], home) is None
