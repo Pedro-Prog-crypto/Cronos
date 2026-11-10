@@ -8,7 +8,8 @@
     "build": "node scripts/build-studio-3d.mjs && vite build && node scripts/licenses.mjs",
     "lint": "tsc --noEmit",
     "test:study-images": "node scripts/test-study-image-dedupe.mjs",
-    "test:long-capture": "node scripts/test-long-capture.mjs"
+    "test:long-capture": "node scripts/test-long-capture.mjs",
+    "test:capabilities": "node --experimental-strip-types scripts/test-capability-routing.mjs"
   },
   "dependencies": {
     "@echogarden/fvad-wasm": "0.2.0",

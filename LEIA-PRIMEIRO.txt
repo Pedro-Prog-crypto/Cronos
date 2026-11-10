@@ -1,8 +1,8 @@
 CRONOS COMPLETO — INSTALACAO AUTONOMA
 
-SE BAIXOU INSTALAR-CRONOS-COMPLETO-R42.bat
+SE BAIXOU INSTALAR-CRONOS-COMPLETO-R43.bat
 Execute o BAT uma vez. Ele instala o programa e o codigo-fonte em
-%USERPROFILE%\Cronos-R42. Para encontrar a pasta: Win+R, cole esse caminho e
+%USERPROFILE%\Cronos-R43. Para encontrar a pasta: Win+R, cole esse caminho e
 pressione Enter. Na primeira abertura o instalador procura os dados antigos.
 Se houver mais de uma pasta possivel, escolha a que tem suas memorias e APIs.
 Se aparecer Cronos-R39 com configuracao padrao e sem suas conversas, use
@@ -10,13 +10,18 @@ Se aparecer Cronos-R39 com configuracao padrao e sem suas conversas, use
 Ele copia .env, vault, integracoes e personalidade localmente antes de abrir.
 Se a escolha falhar ou for cancelada, execute o mesmo BAT de novo. A pasta
 antiga permanece intacta. Seus dados privados nao sao publicados no GitHub.
-Nas proximas vezes, abra ABRIR-CRONOS.bat dentro da pasta Cronos-R42.
+Nas proximas vezes, abra ABRIR-CRONOS.bat dentro da pasta Cronos-R43.
 
-REVISAO DE 06/11/2026 (R42)
-A tela inicial agora tem navegacao recolhivel, indicadores reais do sistema e
-as funcoes da antiga estrela dentro da engrenagem inferior. A posicao dos
-paineis e salva nas preferencias locais. Sensores nao disponiveis aparecem
-como indisponiveis. Esta revisao ainda precisa de verificacao visual no Windows.
+REVISAO DE 10/11/2026 (R43)
+A tela inicial usa o planeta separado da referencia, um holograma de filamentos
+animado, menu lateral e dock de sete acoes. Menu e indicadores podem ser
+recolhidos; no celular comecam fechados. Os cinco itens do menu abrem um painel
+leve e os modulos completos continuam acessiveis. Comandos de texto ou voz para
+abrir essas areas usam o mesmo roteador. Os indicadores sao medidos pelo
+computador; sensores sem leitura aparecem como indisponiveis. A interface foi
+testada no navegador em tamanhos de desktop e celular. Esta revisao ainda
+precisa de verificacao visual no Windows. O acesso pelo celular ao assistente
+completo exige uma conexao segura ao computador; nao ha hospedagem publica.
 
 REVISAO DE 06/11/2026 (R41)
 Perguntas de 15 linhas foram testadas; falhas em consultas auxiliares de memoria

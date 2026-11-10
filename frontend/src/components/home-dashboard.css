@@ -20,3 +20,52 @@
 .cronos-quick-actions{gap:8px!important;padding:9px 15px!important;border:1px solid #80dbea66;border-radius:999px;background:#0b2635c9;box-shadow:0 0 23px #1dbbe633;backdrop-filter:blur(15px)}.cronos-quick-actions button{box-shadow:none}.cronos-quick-actions .reference-attachment,.cronos-quick-actions .reference-mic,.cronos-quick-actions .reference-screen{border-color:transparent;background:transparent;border-radius:10px}.cronos-quick-actions button:hover{background:#14536b88}.home-dock-gear[aria-expanded=true]{color:#39f3ef!important;background:#125e6d88!important}
 @media(max-width:1050px){.home-stats{right:10px;width:195px}.home-nav{left:10px;width:165px}.home-nav button{font-size:10px}.home-brand{left:15px}.cronos-central-hologram{transform:translate(-50%,-50%) scale(.8)}}
 @media(max-width:700px){.home-nav{top:17%;left:7px}.home-nav:not(.closed){width:130px}.home-nav button{gap:4px;font-size:9px}.home-nav button svg{width:30px;height:30px}.home-stats{top:12%;width:43px;padding:7px}.home-stats:not(.closed){width:176px}.home-brand{top:12px;font-size:15px}.home-gear-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.cronos-quick-actions{max-width:calc(100vw - 12px);overflow-x:auto;justify-content:flex-start;scrollbar-width:none}.cronos-central-hologram{top:46%;transform:translate(-50%,-50%) scale(.65)}}
+
+/* R43: reference assets supply only the horizon; controls are accessible DOM elements. */
+.cronos-scene-tint{background:linear-gradient(90deg,#00050d42,transparent 28% 72%,#00050d45)}
+.cronos-scene-horizon{inset:0;border:0;border-radius:0;box-shadow:none;background:url('../assets/images/planet-horizon-reference.jpg') center bottom / cover no-repeat;opacity:.94}
+.cronos-central-hologram{left:50%;top:35%;transform:translate(-50%,-50%)!important;filter:drop-shadow(0 0 25px #0099ff5c)}
+.cronos-central-hologram>div:first-child{width:min(430px,34vw)!important;height:min(430px,34vw)!important}
+.cronos-home-hud{font-family:'Rajdhani','Space Grotesk',sans-serif}
+.home-brand{top:17px;left:4%;gap:13px;font-size:20px;letter-spacing:.37em;font-weight:600}
+.home-brand-mark{width:32px;height:32px;font-size:30px;border-color:#74faff;box-shadow:0 0 8px #00dfff8a,0 0 22px #006bff80,inset 0 0 10px #00dfff55}
+.home-brand-line{width:clamp(45px,15vw,220px);opacity:.52}
+.home-nav{top:24%;left:3.1%;width:212px;gap:5px}
+.home-nav button{border-radius:2px;background:transparent!important;padding:5px 4px;gap:13px;font-size:14px;letter-spacing:.11em;font-weight:500}
+.home-nav button.selected{color:#30eeef!important}
+.home-nav button.selected span:after{content:'';display:inline-block;width:clamp(20px,5vw,80px);height:1px;margin:0 0 4px 13px;background:linear-gradient(90deg,#14f8f4,transparent);box-shadow:0 0 8px #00fff0}
+.home-nav button svg{width:40px;height:40px;padding:9px;border-color:#66839888;color:#ebfaff}
+.home-nav button.selected svg{box-shadow:0 0 10px #08f2fdaa,0 0 23px #08e4f766}
+.home-nav .home-collapse{margin-bottom:10px;opacity:.68;width:31px;height:31px}
+.home-nav:after{content:'';display:block;margin:16px 0 0 8px;width:135px;height:39px;opacity:.55;background-image:radial-gradient(circle,#02e7f5 1px,transparent 1.5px);background-size:13px 13px;mask-image:linear-gradient(90deg,#000,transparent)}
+.home-nav.closed:after{display:none}
+.home-stats{top:5%;right:2.6%;width:252px;max-height:78%;padding:12px 12px 14px;border:1px solid #95f5ffb3;border-radius:17px;background:linear-gradient(145deg,#0b202ab8,#00131ae8);box-shadow:inset 0 0 17px #50eaff32,0 0 12px #40ecff7a,0 0 31px #03d7fb34;backdrop-filter:blur(13px)}
+.home-stats-header{font-size:10px;letter-spacing:.11em;color:#c8faff}
+.home-usage{width:128px;height:128px;margin-top:10px;background:conic-gradient(#18eff4 var(--usage),#143544 var(--usage));box-shadow:0 0 15px #00e8f877}
+.home-usage>div{width:100px;height:100px;background:#00131b}
+.home-usage strong{font-family:'Space Grotesk',sans-serif;font-size:29px;color:#fff}
+.home-status{margin:3px 0 8px;color:#a2c5d0}
+.home-stat-list{gap:6px;padding-top:9px}
+.home-stat-list button{min-height:47px;padding:6px 7px;border:1px solid #68efff5d;border-radius:11px;background:linear-gradient(100deg,#143d4dbc,#031d27d9);box-shadow:inset 0 0 10px #21b9d02f,0 0 8px #01c3e51d}
+.home-stat-list button>svg:first-child{width:22px;height:22px;color:#dcfaff}
+.home-stat-list b{font-size:10px;color:#eefcff}
+.home-stat-list strong{font-family:'Space Grotesk',sans-serif;font-size:10px}
+.home-stat-list i{height:5px;border-radius:5px;background:linear-gradient(90deg,#19dcf5,#c7fffa);box-shadow:0 0 7px #19fff6}
+.home-inspector{position:absolute;left:clamp(210px,17vw,290px);top:16%;width:min(340px,34vw);max-height:66vh;overflow:auto;pointer-events:auto;padding:18px;border:1px solid #4ddceb9a;border-radius:14px;background:#03131fea;box-shadow:0 16px 45px #000a,0 0 22px #00cfff38;backdrop-filter:blur(18px)}
+.home-inspector header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px}.home-inspector header small,.home-inspector-foot{font:10px 'JetBrains Mono',monospace;color:#65dbe9;letter-spacing:.1em}.home-inspector h2{font-size:26px;margin:3px 0}.home-inspector header button{color:#b7f5ff;border:0;background:transparent}.home-inspector p{font-size:15px;line-height:1.5;color:#b7dce5;margin:0 0 14px}.home-inspector>button{display:block;width:100%;margin-top:8px;padding:10px;border:1px solid #57d9e773;border-radius:8px;background:#0b3340ae;color:#e6faff;text-align:left}.home-inspector>button:hover{border-color:#72faff;background:#0f5260}.home-inspector-list{display:grid;gap:6px;margin-bottom:12px}.home-inspector-list>div{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid #6be7ee32;font-size:13px}.home-inspector-list strong{font-weight:600;color:#e4fbff}.home-inspector label{display:flex;align-items:center;gap:8px;margin:10px 0;font-size:14px}.home-inspector input{accent-color:#00e2e9}.home-inspector-foot{display:block;margin-top:18px;color:#8eafbb}
+.cronos-quick-actions.home-main-dock{bottom:4%;gap:0!important;padding:8px 12px!important;min-width:540px;min-height:64px;justify-content:space-around;border:1px solid #b6f9ffb0;background:linear-gradient(180deg,#12404fbd,#051a24dd);box-shadow:0 0 10px #54e8ff9a,0 0 25px #00bbff60,inset 0 0 15px #48ecff39;backdrop-filter:blur(18px)}
+.home-main-dock:before,.home-main-dock:after{content:'';position:absolute;left:28%;right:28%;height:3px;background:linear-gradient(90deg,transparent,#8bfaff,transparent);box-shadow:0 0 12px #56ffff,0 0 24px #008cff}.home-main-dock:before{top:-2px}.home-main-dock:after{bottom:-2px;background:linear-gradient(90deg,transparent,#a987ff,transparent);box-shadow:0 0 12px #b487ff}
+.home-main-dock .reference-attachment{position:relative;flex:0 0 64px;width:64px;height:41px;border-radius:0;color:#e7fdff!important;background:none!important}
+.home-main-dock .reference-attachment:not(:last-child):after{content:'';position:absolute;right:-1px;height:27px;width:1px;background:#7fc9d077}
+.home-main-dock .reference-attachment:hover{color:#33f2f9!important;filter:drop-shadow(0 0 9px #51eaff)}
+.home-main-dock .profile-shortcut{color:#e957ff!important}
+.home-main-dock .home-dock-gear[aria-expanded=true]{color:#2ffff7!important}
+.cronos-utility-actions{position:fixed;right:16px;bottom:14px;z-index:36;display:flex;align-items:center;gap:5px;padding:4px;border:1px solid #24597088;border-radius:30px;background:#031721b8}
+.cronos-utility-actions .reference-attachment,.cronos-utility-actions .reference-mic,.cronos-utility-actions .reference-screen,.cronos-utility-actions .reference-send-audio{width:29px;height:29px;flex-basis:29px;background:transparent;border-color:transparent;box-shadow:none}
+.cronos-utility-actions.home-utility{bottom:4.6%;right:2%}
+@media(max-width:1100px){.home-stats{right:12px;width:205px}.home-nav{left:18px;width:190px}.home-inspector{left:190px}.cronos-central-hologram{top:37%;transform:translate(-50%,-50%) scale(.82)!important}.cronos-utility-actions.home-utility{right:10px;bottom:4px}}
+@media(max-width:700px){.cronos-scene-horizon{background-size:auto 100%;background-position:center bottom}.cronos-central-hologram{top:37%;transform:translate(-50%,-50%) scale(.67)!important}.home-brand{top:12px;left:13px;font-size:14px}.home-brand-mark{width:27px;height:27px}.home-brand-line{width:45px}.home-nav{top:13%;left:7px;width:146px;gap:2px}.home-nav button{font-size:10px;padding:3px 0;gap:6px}.home-nav button svg{width:30px;height:30px;padding:7px}.home-nav button.selected span:after{width:10px;margin-left:5px}.home-nav .home-collapse{width:24px;height:24px;margin-bottom:4px}.home-nav:after{display:none}.home-stats{top:8%;right:7px;width:38px;max-height:67vh;padding:6px}.home-stats:not(.closed){width:170px}.home-stats-header>span{font-size:8px}.home-stats:not(.closed) .home-usage{width:90px;height:90px}.home-stats:not(.closed) .home-usage>div{width:70px;height:70px}.home-stats:not(.closed) .home-usage strong{font-size:20px}.home-stat-list button{min-height:42px}.home-stat-list small{display:none}.home-inspector{left:50%;top:13%;transform:translateX(-50%);width:min(360px,calc(100vw - 30px));max-height:65vh;z-index:50}.home-gear-menu{z-index:51;bottom:125px;max-height:65vh}.home-gear-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.cronos-quick-actions.home-main-dock{bottom:45px;min-width:0;width:calc(100vw - 18px);min-height:54px;padding:5px!important;overflow:visible}.home-main-dock .reference-attachment{flex:1 1 0;width:auto;height:37px}.home-main-dock .reference-attachment svg{width:18px;height:18px}.cronos-utility-actions.home-utility{bottom:4px;right:50%;transform:translateX(50%);height:34px}.cronos-live-transcript{bottom:115px}}
+.cronos-scene-horizon{width:100%;height:100%;left:0;right:0;top:0;bottom:0}
+@media(max-width:700px){.cronos-central-hologram{top:35%;transform:translate(-50%,-50%) scale(.82)!important}.cronos-central-hologram>div:first-child{width:min(390px,80vw)!important;height:min(390px,80vw)!important}.home-nav.closed button:not(.home-collapse){display:none}.home-nav.closed{width:31px}.home-stats.closed{width:34px}.home-stats.closed .home-stats-header{justify-content:center}.home-stats.closed .home-stats-header button:last-child{padding:2px}}
+@media(max-width:700px){.cronos-central-hologram{left:50%}}
+@media(max-width:700px){.cronos-central-hologram{scale:1!important}}

@@ -2,7 +2,8 @@ import {ResponseClock} from './components/ResponseClock';
 import {UpdateNotice} from './components/UpdateNotice';
 /** @license SPDX-License-Identifier: Apache-2.0 */
 import React,{Suspense,lazy,useCallback,useEffect,useRef,useState} from 'react';
-import {Mic,X,Send,RotateCw,ImagePlus,FileArchive,MonitorUp,BookOpen,FileText,PanelsTopLeft,LayoutGrid,Globe2,Activity,Settings2,UserRound} from 'lucide-react';
+import {Mic,X,Send,RotateCw,ImagePlus,FileArchive,MonitorUp,BookOpen,FileText,PanelsTopLeft,LayoutGrid,Globe2,ChartNoAxesColumn,SlidersHorizontal,Settings,UserRound,Folder} from 'lucide-react';
+import {ActionRouter,type CapabilityId} from './capabilities';
 import {IntegratedNeuralStage} from './components/IntegratedNeuralStage';
 import {HomeDashboard} from './components/HomeDashboard';
 import {useCronosVoice,useMicrophone} from './hooks/useCronosVoice';
@@ -58,6 +59,7 @@ export default function App(){
   const [notice,setNotice]=useState(''),[error,setError]=useState(false);
   const [chatOpen,setChatOpen]=useState(false),[module,setModule]=useState<string|null>(null);
   const [dashboardMenu,setDashboardMenu]=useState(false);
+  const [homeSection,setHomeSection]=useState<CapabilityId|null>(null);
   const [homePanelRequest,setHomePanelRequest]=useState(0);
   const [draft,setDraft]=useState(''),[liveTranscript,setLiveTranscript]=useState(''),[busy,setBusy]=useState(false),[tools,setTools]=useState<ToolResult[]>([]);
   const [longDictation,setLongDictation]=useState(false),longDictationRef=useRef(false);
@@ -251,6 +253,9 @@ export default function App(){
   const runCommand=(text:string)=>{
     const normalizedCommand=text.trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/^(?:kronos|cronos)[,\s:]+/i,'').replace(/[.!?]+$/,'').toLowerCase().replace(/\s+/g,' ');
     const mainBridge=(window as any).pywebview?.api;
+    const openSection=(section:CapabilityId)=>{setHomeSection(section);setDashboardMenu(false);setModule(null);setEyeOpen(false);setChatOpen(false);};
+    const actions=new ActionRouter({system:()=>openSection('system'),memory:()=>openSection('memory'),connections:()=>openSection('connections'),analysis:()=>openSection('analysis'),settings:()=>openSection('settings'),studio:()=>{restoreWindow('studio');if(!studio)setStudio({brief:'',request:Date.now()});setModule(null);setEyeOpen(false);setChatOpen(false);},study:()=>{restoreWindow('study');setStudyOpen(true);setModule(null);setEyeOpen(false);setChatOpen(false);},internet:()=>{setModule('internet');},files:()=>openAnalysis('document'),chat:()=>{restoreWindow('chat');setChatOpen(true);}});
+    if(actions.route(text))return true;
     if(asksToReplayImages(text)){
       const previous=studyPanelsRef.current.filter(panel=>panel.mode==='visual'&&panel.reply.trim()).sort((a,b)=>b.createdAt-a.createdAt)[0];
       let replayed=false;
@@ -472,17 +477,19 @@ export default function App(){
     <UpdateNotice connected={connected} enabled={panelPrefs?.proactive_suggestions!==false} idle={!studio&&!module&&!studyOpen&&!chatOpen&&!eyeOpen&&!busy&&!microphone.capturing&&!microphone.transcribing&&!voice.isSpeaking&&!voice.isGenerating} voiceEnabled={autoVoice&&Boolean(config?.fish_speech_configured)} onSpeak={text=>void voice.speak(text)} onBusy={setUpdateBusy}/>
 
     {!eyeActive&&<main className={`absolute inset-0 ${moduleActive?'scene-under-panel':''}`}><IntegratedNeuralStage state={state} audioLevelSource={audioLevelSource} onOrbClick={stageMic} onMicToggle={stageMic} onModuleClick={stageModule}/></main>}
-    {homeActive&&<HomeDashboard connected={connected} preferences={panelPrefs} onPreferences={updatePreferences} panelOpenRequest={homePanelRequest} menuOpen={dashboardMenu} onMenuClose={()=>setDashboardMenu(false)} onModule={openModule} onStudy={openStudyHome} onStudio={openStudioHome} onEye={openEyeHome} onChat={openChatHome} onScreen={()=>{setDashboardMenu(false);screenMonitor.current?.start();}} onImage={()=>{setDashboardMenu(false);openAnalysis('image');}} onDocument={()=>{setDashboardMenu(false);openAnalysis('document');}} onMicrophone={()=>{setDashboardMenu(false);handleMic();}} microphoneOn={microphone.recording}/>}
+    {homeActive&&<HomeDashboard connected={connected} preferences={panelPrefs} onPreferences={updatePreferences} panelOpenRequest={homePanelRequest} menuOpen={dashboardMenu} onMenuClose={()=>setDashboardMenu(false)} section={homeSection} onSection={setHomeSection} graphTotal={graph.total} provider={config?.provider} providerConfigured={config?.provider_configured} onModule={openModule} onStudy={openStudyHome} onStudio={openStudioHome} onEye={openEyeHome} onChat={openChatHome} onScreen={()=>{setDashboardMenu(false);screenMonitor.current?.start();}} onImage={()=>{setDashboardMenu(false);openAnalysis('image');}} onDocument={()=>{setDashboardMenu(false);openAnalysis('document');}} onMicrophone={()=>{setDashboardMenu(false);handleMic();}} microphoneOn={microphone.recording}/>}
     {eyeOpen&&<WindowSurface minimized={!eyeActive}><div className="eye-slot expanded"><MinimizeWindow label="Olho de Deus" onClick={()=>minimizeWindow('eye')}/>
       <button className="eye-close" aria-label="Fechar Olho de Deus" title="Fechar Olho de Deus · F4 controla o microfone" onClick={()=>{eyeAnnouncement.current=false;setEyeOpen(false);}}><X size={20}/></button>
       <Suspense fallback={<div className="panel-loading">Abrindo Olho de Deus…</div>}><WorldMap query={placeQuery} onError={message=>tell(message,true)} onReady={worldReady}/></Suspense>
     </div></WindowSurface>}
     <ResponseClock turn={latencyDisplay} onDetails={()=>openModule(0)}/>
     {(microphone.capturing||microphone.transcribing)&&liveTranscript.trim()&&<div className="cronos-live-transcript" role="status" aria-live="polite"><span>TRANSCRIÇÃO PROVISÓRIA</span><p>{liveTranscript}</p></div>}
-    <div className="cronos-quick-actions" aria-label="Ações rápidas">
-      {homeActive&&<><button className="reference-attachment studio-shortcut" aria-label="Abrir Estúdio de Sites" title="Abrir Estúdio de Sites" onClick={openStudioHome}><LayoutGrid size={19}/></button><button className="reference-attachment" aria-label="Abrir área de estudos" title="Abrir área de estudos" onClick={openStudyHome}><BookOpen size={19}/></button><button className="reference-attachment" aria-label="Abrir Olho de Deus" title="Abrir Olho de Deus" onClick={openEyeHome}><Globe2 size={19}/></button><button className="reference-attachment" aria-label="Abrir monitoramento" title="Abrir monitoramento" onClick={()=>openModule(11)}><Activity size={19}/></button><button className="reference-attachment home-dock-gear" aria-expanded={dashboardMenu} aria-label="Abrir funções e configurações" title="Funções e configurações" onClick={()=>setDashboardMenu(value=>!value)}><Settings2 size={19}/></button><button className="reference-attachment" aria-label="Abrir conversa" title="Abrir conversa" onClick={openChatHome}><UserRound size={19}/></button></>}
+    <div className={`cronos-quick-actions ${homeActive?'home-main-dock':''}`} aria-label="Ações rápidas">
+      {homeActive&&<><button className="reference-attachment studio-shortcut" aria-label="Abrir Estúdio de Sites" title="Abrir Estúdio de Sites" onClick={openStudioHome}><LayoutGrid size={22}/></button><button className="reference-attachment" aria-label="Abrir área de estudos e arquivos" title="Abrir área de estudos e arquivos" onClick={openStudyHome}><Folder size={22}/></button><button className="reference-attachment" aria-label="Abrir Olho de Deus" title="Abrir Olho de Deus" onClick={openEyeHome}><Globe2 size={22}/></button><button className="reference-attachment" aria-label="Abrir monitoramento" title="Abrir monitoramento" onClick={()=>openModule(11)}><ChartNoAxesColumn size={22}/></button><button className="reference-attachment" aria-label="Abrir conexões" title="Abrir conexões" onClick={()=>setHomeSection('connections')}><SlidersHorizontal size={22}/></button><button className="reference-attachment home-dock-gear" aria-expanded={dashboardMenu} aria-label="Abrir funções e configurações" title="Funções e configurações" onClick={()=>setDashboardMenu(value=>!value)}><Settings size={23}/></button><button className="reference-attachment profile-shortcut" aria-label="Abrir conversa" title="Abrir conversa" onClick={openChatHome}><UserRound size={22}/></button></>}
       {!homeActive&&!eyeActive&&!moduleActive&&!studyActive&&<><button className="reference-attachment" aria-label="Abrir área de estudos" title="Abrir área de estudos" onClick={openStudyHome}><BookOpen size={16}/></button><button className="reference-attachment" aria-label="Analisar imagem" title="Analisar imagem" onClick={()=>openAnalysis('image')}><ImagePlus size={16}/></button><button className="reference-attachment" aria-label="Analisar ZIP ou código" title="Analisar ZIP ou código" onClick={()=>openAnalysis('document')}><FileArchive size={16}/></button></>}
       {!homeActive&&<button className="reference-attachment studio-shortcut" aria-label="Abrir Estúdio de Sites" title="Abrir Estúdio de Sites" onClick={openStudioHome}><PanelsTopLeft size={18}/></button>}
+    </div>
+    <div className={`cronos-utility-actions ${homeActive?'home-utility':''}`} aria-label="Controles de voz e tela">
       <HandControl/>
       <button className="reference-attachment" aria-pressed={longDictation} aria-label={longDictation?'Finalizar ditado longo':'Iniciar ditado longo'} title={longDictation?'Finalizar ditado e revisar a pergunta':'Juntar vários trechos de fala antes de enviar uma pergunta longa'} onClick={toggleLongDictation}><FileText size={16}/></button>
       {microphone.recording&&<button className="reference-send-audio" aria-label="Enviar fala agora" title={microphone.transcribing&&!longDictation?'Transcrevendo a fala':busy?'Aguarde a resposta atual':!microphone.ready?'Aguardando o microfone captar sua fala':longDictation?'Concluir o trecho atual do ditado; a escuta continua':'Enviar agora sem esperar a detecção de silêncio'} disabled={(microphone.transcribing&&!longDictation)||busy||!microphone.ready} onClick={()=>microphone.submit()}><Send size={15}/></button>}

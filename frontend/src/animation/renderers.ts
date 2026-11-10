@@ -11,7 +11,7 @@ export function renderOrb(canvas:SceneCanvas,size:number,_density:number,pixelRa
  light.setTransform(scale/2,0,0,scale/2,0,0);
  // The reference is a breathing ring of free filaments, rather than a solid torus.
  // Cache the angular basis; bounded geometry and half-resolution bloom in the worker.
- const count=14,steps=104;
+ const count=24,steps=144;
  const basis=Array.from({length:steps+1},(_,i)=>{const u=i/steps*Math.PI*2;return {u,c:Math.cos(u),s:Math.sin(u)};});
  const points=Array.from({length:count},()=>new Float32Array((steps+1)*2));
  let active=true,frame=0,timer=0,last=performance.now(),time=0,energy=0;
@@ -25,16 +25,17 @@ export function renderOrb(canvas:SceneCanvas,size:number,_density:number,pixelRa
   const target=value.state==='SPEAKING'?.6+Math.min(1,value.audio)*.7:value.state==='LISTENING'?.25:.08;
   energy+=(target-energy)*Math.min(1,dt*5);
   ctx.clearRect(0,0,logical,logical);light.clearRect(0,0,logical,logical);
-  const radius=184+Math.sin(time*.85)*3+energy*8;
+  const radius=198+Math.sin(time*.85)*3+energy*10;
   for(let k=0;k<count;k++){
-   const phase=k*Math.PI*2/count,p=points[k],rotation=time*(k%2?.2:-.16);
+   const phase=k*Math.PI*2/count,p=points[k],rotation=time*(k%2?.25:-.21);
    for(let i=0;i<=steps;i++){
-    const {u,c,s}=basis[i],wave=Math.sin(u*3+phase+rotation)*(.55+energy*.22)+Math.sin(u*5-phase*.7-time*.45)*.27;
-    const r=radius+wave*(18+energy*15)+Math.cos(u*2+phase-time*.32)*8;
-    const z=Math.sin(u*3+phase+rotation)*12;
-    p[i*2]=300+c*r+z*.12;p[i*2+1]=300+s*r*.96-z*.18;
+    const {u,c,s}=basis[i];
+    const wave=Math.sin(u*3+phase+rotation)*(.72+energy*.35)+Math.sin(u*7-phase*.8-time*(.34+k%4*.035))*.32;
+    const r=radius+wave*(22+energy*19)+Math.cos(u*2+phase-time*.27)*8+Math.sin(u*11+phase*1.8+time*.29)*6+(k%4-1.5)*2;
+    const z=Math.sin(u*4+phase+rotation)*10;
+    p[i*2]=300+c*r+z*.13;p[i*2+1]=300+s*r*(.97+(k%5-2)*.005)-z*.16;
    }
-   trace(light,p);light.strokeStyle=k%3?'rgba(17,98,255,.48)':'rgba(0,210,255,.55)';light.lineWidth=6+energy*2;light.stroke();
+   trace(light,p);light.strokeStyle=k%4?'rgba(0,131,255,.53)':'rgba(0,235,255,.72)';light.lineWidth=6.5+energy*2;light.stroke();
   }
   const voidLight=ctx.createRadialGradient(300,300,0,300,300,radius-6);voidLight.addColorStop(0,'rgba(0,2,10,.96)');voidLight.addColorStop(.85,'rgba(1,5,20,.8)');voidLight.addColorStop(1,'rgba(0,8,30,0)');ctx.fillStyle=voidLight;ctx.beginPath();ctx.arc(300,300,radius-6,0,Math.PI*2);ctx.fill();
   ctx.save();ctx.globalCompositeOperation='screen';
@@ -43,7 +44,7 @@ export function renderOrb(canvas:SceneCanvas,size:number,_density:number,pixelRa
   ctx.fillStyle=aura;ctx.fillRect(50,50,500,500);
   ctx.drawImage(glow,0,0,logical,logical);
   for(let k=0;k<count;k++){
-   trace(ctx,points[k]);ctx.strokeStyle=k%4===0?'rgba(133,234,255,.92)':k%2?'rgba(15,118,255,.9)':'rgba(0,203,255,.78)';ctx.lineWidth=(k%4===0?1:.72)+energy*.18;ctx.stroke();
+   trace(ctx,points[k]);ctx.strokeStyle=k%5===0?'rgba(206,250,255,.97)':k%2?'rgba(20,151,255,.94)':'rgba(0,230,255,.86)';ctx.lineWidth=(k%5===0?1.15:.82)+energy*.2;ctx.stroke();
   }
   // Small highlights run along the same filaments without a second particle scene.
   for(let k=0;k<6;k++){
