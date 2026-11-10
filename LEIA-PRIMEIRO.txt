@@ -1,8 +1,8 @@
 CRONOS COMPLETO — INSTALACAO AUTONOMA
 
-SE BAIXOU INSTALAR-CRONOS-COMPLETO-R43.bat
+SE BAIXOU INSTALAR-CRONOS-COMPLETO-R44.bat
 Execute o BAT uma vez. Ele instala o programa e o codigo-fonte em
-%USERPROFILE%\Cronos-R43. Para encontrar a pasta: Win+R, cole esse caminho e
+%USERPROFILE%\Cronos-R44. Para encontrar a pasta: Win+R, cole esse caminho e
 pressione Enter. Na primeira abertura o instalador procura os dados antigos.
 Se houver mais de uma pasta possivel, escolha a que tem suas memorias e APIs.
 Se aparecer Cronos-R39 com configuracao padrao e sem suas conversas, use
@@ -10,7 +10,12 @@ Se aparecer Cronos-R39 com configuracao padrao e sem suas conversas, use
 Ele copia .env, vault, integracoes e personalidade localmente antes de abrir.
 Se a escolha falhar ou for cancelada, execute o mesmo BAT de novo. A pasta
 antiga permanece intacta. Seus dados privados nao sao publicados no GitHub.
-Nas proximas vezes, abra ABRIR-CRONOS.bat dentro da pasta Cronos-R43.
+Nas proximas vezes, abra ABRIR-CRONOS.bat dentro da pasta Cronos-R44.
+
+REVISAO DE 10/11/2026 (R44)
+O holograma usa a densidade de pixels real da tela ate o limite de 900 pixels
+por lado. A resolucao se reajusta quando a janela muda de tamanho; o desenho
+continua animado no worker, com fallback para canvas comum.
 
 REVISAO DE 10/11/2026 (R43)
 A tela inicial usa o planeta separado da referencia, um holograma de filamentos

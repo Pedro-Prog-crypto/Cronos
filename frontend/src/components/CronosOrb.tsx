@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { renderOrb } from '../animation/renderers';
-import { startCanvasWorker } from '../animation/startCanvasWorker';
+import { orbRenderRatio, startCanvasWorker } from '../animation/startCanvasWorker';
 import { CronosState } from '../types/cronos';
 
 interface CronosOrbProps {
@@ -25,6 +25,7 @@ export const CronosOrb: React.FC<CronosOrbProps> = ({
   showCrossLinks = true,
 }) => {
   const [workerFailed,setWorkerFailed]=useState(false);
+  const [renderRevision,setRenderRevision]=useState(0);
   const sourceRef=useRef(audioLevelSource);sourceRef.current=audioLevelSource;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stateRef = useRef<CronosState>(state);
@@ -43,13 +44,20 @@ export const CronosOrb: React.FC<CronosOrbProps> = ({
     showCrossLinksRef.current = showCrossLinks;
   }, [showCrossLinks]);
 
+  useEffect(()=>{
+    let timer:number|undefined;
+    const resize=()=>{window.clearTimeout(timer);timer=window.setTimeout(()=>setRenderRevision(value=>value+1),180);};
+    window.addEventListener('resize',resize);
+    return()=>{window.removeEventListener('resize',resize);window.clearTimeout(timer);};
+  },[]);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const worker = !workerFailed && startCanvasWorker(canvas, 'orb', size, weaveDensity, () => ({state:stateRef.current,audio:sourceRef.current?.current??audioLevelRef.current,hidden:document.hidden,links:showCrossLinksRef.current,fps:document.documentElement.dataset.cronosEconomy==='true'?20:30}),()=>setWorkerFailed(true));
     if(worker)return worker;
-    return renderOrb(canvas,size,weaveDensity,window.devicePixelRatio||1,()=>({state:stateRef.current,audio:sourceRef.current?.current??audioLevelRef.current,hidden:document.hidden,links:showCrossLinksRef.current,fps:document.documentElement.dataset.cronosEconomy==='true'?20:30}));
-  }, [weaveDensity,workerFailed]);
+    return renderOrb(canvas,size,weaveDensity,orbRenderRatio(canvas,size),()=>({state:stateRef.current,audio:sourceRef.current?.current??audioLevelRef.current,hidden:document.hidden,links:showCrossLinksRef.current,fps:document.documentElement.dataset.cronosEconomy==='true'?20:30}));
+  }, [size,weaveDensity,workerFailed,renderRevision]);
 
   return (
     <div
@@ -60,7 +68,7 @@ export const CronosOrb: React.FC<CronosOrbProps> = ({
       {/* 3D Interwoven Fabric Hologram Canvas: All organic waves, inner aura & outer aura rendered dynamically */}
       <div className={`filament-aura ${state === 'SPEAKING' ? 'speaking' : ''}`} />
       <canvas
-        key={workerFailed?'fallback':'worker'}
+        key={`${workerFailed?'fallback':'worker'}-${renderRevision}`}
         ref={canvasRef}
         width={1200}
         height={1200}

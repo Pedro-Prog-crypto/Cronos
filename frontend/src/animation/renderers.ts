@@ -5,8 +5,8 @@ function context(canvas:SceneCanvas){return canvas.getContext('2d') as CanvasRen
 function buffer():SceneCanvas{return typeof OffscreenCanvas!=='undefined'?new OffscreenCanvas(1,1):document.createElement('canvas');}
 export function renderOrb(canvas:SceneCanvas,size:number,_density:number,pixelRatio:number,input:()=>SceneInput){
  const ctx=context(canvas);if(!ctx)return;
- const logical=600,ratio=Math.min(pixelRatio,1.25),scale=Math.ceil(size*ratio)/logical;
- canvas.width=canvas.height=Math.ceil(size*ratio);ctx.setTransform(scale,0,0,scale,0,0);
+ const logical=600,ratio=Math.min(pixelRatio,900/size),bitmap=Math.min(900,Math.round(size*ratio)),scale=bitmap/logical;
+ canvas.width=canvas.height=bitmap;ctx.setTransform(scale,0,0,scale,0,0);
  const glow=buffer();glow.width=glow.height=Math.ceil(canvas.width/2);const light=context(glow)!;
  light.setTransform(scale/2,0,0,scale/2,0,0);
  // The reference is a breathing ring of free filaments, rather than a solid torus.
