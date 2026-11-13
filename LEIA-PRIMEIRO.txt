@@ -1,8 +1,8 @@
 CRONOS COMPLETO — INSTALACAO AUTONOMA
 
-SE BAIXOU INSTALAR-CRONOS-COMPLETO-R45.bat
+SE BAIXOU INSTALAR-CRONOS-COMPLETO-R46.bat
 Execute o BAT uma vez. Ele instala o programa e o codigo-fonte em
-%USERPROFILE%\Cronos-R45. Para encontrar a pasta: Win+R, cole esse caminho e
+%USERPROFILE%\Cronos-R46. Para encontrar a pasta: Win+R, cole esse caminho e
 pressione Enter. Na primeira abertura o instalador procura os dados antigos.
 Se houver mais de uma pasta possivel, escolha a que tem suas memorias e APIs.
 Se aparecer Cronos-R39 com configuracao padrao e sem suas conversas, use
@@ -10,10 +10,20 @@ Se aparecer Cronos-R39 com configuracao padrao e sem suas conversas, use
 Ele copia .env, vault, integracoes e personalidade localmente antes de abrir.
 Se a escolha falhar ou for cancelada, execute o mesmo BAT de novo. A pasta
 antiga permanece intacta. Seus dados privados nao sao publicados no GitHub.
-Nas proximas vezes, abra ABRIR-CRONOS.bat dentro da pasta Cronos-R45.
+Nas proximas vezes, abra ABRIR-CRONOS.bat dentro da pasta Cronos-R46.
+
+REVISAO DE 13/11/2026 (R46)
+O holograma preserva a textura luminosa da foto enviada pelo senhor. O WebGL
+deforma essa textura continuamente no tempo, sem alternar imagens prontas.
+O movimento fica mais rapido na escuta e na fala de acordo com o estado real
+da voz. Se o computador nao oferecer WebGL, o canvas usa linhas vetoriais
+continuas como alternativa. A R46 inclui um video curto de verificacao em
+docs\visual-audit-r46\holograma-continuo.webm e 20 comparacoes visuais.
+O programa e o codigo-fonte completos estao no instalador; memorias e chaves
+antigas sao importadas da pasta local escolhida no seu proprio computador.
 
 REVISAO DE 13/11/2026 (R45)
-O holograma usa os quadros que o senhor enviou, animados continuamente no canvas.
+Esta versao alternava quadros do holograma e foi substituida pela R46.
 O movimento aumenta em escuta e fala, com brilho forte apenas em momentos curtos.
 O fundo azul fica atras das linhas, e o nome no canto superior ficou discreto.
 O painel de telemetria tem resumo na lateral e vista ampliada com fundo preto,

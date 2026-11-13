@@ -54,9 +54,9 @@ export const CronosOrb: React.FC<CronosOrbProps> = ({
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const worker = !workerFailed && startCanvasWorker(canvas, 'orb', size, weaveDensity, () => ({state:stateRef.current,audio:sourceRef.current?.current??audioLevelRef.current,hidden:document.hidden,links:showCrossLinksRef.current,fps:document.documentElement.dataset.cronosEconomy==='true'?20:30}),()=>setWorkerFailed(true));
+    const worker = !workerFailed && startCanvasWorker(canvas, 'orb', size, weaveDensity, () => ({state:stateRef.current,audio:sourceRef.current?.current??audioLevelRef.current,hidden:document.hidden,links:showCrossLinksRef.current,fps:document.documentElement.dataset.cronosEconomy==='true'?24:60}),()=>setWorkerFailed(true));
     if(worker)return worker;
-    return renderOrb(canvas,size,weaveDensity,orbRenderRatio(canvas,size),()=>({state:stateRef.current,audio:sourceRef.current?.current??audioLevelRef.current,hidden:document.hidden,links:showCrossLinksRef.current,fps:document.documentElement.dataset.cronosEconomy==='true'?20:30}));
+    return renderOrb(canvas,size,weaveDensity,orbRenderRatio(canvas,size),()=>({state:stateRef.current,audio:sourceRef.current?.current??audioLevelRef.current,hidden:document.hidden,links:showCrossLinksRef.current,fps:document.documentElement.dataset.cronosEconomy==='true'?24:60}));
   }, [size,weaveDensity,workerFailed,renderRevision]);
 
   return (
