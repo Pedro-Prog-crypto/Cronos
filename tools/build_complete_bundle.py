@@ -27,7 +27,8 @@ def build():
     tracked=subprocess.check_output(['git','ls-files','-z'],cwd=ROOT).decode().split('\0')
     manifest=json.loads((ROOT/'tools/interface_update_manifest.json').read_text())
     ui_assets={p.relative_to(ROOT).as_posix() for p in (ROOT/'cronos/ui/assets').rglob('*') if p.is_file()}
-    names=sorted(name for name in set(filter(None,tracked))|set(EXTRA)|set(CURRENT_REPORTS)|ui_assets|set(manifest['files'])|{'tools/restore_existing_data.py'} if not name.startswith('releases/') and (ROOT/name).is_file())
+    historical_visual_audits=tuple(f'docs/visual-audit-r{revision}/' for revision in (45,46,47,48))
+    names=sorted(name for name in set(filter(None,tracked))|set(EXTRA)|set(CURRENT_REPORTS)|ui_assets|set(manifest['files'])|{'tools/restore_existing_data.py'} if not name.startswith(('releases/',*historical_visual_audits)) and (ROOT/name).is_file())
     names=sorted(set(names)|{p.relative_to(ROOT).as_posix() for p in (ROOT/'examples/3d-product-demo').rglob('*') if p.is_file()})
     for name in names:
         parts=Path(name).parts

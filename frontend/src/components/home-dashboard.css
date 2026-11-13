@@ -76,7 +76,7 @@
 .home-brand-line{width:clamp(22px,7vw,95px);opacity:.34}
 .cronos-central-hologram>div:first-child{width:clamp(430px,32vw,620px)!important;height:clamp(430px,32vw,620px)!important}
 .cronos-central-hologram canvas.filament-glow{filter:none}
-.cronos-central-hologram .filament-aura{z-index:0;opacity:1;background:radial-gradient(circle,#010916ec 0 34%,#042142a8 42%,#0044933d 49%,#0077ef15 55%,transparent 65%)}
+.cronos-central-hologram .filament-aura{z-index:0;opacity:1;background:radial-gradient(circle,#092a78a8 0 29%,#09317f9c 35%,#0752a84a 47%,#006aff1c 56%,transparent 68%),linear-gradient(#58a9ff07 1px,transparent 1px),linear-gradient(90deg,#58a9ff07 1px,transparent 1px);background-size:100% 100%,28px 28px,28px 28px;mask-image:radial-gradient(circle,#000 0 48%,transparent 68%)}
 .cronos-scene-horizon::after{content:'';position:absolute;inset:0;background:inherit;transform:scaleY(1.8);transform-origin:50% 73%;mask-image:linear-gradient(to bottom,transparent 79%,#000 94%);pointer-events:none}
 @media(max-width:700px){.home-brand{top:11px;font-size:10px}.home-brand-mark{width:21px;height:21px;font-size:21px}.cronos-central-hologram>div:first-child{width:min(390px,80vw)!important;height:min(390px,80vw)!important}}
 

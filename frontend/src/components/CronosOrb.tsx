@@ -65,7 +65,7 @@ export const CronosOrb: React.FC<CronosOrbProps> = ({
       style={{ width: size, height: size }}
       onClick={onOrbClick}
     >
-      {/* 3D Interwoven Fabric Hologram Canvas: All organic waves, inner aura & outer aura rendered dynamically */}
+      {/* Animated contour and independent filaments; the aura supplies the blue field. */}
       <div className={`filament-aura ${state === 'SPEAKING' ? 'speaking' : ''}`} />
       <canvas
         key={`${workerFailed?'fallback':'worker'}-${renderRevision}`}
@@ -75,7 +75,7 @@ export const CronosOrb: React.FC<CronosOrbProps> = ({
         className={`w-full h-full max-w-none cursor-pointer relative z-10 filament-glow transition-all duration-500 ${
           state === 'SPEAKING' ? 'speaking' : ''
         }`}
-        title="CRONOS // Núcleo Holográfico de Linhas Conectadas (Clique para testar voz)"
+        title="CRONOS // Holograma ativo (clique para testar voz)"
       />
     </div>
   );
