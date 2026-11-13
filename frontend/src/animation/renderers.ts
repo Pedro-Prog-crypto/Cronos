@@ -1,55 +1,140 @@
 import {CronosState} from '../types/cronos';
+import framesAUrl from '../assets/images/hologram-reference-frames-a.png?url';
+import framesBUrl from '../assets/images/hologram-reference-frames-b.jpg?url';
 export type SceneInput={state:CronosState;audio:number;hidden:boolean;links:boolean;fps?:number};
 type SceneCanvas=HTMLCanvasElement|OffscreenCanvas;
 function context(canvas:SceneCanvas){return canvas.getContext('2d') as CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D|null;}
-function buffer():SceneCanvas{return typeof OffscreenCanvas!=='undefined'?new OffscreenCanvas(1,1):document.createElement('canvas');}
+function buffer():SceneCanvas{return typeof OffscreenCanvas!=='undefined'?new OffscreenCanvas(600,600):document.createElement('canvas');}
+let orbFramesPromise:Promise<SceneCanvas[]>|undefined;
+function orbFrames(){
+ if(orbFramesPromise)return orbFramesPromise;
+ orbFramesPromise=(async()=>{
+  const sources=await Promise.all([framesAUrl,framesBUrl].map(async url=>{
+   const response=await fetch(url);if(!response.ok)throw new Error(`Hologram frame ${response.status}`);
+   return createImageBitmap(await response.blob());
+  }));
+  const edgeMask=new Uint8Array(600*600);
+  for(let pixel=0;pixel<edgeMask.length;pixel++){
+   const x=pixel%600-300,y=Math.floor(pixel/600)-300;
+   edgeMask[pixel]=Math.round(255*Math.max(0,Math.min(1,(290-Math.hypot(x,y))/20)));
+  }
+  const frames:SceneCanvas[]=[];
+  try{
+   for(const source of sources){
+    const cellWidth=source.width/3,cellHeight=source.height/2;
+    for(let index=0;index<6;index++){
+     const frame=buffer();frame.width=frame.height=600;
+     const target=context(frame)!;
+     target.drawImage(source,(index%3)*cellWidth,Math.floor(index/3)*cellHeight,cellWidth,cellHeight,0,0,600,600);
+     // Black is the sprite sheet's background. Convert it to transparent light
+     // so the real CRONOS scene stays visible behind the animated filaments.
+     const pixels=target.getImageData(0,0,600,600),data=pixels.data;
+     for(let i=0;i<data.length;i+=4){
+      const peak=Math.max(data[i],data[i+1],data[i+2]);
+      const edge=edgeMask[i/4]/255;
+      if(peak<20||edge===0){data[i]=data[i+1]=data[i+2]=data[i+3]=0;continue;}
+      data[i]=Math.min(255,Math.round(data[i]*255/peak));
+      data[i+1]=Math.min(255,Math.round(data[i+1]*255/peak));
+      data[i+2]=Math.min(255,Math.round(data[i+2]*255/peak));
+      data[i+3]=Math.round((peak-20)/235*255*edge);
+     }
+     target.putImageData(pixels,0,0);frames.push(frame);
+    }
+   }
+  }finally{sources.forEach(source=>source.close());}
+  return frames;
+ })().catch(error=>{orbFramesPromise=undefined;throw error;});
+ return orbFramesPromise;
+}
 export function renderOrb(canvas:SceneCanvas,size:number,_density:number,pixelRatio:number,input:()=>SceneInput){
  const ctx=context(canvas);if(!ctx)return;
  const logical=600,ratio=Math.min(pixelRatio,900/size),bitmap=Math.min(900,Math.round(size*ratio)),scale=bitmap/logical;
  canvas.width=canvas.height=bitmap;ctx.setTransform(scale,0,0,scale,0,0);
- const glow=buffer();glow.width=glow.height=Math.ceil(canvas.width/2);const light=context(glow)!;
- light.setTransform(scale/2,0,0,scale/2,0,0);
- // The reference is a breathing ring of free filaments, rather than a solid torus.
- // Cache the angular basis; bounded geometry and half-resolution bloom in the worker.
- const count=24,steps=144;
+ // Independent, flowing filaments. No flattened image or full-ring bloom.
+ const count=8,steps=192,segments=32,segmentLength=steps/segments;
  const basis=Array.from({length:steps+1},(_,i)=>{const u=i/steps*Math.PI*2;return {u,c:Math.cos(u),s:Math.sin(u)};});
  const points=Array.from({length:count},()=>new Float32Array((steps+1)*2));
- let active=true,frame=0,timer=0,last=performance.now(),time=0,energy=0;
+ let active=true,frame=0,timer=0,last=performance.now(),spin=0,energy=0,velocity=.28;
+ let atlas:SceneCanvas[]|undefined,sequencePosition=0,previousPosition=0,transition=1;
+ type OrbMode='IDLE'|'LISTENING'|'SPEAKING';
+ let currentMode:OrbMode='IDLE',previousMode:OrbMode='IDLE';
+ const sequences={IDLE:[0,1,2,3,4,5,4,3,2,1],LISTENING:[2,3,4,5,6,7,8,7,6,5,4,3],SPEAKING:[8,9,10,11,10,9,8,11,10,9]};
+ void orbFrames().then(loaded=>{if(active)atlas=loaded;}).catch(error=>console.warn('Hologram atlas unavailable; using vector fallback.',error));
  const schedule=(delay=0)=>{if(!active)return;if(delay)timer=self.setTimeout(()=>{if(active)frame=requestAnimationFrame(draw);},delay);else frame=requestAnimationFrame(draw);};
  const trace=(target:CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D,p:Float32Array)=>{target.beginPath();target.moveTo(p[0],p[1]);for(let j=2;j<p.length;j+=2)target.lineTo(p[j],p[j+1]);target.closePath();};
+ const traceSegment=(p:Float32Array,start:number,end:number)=>{ctx.beginPath();ctx.moveTo(p[start*2],p[start*2+1]);for(let j=start+1;j<=end;j++)ctx.lineTo(p[j*2],p[j*2+1]);};
+ const paintSequence=(mode:typeof currentMode,position:number,opacity:number)=>{
+  const sequence=sequences[mode],part=position%sequence.length,index=Math.floor(part);
+  // Keep a single reference frame sharp for most of its life. Only dissolve
+  // briefly at the cut; continuously blending two rings doubles the filaments.
+  const fade=Math.max(0,Math.min(1,(part-index-.78)/.22));
+  ctx.globalAlpha=opacity*(1-fade);ctx.drawImage(atlas![sequence[index]],0,0,logical,logical);
+  if(fade>0){ctx.globalAlpha=opacity*fade;ctx.drawImage(atlas![sequence[(index+1)%sequence.length]],0,0,logical,logical);}
+ };
  const draw=()=>{
   if(!active)return;const value=input(),now=performance.now();
   if(value.hidden){last=now;schedule(180);return;}
   if(now-last<1000/(value.fps||30)-1){schedule();return;}
-  const dt=Math.min(.06,(now-last)/1000);last=now;time+=dt;
-  const target=value.state==='SPEAKING'?.6+Math.min(1,value.audio)*.7:value.state==='LISTENING'?.25:.08;
-  energy+=(target-energy)*Math.min(1,dt*5);
-  ctx.clearRect(0,0,logical,logical);light.clearRect(0,0,logical,logical);
-  const radius=198+Math.sin(time*.85)*3+energy*10;
+  const dt=Math.min(.06,(now-last)/1000);last=now;
+  const level=Math.max(0,Math.min(1,value.audio));
+  const targetEnergy=value.state==='SPEAKING'?.72+level*.22:value.state==='LISTENING'?.35+level*.2:.06;
+  const targetVelocity=value.state==='SPEAKING'?.92+level*.2:value.state==='LISTENING'?.55+level*.08:.28;
+  energy+=(targetEnergy-energy)*Math.min(1,dt*4);
+  velocity+=(targetVelocity-velocity)*Math.min(1,dt*3);
+  spin+=dt*velocity;
+  const requestedMode=value.state==='SPEAKING'?'SPEAKING':value.state==='LISTENING'?'LISTENING':'IDLE';
+  if(requestedMode!==currentMode){previousMode=currentMode;previousPosition=sequencePosition;currentMode=requestedMode;sequencePosition=0;transition=0;}
+  sequencePosition+=dt*(currentMode==='SPEAKING'?10+level*2:currentMode==='LISTENING'?7+level:4);
+  transition=Math.min(1,transition+dt*4);
+  if(atlas){
+   ctx.clearRect(0,0,logical,logical);
+   ctx.save();
+   const wobble=energy*.025;
+   ctx.translate(300,300);ctx.scale(1+Math.sin(spin*1.7)*wobble,1+Math.cos(spin*1.3)*wobble);ctx.translate(-300,-300);
+   if(transition<1)paintSequence(previousMode,previousPosition,1-transition);
+   const glint=Math.pow(Math.max(0,Math.sin(now/1000*(currentMode==='SPEAKING'?2.7:1.55))),8);
+   const base=currentMode==='IDLE'?.78:currentMode==='LISTENING'?.83:.86;
+   paintSequence(currentMode,sequencePosition,transition*Math.min(1,base+glint*.2+level*.07));
+   ctx.restore();schedule();return;
+  }
+  ctx.clearRect(0,0,logical,logical);
+  const radius=193+Math.sin(spin*.7)*2+energy*5;
   for(let k=0;k<count;k++){
-   const phase=k*Math.PI*2/count,p=points[k],rotation=time*(k%2?.25:-.21);
+   const phase=k*Math.PI*2/count,p=points[k];
    for(let i=0;i<=steps;i++){
     const {u,c,s}=basis[i];
-    const wave=Math.sin(u*3+phase+rotation)*(.72+energy*.35)+Math.sin(u*7-phase*.8-time*(.34+k%4*.035))*.32;
-    const r=radius+wave*(22+energy*19)+Math.cos(u*2+phase-time*.27)*8+Math.sin(u*11+phase*1.8+time*.29)*6+(k%4-1.5)*2;
-    const z=Math.sin(u*4+phase+rotation)*10;
-    p[i*2]=300+c*r+z*.13;p[i*2+1]=300+s*r*(.97+(k%5-2)*.005)-z*.16;
+    const r=radius+(k-(count-1)/2)*.65
+      +Math.sin(2*u+phase+spin)*(19+energy*12)
+      +Math.sin(u+phase*.85-spin*.4)*(7+energy*6)
+      +Math.sin(3*u-phase*.7+spin*.65)*(3+energy*2);
+    p[i*2]=300+c*r*(1+Math.cos(phase)*.007);
+    p[i*2+1]=300+s*r*(.99+Math.sin(phase)*.009);
    }
-   trace(light,p);light.strokeStyle=k%4?'rgba(0,131,255,.53)':'rgba(0,235,255,.72)';light.lineWidth=6.5+energy*2;light.stroke();
   }
-  const voidLight=ctx.createRadialGradient(300,300,0,300,300,radius-6);voidLight.addColorStop(0,'rgba(0,2,10,.96)');voidLight.addColorStop(.85,'rgba(1,5,20,.8)');voidLight.addColorStop(1,'rgba(0,8,30,0)');ctx.fillStyle=voidLight;ctx.beginPath();ctx.arc(300,300,radius-6,0,Math.PI*2);ctx.fill();
-  ctx.save();ctx.globalCompositeOperation='screen';
-  const aura=ctx.createRadialGradient(300,300,radius-35,300,300,radius+65);
-  aura.addColorStop(0,'rgba(0,40,130,0)');aura.addColorStop(.42,'rgba(0,90,255,.13)');aura.addColorStop(.7,'rgba(0,105,255,.035)');aura.addColorStop(1,'rgba(0,70,255,0)');
-  ctx.fillStyle=aura;ctx.fillRect(50,50,500,500);
-  ctx.drawImage(glow,0,0,logical,logical);
+  ctx.save();ctx.lineJoin='round';ctx.lineCap='round';
+  // Thin continuous paths preserve the ring silhouette between luminous regions.
   for(let k=0;k<count;k++){
-   trace(ctx,points[k]);ctx.strokeStyle=k%5===0?'rgba(206,250,255,.97)':k%2?'rgba(20,151,255,.94)':'rgba(0,230,255,.86)';ctx.lineWidth=(k%5===0?1.15:.82)+energy*.2;ctx.stroke();
+   trace(ctx,points[k]);ctx.strokeStyle=k%2?'rgba(0,125,238,.48)':'rgba(0,198,255,.52)';ctx.lineWidth=1.45;ctx.stroke();
   }
-  // Small highlights run along the same filaments without a second particle scene.
-  for(let k=0;k<6;k++){
-   const p=points[k*2],j=Math.floor(((time*(.035+k*.003)+k/6)%1)*steps)*2;
-   const halo=ctx.createRadialGradient(p[j],p[j+1],0,p[j],p[j+1],5);halo.addColorStop(0,'#c7faff');halo.addColorStop(.25,'#13d9ff');halo.addColorStop(1,'#008fff00');ctx.fillStyle=halo;ctx.beginPath();ctx.arc(p[j],p[j+1],5,0,Math.PI*2);ctx.fill();
+  for(let k=0;k<count;k++){
+   const p=points[k],phase=k*Math.PI*2/count;
+   for(let slice=0;slice<segments;slice++){
+    const start=slice*segmentLength,end=start+segmentLength;
+    const u=(start+end)*.5/steps*Math.PI*2;
+    const bright=Math.pow(Math.max(0,Math.cos(3*u-spin*.8+phase*.44)),3);
+    const secondary=Math.pow(Math.max(0,Math.cos(2*u+spin*.5-phase*.6)),4)*.7;
+    const intensity=Math.min(1,bright+secondary);
+    if(intensity<.045)continue;
+    traceSegment(p,start,end);
+    if(intensity>.5){
+     ctx.strokeStyle=`rgba(0,170,255,${((intensity-.5)*1.05).toFixed(3)})`;
+     ctx.lineWidth=9;ctx.stroke();
+    }
+    ctx.strokeStyle=`rgba(0,145,255,${(.06+.17*intensity).toFixed(3)})`;
+    ctx.lineWidth=3+intensity*2;ctx.stroke();
+    ctx.strokeStyle=k%3===0?`rgba(211,249,255,${(.18+.78*intensity).toFixed(3)})`:`rgba(25,213,255,${(.16+.74*intensity).toFixed(3)})`;
+    ctx.lineWidth=1.4+intensity*1.2+energy*.25;ctx.stroke();
+   }
   }
   ctx.restore();schedule();
  };

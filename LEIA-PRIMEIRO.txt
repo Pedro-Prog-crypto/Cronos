@@ -1,8 +1,8 @@
 CRONOS COMPLETO — INSTALACAO AUTONOMA
 
-SE BAIXOU INSTALAR-CRONOS-COMPLETO-R44.bat
+SE BAIXOU INSTALAR-CRONOS-COMPLETO-R45.bat
 Execute o BAT uma vez. Ele instala o programa e o codigo-fonte em
-%USERPROFILE%\Cronos-R44. Para encontrar a pasta: Win+R, cole esse caminho e
+%USERPROFILE%\Cronos-R45. Para encontrar a pasta: Win+R, cole esse caminho e
 pressione Enter. Na primeira abertura o instalador procura os dados antigos.
 Se houver mais de uma pasta possivel, escolha a que tem suas memorias e APIs.
 Se aparecer Cronos-R39 com configuracao padrao e sem suas conversas, use
@@ -10,7 +10,21 @@ Se aparecer Cronos-R39 com configuracao padrao e sem suas conversas, use
 Ele copia .env, vault, integracoes e personalidade localmente antes de abrir.
 Se a escolha falhar ou for cancelada, execute o mesmo BAT de novo. A pasta
 antiga permanece intacta. Seus dados privados nao sao publicados no GitHub.
-Nas proximas vezes, abra ABRIR-CRONOS.bat dentro da pasta Cronos-R44.
+Nas proximas vezes, abra ABRIR-CRONOS.bat dentro da pasta Cronos-R45.
+
+REVISAO DE 13/11/2026 (R45)
+O holograma usa os quadros que o senhor enviou, animados continuamente no canvas.
+O movimento aumenta em escuta e fala, com brilho forte apenas em momentos curtos.
+O fundo azul fica atras das linhas, e o nome no canto superior ficou discreto.
+O painel de telemetria tem resumo na lateral e vista ampliada com fundo preto,
+LEDs e cards neon. Porcentagens medidas aparecem dentro de aneis nas duas vistas.
+A saude do sistema e uma estimativa calculada de CPU, RAM, disco e temperatura;
+nao e diagnostico do hardware. GPU e ventoinha sao lidas quando o computador
+oferece sensores compativeis. Sem conexao, os valores ficam indisponiveis.
+O planeta continua ate a
+base da janela. Foram comparados 20 quadros e testadas as telas de desktop e
+celular no navegador.
+O movimento real ainda precisa ser conferido no computador Windows do usuario.
 
 REVISAO DE 10/11/2026 (R44)
 O holograma usa a densidade de pixels real da tela ate o limite de 900 pixels

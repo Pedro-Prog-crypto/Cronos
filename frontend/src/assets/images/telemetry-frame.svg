@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1000" preserveAspectRatio="none">
+ <defs><filter id="glow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="4"/></filter></defs>
+ <path id="outline" d="M3 72 Q3 56 18 41 L48 12 Q58 2 76 2 H579 Q589 2 600 18 L615 29 H751 L770 16 H813 Q829 16 839 27 L880 69 Q898 86 898 107 V915 Q898 934 886 949 L850 985 Q837 998 815 998 H76 Q58 998 47 985 L16 950 Q3 934 3 914 Z" fill="none" stroke="#00bfff" stroke-width="4" filter="url(#glow)"/>
+ <use href="#outline" fill="none" stroke="#34dfff" stroke-width="2"/>
+ <path d="M16 78 L67 27 H568 L601 43 H753 L773 31 H814 L883 100 V905 L840 983 H76 L16 911 Z" fill="none" stroke="#0a83c6" stroke-width="1" opacity=".7"/>
+ <path d="M72 2 H335 M519 2 H582 M602 29 H701 M771 16 H819 M3 326 V422 M3 804 V878 M898 146 V270 M898 742 V860 M87 998 H318 M501 998 H658" fill="none" stroke="#d6ffff" stroke-width="4" stroke-linecap="round" filter="url(#glow)"/>
+ <path d="M72 2 H335 M519 2 H582 M602 29 H701 M771 16 H819 M3 326 V422 M3 804 V878 M898 146 V270 M898 742 V860 M87 998 H318 M501 998 H658" fill="none" stroke="#d6ffff" stroke-width="2" stroke-linecap="round"/>
+</svg>

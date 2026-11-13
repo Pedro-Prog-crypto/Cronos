@@ -24,11 +24,27 @@ def test_metrics_are_measured_and_network_rate_is_delta(monkeypatch):
     second = sample.snapshot()
     assert first['network_bytes_per_second'] is None
     assert second['network_bytes_per_second'] == (3097152 - 1000) / 2
+    assert second['network_download_bytes_per_second'] == (3097152 - 1000) / 2
+    assert second['network_upload_bytes_per_second'] == 0
     assert second['cpu_percent'] == 28
     assert second['ram_percent'] == 46
     assert second['disk_percent'] == 72
     assert second['battery_percent'] == 78
     assert second['temperature_celsius'] is None
+
+
+def test_optional_gpu_sensor_and_missing_values(monkeypatch):
+    from cronos import system_metrics
+    monkeypatch.setattr(system_metrics.shutil, 'which', lambda _: '/usr/bin/nvidia-smi')
+    monkeypatch.setattr(system_metrics.subprocess, 'run', lambda *args, **kwargs:
+                        SimpleNamespace(returncode=0, stdout='37, 1536, 4096, 58, Not Supported\n'))
+    result = SystemMetrics._nvidia_gpu()
+    assert result['gpu_percent'] == 37
+    assert result['gpu_memory_used_bytes'] == 1536 * 1048576
+    assert result['gpu_temperature_celsius'] == 58
+    assert result['gpu_fan_percent'] is None
+    monkeypatch.setattr(system_metrics.shutil, 'which', lambda _: None)
+    assert all(value is None for value in SystemMetrics._nvidia_gpu().values())
 
 
 def test_metrics_endpoint_requires_token(tmp_path):
