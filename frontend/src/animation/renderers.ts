@@ -15,18 +15,26 @@ export function renderOrb(canvas:SceneCanvas,size:number,density:number,pixelRat
  varying vec2 uv;uniform sampler2D source;uniform float phase;uniform float energy;
  void main(){
    vec2 p=uv-vec2(.5);float angle=atan(p.y,p.x);float radius=length(p);
+   // Each radial lane samples a different phase: neighbouring strands cross
+   // and separate instead of carrying one photograph around the circle.
+   float lane=(radius-.31)*19.0;
+   float traveling=sin(2.0*angle+phase*.78+lane*.22);
+   float counter=sin(angle+phase*.59-lane*.34+.7);
+   float detail=sin(5.0*angle-phase*1.27+lane*.47);
+   float displaced=(.006+energy*.018)*traveling
+     +(.003+energy*.005)*counter+.0012*detail;
+   float warped=radius-displaced;
    float flowing=angle
-     -(.028+energy*.016)*sin(angle*2.0+phase*1.3+radius*32.0)
-     -(.017+energy*.011)*sin(angle*4.0-phase*.85-radius*24.0);
-   float warped=radius+(.006+energy*.016)*sin(angle*3.0+phase*1.15+radius*18.0)
-     +(.004+energy*.008)*sin(angle*2.0-phase*.7-radius*16.0);
+     +(.020+energy*.034)*sin(2.0*angle+phase*.71+lane*.38)
+     +.008*sin(3.0*angle-phase*.94-lane*.29);
    vec2 sampleAt=vec2(.5)+vec2(cos(flowing),sin(flowing))*warped;
    vec3 light=texture2D(source,vec2(sampleAt.x,1.0-sampleAt.y)).rgb;
    float peak=max(max(light.r,light.g),light.b);
    float inside=step(0.0,sampleAt.x)*step(sampleAt.x,1.0)*step(0.0,sampleAt.y)*step(sampleAt.y,1.0);
    float sourceRadius=length(sampleAt-vec2(.5));
    float opacity=smoothstep(.055,.20,peak)*(1.0-smoothstep(.42,.47,radius))*(1.0-smoothstep(.43,.48,sourceRadius))*inside;
-   float glimmer=.97+.10*sin(angle*4.0-phase*1.8)+energy*.15;
+   float glimmer=.96+.12*sin(angle+phase*.68+lane*.18)
+     +.055*sin(3.0*angle+phase*1.17-lane*.27)+energy*.12;
    gl_FragColor=vec4(min(light*glimmer,1.0),opacity);
  }`;
  const shader=(type:number,source:string)=>{const value=gl.createShader(type);if(!value)throw new Error('Hologram shader unavailable');gl.shaderSource(value,source);gl.compileShader(value);if(!gl.getShaderParameter(value,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(value)||'Hologram shader failed');return value;};
@@ -42,7 +50,7 @@ export function renderOrb(canvas:SceneCanvas,size:number,density:number,pixelRat
  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
  gl.uniform1i(gl.getUniformLocation(program,'source'),0);gl.viewport(0,0,bitmap,bitmap);
- let active=true,ready=false,frame=0,timer=0,last=performance.now(),motion=0,velocity=.65,energy=.06;
+ let active=true,ready=false,frame=0,timer=0,last=performance.now(),motion=0,velocity=.65,energy=.06,audioEnvelope=0;
  void (async()=>{
   const response=await fetch(referenceFramesUrl);if(!response.ok)throw new Error(`Hologram reference ${response.status}`);
   const sheet=await createImageBitmap(await response.blob());
@@ -58,9 +66,10 @@ export function renderOrb(canvas:SceneCanvas,size:number,density:number,pixelRat
   if(now-last<1000/(value.fps||60)-1){schedule();return;}
   const dt=Math.min(.05,(now-last)/1000);last=now;
   const level=Math.max(0,Math.min(1,value.audio));
-  const targetVelocity=value.state==='SPEAKING'?1.8+level*.35:value.state==='LISTENING'?1.1+level*.2:.65;
-  const targetEnergy=value.state==='SPEAKING'?.62+level*.32:value.state==='LISTENING'?.34+level*.18:.06;
-  velocity+=(targetVelocity-velocity)*Math.min(1,dt*3.4);energy+=(targetEnergy-energy)*Math.min(1,dt*4.2);
+  audioEnvelope+=(level-audioEnvelope)*Math.min(1,dt*(level>audioEnvelope?8:2.3));
+  const targetVelocity=value.state==='SPEAKING'?1.55+audioEnvelope*.23:value.state==='LISTENING'?1.05+audioEnvelope*.12:.65;
+  const targetEnergy=value.state==='SPEAKING'?.54+audioEnvelope*.35:value.state==='LISTENING'?.26+audioEnvelope*.23:.06;
+  velocity+=(targetVelocity-velocity)*Math.min(1,dt*2.5);energy+=(targetEnergy-energy)*Math.min(1,dt*3.1);
   motion+=dt*velocity;
   if(ready){gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);gl.uniform1f(phaseUniform,motion);gl.uniform1f(energyUniform,energy);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);}
   schedule();
@@ -77,7 +86,7 @@ function renderOrbVectors(canvas:SceneCanvas,size:number,_density:number,pixelRa
  const count=7,steps=240,tau=Math.PI*2;
  const circle=Array.from({length:steps+1},(_,i)=>{const u=i*tau/steps;return {u,c:Math.cos(u),s:Math.sin(u)};});
  const paths=Array.from({length:count},()=>new Float32Array((steps+1)*2));
- let active=true,frame=0,timer=0,last=performance.now(),phase=0,velocity=.18,energy=.06;
+ let active=true,frame=0,timer=0,last=performance.now(),phase=0,velocity=.18,energy=.06,audioEnvelope=0;
  const schedule=(delay=0)=>{if(!active)return;if(delay)timer=self.setTimeout(()=>{if(active)frame=requestAnimationFrame(draw);},delay);else frame=requestAnimationFrame(draw);};
  const trace=(path:Float32Array)=>{ctx.beginPath();ctx.moveTo(path[0],path[1]);for(let j=2;j<path.length;j+=2)ctx.lineTo(path[j],path[j+1]);ctx.closePath();};
  const highlight=(path:Float32Array,angle:number,halfWidth:number)=>{
@@ -98,8 +107,9 @@ function renderOrbVectors(canvas:SceneCanvas,size:number,_density:number,pixelRa
   if(now-last<1000/fps-1){schedule();return;}
   const dt=Math.min(.05,(now-last)/1000);last=now;
   const level=Math.max(0,Math.min(1,value.audio));
-  const targetVelocity=value.state==='SPEAKING'?.57+level*.16:value.state==='LISTENING'?.34+level*.09:.18;
-  const targetEnergy=value.state==='SPEAKING'?.58+level*.34:value.state==='LISTENING'?.32+level*.18:.06;
+  audioEnvelope+=(level-audioEnvelope)*Math.min(1,dt*(level>audioEnvelope?8:2.3));
+  const targetVelocity=value.state==='SPEAKING'?.57+audioEnvelope*.16:value.state==='LISTENING'?.34+audioEnvelope*.09:.18;
+  const targetEnergy=value.state==='SPEAKING'?.58+audioEnvelope*.34:value.state==='LISTENING'?.32+audioEnvelope*.18:.06;
   velocity+=(targetVelocity-velocity)*Math.min(1,dt*3.4);
   energy+=(targetEnergy-energy)*Math.min(1,dt*4.2);
   phase+=dt*velocity;
@@ -132,8 +142,8 @@ function renderOrbVectors(canvas:SceneCanvas,size:number,_density:number,pixelRa
   }
   for(let strand=0;strand<count;strand++){
    const path=paths[strand];
-   // The bright spots breathe within each strand instead of orbiting as a wheel.
-   const angle=strand*2.38+.55*Math.sin(phase*(1.1+strand*.065)+strand*.8);
+   // Highlights circulate at different rates; the ring itself never rotates.
+   const angle=strand*2.38+phase*(.55+strand*.04)+.25*Math.sin(phase*.7+strand*.8);
    const strength=strand%3===0?.94:.58;
    highlight(path,angle,.38+energy*.06);
    ctx.shadowColor='#13d9ff';ctx.shadowBlur=15+energy*8;
