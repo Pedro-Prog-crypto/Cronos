@@ -1,5 +1,6 @@
 import {CronosState} from '../types/cronos';
 import orbMotionUrl from '../assets/images/orb-motion-field.png?url';
+import {orbMotionTarget} from './orbDynamics';
 export type SceneInput={state:CronosState;audio:number;hidden:boolean;links:boolean;fps?:number};
 type SceneCanvas=HTMLCanvasElement|OffscreenCanvas;
 function context(canvas:SceneCanvas){return canvas.getContext('2d') as CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D|null;}
@@ -12,16 +13,16 @@ export function renderOrb(canvas:SceneCanvas,size:number,density:number,pixelRat
  if(!gl)return renderOrbVectors(canvas,size,density,pixelRatio,input);
  const vertex=`attribute vec2 position;varying vec2 uv;void main(){uv=(position+1.0)*0.5;gl_Position=vec4(position,0.0,1.0);}`;
  const fragment=`precision highp float;
- varying vec2 uv;uniform float phase;uniform float energy;
+ varying vec2 uv;uniform float phase;uniform float energy;uniform float expansion;
  uniform sampler2D motionField;uniform float sourceBlend;uniform float videoTime;
- float readField(float index,float azimuth,float radial){
+ vec3 readField(float index,float azimuth,float radial){
    float column=mod(index,8.0),row=floor(index/8.0);
    vec2 at=vec2((column*256.0+azimuth*255.0+.5)/2048.0,
-                (row*64.0+radial*63.0+.5)/1728.0);
-   return texture2D(motionField,at).r;
+                (row*64.0+radial*63.0+.5)/896.0);
+   return texture2D(motionField,at).rgb;
  }
  void main(){
-   vec2 p=uv-vec2(.5);float angle=atan(p.y,p.x);float radius=length(p);
+   vec2 p=uv-vec2(.5);float angle=atan(p.y,p.x);float radius=length(p)/(1.0+expansion);
    // The silhouette undulates continuously. Three separate paths cross it at
    // different speeds; no bitmap or complete-ring rotation is involved.
    float contour=(.013+energy*.008)*sin(2.0*angle+phase*.91)
@@ -57,28 +58,45 @@ export function renderOrb(canvas:SceneCanvas,size:number,density:number,pixelRat
      +vec3(.46,.91,1.0)*sparks*.85;
    float alpha=clamp(body*.8+halo*.31+filament*.63+sparks*.30,0.0,.94);
    float azimuth=fract((angle+3.14159265)/6.2831853);
-   float radial=(63.0+(radius-.31)*210.0-45.0)/40.0;
-   float sourceFrame=mod(videoTime*30.0,195.0)+15.0;
+   float radial=(63.0+(radius-.31)*210.0-35.0)/60.0;
+   float sourceFrame=mod(videoTime*30.0,90.0)+15.0;
    float frameA=floor(sourceFrame),fraction=fract(sourceFrame);
-   float frameB=mod(frameA+1.0,210.0);
-   float sampled=mix(readField(frameA,azimuth,radial),
+   float frameB=mod(frameA+1.0,105.0);
+   vec3 sampledField=mix(readField(frameA,azimuth,radial),
      readField(frameB,azimuth,radial),fraction);
    // The last half second folds into the first half second without a hard cut.
-   float closure=smoothstep(195.0,210.0,sourceFrame);
-   float startIndex=sourceFrame-195.0;
+   float closure=smoothstep(90.0,105.0,sourceFrame);
+   float startIndex=sourceFrame-90.0;
    float startA=floor(startIndex),startB=startA+1.0;
-   float fromStart=mix(readField(startA,azimuth,radial),
+   vec3 fromStart=mix(readField(startA,azimuth,radial),
      readField(startB,azimuth,radial),fract(startIndex));
-   sampled=mix(sampled,fromStart,closure);
+   sampledField=mix(sampledField,fromStart,closure);
+   float sampled=sampledField.r;
    sampled*=step(0.0,radial)*(1.0-step(1.0,radial));
-   float emission=pow(sampled,.72);
-   float neighborInner=readField(frameA,azimuth,clamp(radial-.025,0.0,1.0));
-   float neighborOuter=readField(frameA,azimuth,clamp(radial+.025,0.0,1.0));
-   float ridge=clamp((sampled-.5*(neighborInner+neighborOuter))*3.0,0.0,1.0);
+   float distanceToRails=min(abs(radial-sampledField.g),abs(radial-sampledField.b));
+   float isolate=1.0-smoothstep(.045,.105,distanceToRails);
+   float emission=pow(sampled,1.05)*isolate;
+   float neighborInner=readField(frameA,azimuth,clamp(radial-.025,0.0,1.0)).r;
+   float neighborOuter=readField(frameA,azimuth,clamp(radial+.025,0.0,1.0)).r;
+   float ridge=clamp((sampled-.5*(neighborInner+neighborOuter))*3.0,0.0,1.0)*isolate;
+   float railInner=1.0-smoothstep(.010,.035,abs(radial-sampledField.g));
+   float railOuter=1.0-smoothstep(.010,.035,abs(radial-sampledField.b));
+   float repair=max(railInner,railOuter)*(.74+.26*(1.0-smoothstep(.18,.55,sampled)));
+   repair*=step(0.0,radial)*(1.0-step(1.0,radial));
    vec3 captured=vec3(.025,.40,.92)*emission*(1.05+energy*.18)
-     +vec3(.28,.89,1.0)*pow(emission,2.3)*1.15
-     +vec3(.27,.86,1.0)*ridge*.31;
-   float capturedAlpha=clamp(emission*.79+pow(emission,2.3)*.25+ridge*.11,0.0,.95);
+     +vec3(.28,.89,1.0)*pow(emission,2.1)*1.08
+     +vec3(.27,.86,1.0)*ridge*.31+vec3(.09,.75,1.0)*repair*.92;
+   float capturedAlpha=clamp(emission*.90+pow(emission,2.1)*.24+ridge*.11+repair*.88,0.0,.96);
+   float particles=0.0;
+   for(int particleIndex=0;particleIndex<3;particleIndex++){
+     float identity=float(particleIndex);
+     float orbit=phase*(.45+identity*.09)+identity*2.15;
+     float along=pow(max(0.0,cos(angle-orbit)),520.0);
+     float across=1.0-smoothstep(.006,.040,abs(radial-sampledField.g));
+     particles+=along*across*(.22+energy*.65);
+   }
+   captured+=vec3(.18,.76,1.0)*particles*.7;
+   capturedAlpha=clamp(capturedAlpha+particles*.30,0.0,.96);
    gl_FragColor=vec4(mix(min(light,1.0),captured,sourceBlend),
      mix(alpha,capturedAlpha,sourceBlend));
  }`;
@@ -91,6 +109,7 @@ export function renderOrb(canvas:SceneCanvas,size:number,density:number,pixelRat
  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
  const position=gl.getAttribLocation(program,'position');gl.enableVertexAttribArray(position);gl.vertexAttribPointer(position,2,gl.FLOAT,false,0,0);
  const phaseUniform=gl.getUniformLocation(program,'phase'),energyUniform=gl.getUniformLocation(program,'energy');
+ const expansionUniform=gl.getUniformLocation(program,'expansion');
  const sourceBlendUniform=gl.getUniformLocation(program,'sourceBlend');
  const videoTimeUniform=gl.getUniformLocation(program,'videoTime');
  const texture=gl.createTexture();gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,texture);
@@ -100,12 +119,12 @@ export function renderOrb(canvas:SceneCanvas,size:number,density:number,pixelRat
  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
  gl.uniform1i(gl.getUniformLocation(program,'motionField'),0);
  gl.viewport(0,0,bitmap,bitmap);
- let active=true,ready=false,blend=0,frame=0,timer=0,last=performance.now(),motion=0,videoTime=0,velocity=1.15,energy=.06,audioEnvelope=0;
+ let active=true,ready=false,blend=0,frame=0,timer=0,last=performance.now(),motion=0,videoTime=0,velocity=.22,energy=.018,expansion=0,audioEnvelope=0;
  void (async()=>{
   const response=await fetch(orbMotionUrl);if(!response.ok)throw new Error(`Motion field ${response.status}`);
   const bitmap=await createImageBitmap(await response.blob());
   try{if(!active)return;gl.bindTexture(gl.TEXTURE_2D,texture);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,1);
-   gl.texImage2D(gl.TEXTURE_2D,0,gl.LUMINANCE,gl.LUMINANCE,gl.UNSIGNED_BYTE,bitmap);ready=true;}
+   gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,bitmap);ready=true;}
   finally{bitmap.close();}
  })().catch(error=>console.warn('Hologram motion field unavailable.',error));
  const schedule=(delay=0)=>{if(!active)return;if(delay)timer=self.setTimeout(()=>{if(active)frame=requestAnimationFrame(draw);},delay);else frame=requestAnimationFrame(draw);};
@@ -116,14 +135,16 @@ export function renderOrb(canvas:SceneCanvas,size:number,density:number,pixelRat
   const dt=Math.min(.05,(now-last)/1000);last=now;
   const level=Math.max(0,Math.min(1,value.audio));
   audioEnvelope+=(level-audioEnvelope)*Math.min(1,dt*(level>audioEnvelope?8:2.3));
-  const targetVelocity=value.state==='SPEAKING'?2.55+audioEnvelope*.35:value.state==='LISTENING'?1.75+audioEnvelope*.18:1.15;
-  const targetEnergy=value.state==='SPEAKING'?.54+audioEnvelope*.35:value.state==='LISTENING'?.26+audioEnvelope*.23:.06;
-  velocity+=(targetVelocity-velocity)*Math.min(1,dt*2.5);energy+=(targetEnergy-energy)*Math.min(1,dt*3.1);
+  const target=orbMotionTarget(value.state,audioEnvelope);
+  velocity+=(target.rate-velocity)*Math.min(1,dt*3.2);
+  energy+=(target.energy-energy)*Math.min(1,dt*3.6);
+  expansion+=(target.expansion-expansion)*Math.min(1,dt*3.0);
   motion+=dt*velocity;
-  videoTime+=dt*velocity/1.15;
+  videoTime+=dt*velocity;
   blend+=dt*(ready?2.5:-3.0);blend=Math.min(1,Math.max(0,blend));
   gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);gl.uniform1f(phaseUniform,motion);
-  gl.uniform1f(energyUniform,energy);gl.uniform1f(sourceBlendUniform,blend);
+  gl.uniform1f(energyUniform,energy);gl.uniform1f(expansionUniform,expansion);
+  gl.uniform1f(sourceBlendUniform,blend);
   gl.uniform1f(videoTimeUniform,videoTime);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
   schedule();
  };
@@ -140,7 +161,7 @@ function renderOrbVectors(canvas:SceneCanvas,size:number,_density:number,pixelRa
  const circle=Array.from({length:steps+1},(_,i)=>{const u=i*tau/steps;return {u,c:Math.cos(u),s:Math.sin(u)};});
  const paths=Array.from({length:count},()=>new Float32Array((steps+1)*2));
  const bodyPath=new Float32Array((steps+1)*2);
- let active=true,frame=0,timer=0,last=performance.now(),phase=0,velocity=1.15,energy=.06,audioEnvelope=0;
+ let active=true,frame=0,timer=0,last=performance.now(),phase=0,velocity=.22,energy=.018,expansion=0,audioEnvelope=0;
  const schedule=(delay=0)=>{if(!active)return;if(delay)timer=self.setTimeout(()=>{if(active)frame=requestAnimationFrame(draw);},delay);else frame=requestAnimationFrame(draw);};
  const trace=(path:Float32Array)=>{ctx.beginPath();ctx.moveTo(path[0],path[1]);for(let j=2;j<path.length;j+=2)ctx.lineTo(path[j],path[j+1]);ctx.closePath();};
  const highlight=(path:Float32Array,angle:number,halfWidth:number)=>{
@@ -162,10 +183,10 @@ function renderOrbVectors(canvas:SceneCanvas,size:number,_density:number,pixelRa
   const dt=Math.min(.05,(now-last)/1000);last=now;
   const level=Math.max(0,Math.min(1,value.audio));
   audioEnvelope+=(level-audioEnvelope)*Math.min(1,dt*(level>audioEnvelope?8:2.3));
-  const targetVelocity=value.state==='SPEAKING'?2.55+audioEnvelope*.35:value.state==='LISTENING'?1.75+audioEnvelope*.18:1.15;
-  const targetEnergy=value.state==='SPEAKING'?.54+audioEnvelope*.35:value.state==='LISTENING'?.26+audioEnvelope*.23:.06;
-  velocity+=(targetVelocity-velocity)*Math.min(1,dt*3.4);
-  energy+=(targetEnergy-energy)*Math.min(1,dt*4.2);
+  const target=orbMotionTarget(value.state,audioEnvelope);
+  velocity+=(target.rate-velocity)*Math.min(1,dt*3.4);
+  energy+=(target.energy-energy)*Math.min(1,dt*4.2);
+  expansion+=(target.expansion-expansion)*Math.min(1,dt*3.0);
   phase+=dt*velocity;
   ctx.clearRect(0,0,logical,logical);
   for(let i=0;i<=steps;i++){
@@ -174,7 +195,7 @@ function renderOrbVectors(canvas:SceneCanvas,size:number,_density:number,pixelRa
     +(6+energy*3.6)*Math.sin(3*u-phase*.64+.4)
     +4.2*Math.sin(5*u+phase*.59+1.2)
     +1.8*Math.sin(7*u-phase*.37+.8);
-   const baseRadius=186+contour;
+   const baseRadius=(186+contour)*(1+expansion);
    bodyPath[i*2]=300+c*baseRadius;bodyPath[i*2+1]=300+s*baseRadius;
    for(let strand=0;strand<count;strand++){
     const path=paths[strand];

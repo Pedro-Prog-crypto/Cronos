@@ -1,8 +1,8 @@
 CRONOS COMPLETO — INSTALACAO AUTONOMA
 
-SE BAIXOU INSTALAR-CRONOS-COMPLETO-R49.bat
+SE BAIXOU INSTALAR-CRONOS-COMPLETO-R50.bat
 Execute o BAT uma vez. Ele instala o programa e o codigo-fonte em
-%USERPROFILE%\Cronos-R49. Para encontrar a pasta: Win+R, cole esse caminho e
+%USERPROFILE%\Cronos-R50. Para encontrar a pasta: Win+R, cole esse caminho e
 pressione Enter. Na primeira abertura o instalador procura os dados antigos.
 Se houver mais de uma pasta possivel, escolha a que tem suas memorias e APIs.
 Se aparecer Cronos-R39 com configuracao padrao e sem suas conversas, use
@@ -10,7 +10,15 @@ Se aparecer Cronos-R39 com configuracao padrao e sem suas conversas, use
 Ele copia .env, vault, integracoes e personalidade localmente antes de abrir.
 Se a escolha falhar ou for cancelada, execute o mesmo BAT de novo. A pasta
 antiga permanece intacta. Seus dados privados nao sao publicados no GitHub.
-Nas proximas vezes, abra ABRIR-CRONOS.bat dentro da pasta Cronos-R49.
+Nas proximas vezes, abra ABRIR-CRONOS.bat dentro da pasta Cronos-R50.
+
+REVISAO DE 13/11/2026 (R50)
+O holograma permanece no formato extraido do video, mas usa somente o trecho
+sem sobreposicoes. O contorno ganhou trilhas continuas e menos tracos soltos.
+Em repouso se move devagar; ruido baixo quase nao altera o movimento; voz media
+e alta aumentam gradualmente velocidade, brilho e tamanho. A fala do Cronos
+usa o nivel da reproducao de audio quando disponivel. A escuta usa o nivel real
+do microfone. Veja docs\visual-audit-r50\LEIA.md para video e verificacoes.
 
 REVISAO DE 13/11/2026 (R49)
 O holograma usa o movimento extraido do video enviado pelo usuario. O contorno

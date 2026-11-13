@@ -184,7 +184,7 @@ export default function App(){
     }).catch(()=>{});
     return()=>{alive=false;};
   },[connected,Boolean(config)]);
-  const state=voice.isSpeaking?'SPEAKING':microphone.capturing?'LISTENING':moduleActivity;
+  const state=voice.isSpeaking?'SPEAKING':microphone.recording?'LISTENING':moduleActivity;
   const audioLevelSource=voice.isSpeaking?voice.audioLevelSource:microphone.audioLevelSource;
   const live=useRef({busy:false,recording:false,transcribing:false,speaking:false,generating:false,module:null as string|null,announce:false,fish:false});
   live.current={busy,recording:microphone.capturing||microphone.starting,transcribing:microphone.transcribing,speaking:voice.isSpeaking,generating:voice.isGenerating,module,announce:announceAlerts,fish:Boolean(config?.fish_configured)};
