@@ -15,15 +15,18 @@ export function renderOrb(canvas:SceneCanvas,size:number,density:number,pixelRat
  varying vec2 uv;uniform sampler2D source;uniform float phase;uniform float energy;
  void main(){
    vec2 p=uv-vec2(.5);float angle=atan(p.y,p.x);float radius=length(p);
-   float flowing=angle-phase*1.1-(.038+energy*.025)*sin(angle*2.0+phase*.91)-.018*sin(angle*3.0-phase*.62);
-   float warped=radius+(.010+energy*.005)*sin(angle*2.0+phase*.88)+.005*sin(angle*3.0-phase*.55);
+   float flowing=angle
+     -(.028+energy*.016)*sin(angle*2.0+phase*1.3+radius*32.0)
+     -(.017+energy*.011)*sin(angle*4.0-phase*.85-radius*24.0);
+   float warped=radius+(.006+energy*.016)*sin(angle*3.0+phase*1.15+radius*18.0)
+     +(.004+energy*.008)*sin(angle*2.0-phase*.7-radius*16.0);
    vec2 sampleAt=vec2(.5)+vec2(cos(flowing),sin(flowing))*warped;
    vec3 light=texture2D(source,vec2(sampleAt.x,1.0-sampleAt.y)).rgb;
    float peak=max(max(light.r,light.g),light.b);
    float inside=step(0.0,sampleAt.x)*step(sampleAt.x,1.0)*step(0.0,sampleAt.y)*step(sampleAt.y,1.0);
    float sourceRadius=length(sampleAt-vec2(.5));
    float opacity=smoothstep(.055,.20,peak)*(1.0-smoothstep(.42,.47,radius))*(1.0-smoothstep(.43,.48,sourceRadius))*inside;
-   float glimmer=1.0+.10*sin(angle*3.0-phase*1.35)+energy*.15;
+   float glimmer=.97+.10*sin(angle*4.0-phase*1.8)+energy*.15;
    gl_FragColor=vec4(min(light*glimmer,1.0),opacity);
  }`;
  const shader=(type:number,source:string)=>{const value=gl.createShader(type);if(!value)throw new Error('Hologram shader unavailable');gl.shaderSource(value,source);gl.compileShader(value);if(!gl.getShaderParameter(value,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(value)||'Hologram shader failed');return value;};
@@ -39,7 +42,7 @@ export function renderOrb(canvas:SceneCanvas,size:number,density:number,pixelRat
  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
  gl.uniform1i(gl.getUniformLocation(program,'source'),0);gl.viewport(0,0,bitmap,bitmap);
- let active=true,ready=false,frame=0,timer=0,last=performance.now(),motion=0,velocity=.18,energy=.06;
+ let active=true,ready=false,frame=0,timer=0,last=performance.now(),motion=0,velocity=.65,energy=.06;
  void (async()=>{
   const response=await fetch(referenceFramesUrl);if(!response.ok)throw new Error(`Hologram reference ${response.status}`);
   const sheet=await createImageBitmap(await response.blob());
@@ -55,7 +58,7 @@ export function renderOrb(canvas:SceneCanvas,size:number,density:number,pixelRat
   if(now-last<1000/(value.fps||60)-1){schedule();return;}
   const dt=Math.min(.05,(now-last)/1000);last=now;
   const level=Math.max(0,Math.min(1,value.audio));
-  const targetVelocity=value.state==='SPEAKING'?.62+level*.18:value.state==='LISTENING'?.36+level*.10:.18;
+  const targetVelocity=value.state==='SPEAKING'?1.8+level*.35:value.state==='LISTENING'?1.1+level*.2:.65;
   const targetEnergy=value.state==='SPEAKING'?.62+level*.32:value.state==='LISTENING'?.34+level*.18:.06;
   velocity+=(targetVelocity-velocity)*Math.min(1,dt*3.4);energy+=(targetEnergy-energy)*Math.min(1,dt*4.2);
   motion+=dt*velocity;
@@ -129,7 +132,8 @@ function renderOrbVectors(canvas:SceneCanvas,size:number,_density:number,pixelRa
   }
   for(let strand=0;strand<count;strand++){
    const path=paths[strand];
-   const angle=phase*(1.1+strand*.065)+strand*2.38;
+   // The bright spots breathe within each strand instead of orbiting as a wheel.
+   const angle=strand*2.38+.55*Math.sin(phase*(1.1+strand*.065)+strand*.8);
    const strength=strand%3===0?.94:.58;
    highlight(path,angle,.38+energy*.06);
    ctx.shadowColor='#13d9ff';ctx.shadowBlur=15+energy*8;

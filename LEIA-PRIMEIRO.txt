@@ -1,8 +1,8 @@
 CRONOS COMPLETO — INSTALACAO AUTONOMA
 
-SE BAIXOU INSTALAR-CRONOS-COMPLETO-R46.bat
+SE BAIXOU INSTALAR-CRONOS-COMPLETO-R47.bat
 Execute o BAT uma vez. Ele instala o programa e o codigo-fonte em
-%USERPROFILE%\Cronos-R46. Para encontrar a pasta: Win+R, cole esse caminho e
+%USERPROFILE%\Cronos-R47. Para encontrar a pasta: Win+R, cole esse caminho e
 pressione Enter. Na primeira abertura o instalador procura os dados antigos.
 Se houver mais de uma pasta possivel, escolha a que tem suas memorias e APIs.
 Se aparecer Cronos-R39 com configuracao padrao e sem suas conversas, use
@@ -10,7 +10,16 @@ Se aparecer Cronos-R39 com configuracao padrao e sem suas conversas, use
 Ele copia .env, vault, integracoes e personalidade localmente antes de abrir.
 Se a escolha falhar ou for cancelada, execute o mesmo BAT de novo. A pasta
 antiga permanece intacta. Seus dados privados nao sao publicados no GitHub.
-Nas proximas vezes, abra ABRIR-CRONOS.bat dentro da pasta Cronos-R46.
+Nas proximas vezes, abra ABRIR-CRONOS.bat dentro da pasta Cronos-R47.
+
+REVISAO DE 13/11/2026 (R47)
+O holograma nao gira mais como uma roda. A foto luminosa continua sendo a base,
+mas os filamentos mudam localmente de forma, sem giro global da imagem. Na fala,
+as deformacoes ficam mais amplas; parado, o movimento permanece leve. O modo
+vetorial alternativo tambem deixou de mover os pontos de brilho em volta do anel.
+O video de 9 segundos em docs\visual-audit-r47\holograma-estados.webm mostra
+parado, escutando e falando, nesta ordem. A aparencia foi comparada com 20
+quadros da referencia. O navegador foi testado em desktop e celular.
 
 REVISAO DE 13/11/2026 (R46)
 O holograma preserva a textura luminosa da foto enviada pelo senhor. O WebGL
