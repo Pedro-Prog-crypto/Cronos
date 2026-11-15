@@ -5,15 +5,17 @@ import {modules} from '../panels/modules';
 import {capability,type CapabilityId} from '../capabilities';
 import {TelemetryDetail,type Metrics} from './TelemetryDetail';
 import './home-dashboard.css';
+import {ReferenceCards} from './ReferenceCards';
 
-type Props={connected:boolean;preferences:any;onPreferences:(value:any)=>void;panelOpenRequest:number;menuOpen:boolean;onMenuClose:()=>void;section:CapabilityId|null;onSection:(value:CapabilityId|null)=>void;graphTotal:number;provider?:string;providerConfigured?:boolean;onModule:(index:number)=>void;onStudy:()=>void;onStudio:()=>void;onEye:()=>void;onChat:()=>void;onScreen:()=>void;onImage:()=>void;onDocument:()=>void;onMicrophone:()=>void;microphoneOn:boolean};
+type Props={connected:boolean;preferences:any;onPreferences:(value:any)=>void;panelOpenRequest:number;menuOpen:boolean;onMenuClose:()=>void;section:CapabilityId|null;onSection:(value:CapabilityId|null)=>void;graphTotal:number;provider?:string;providerConfigured?:boolean;onModule:(index:number)=>void;onStudy:()=>void;onStudio:()=>void;onEye:()=>void;onChat:()=>void;onScreen:()=>void;onImage:()=>void;onDocument:()=>void;onMicrophone:()=>void;microphoneOn:boolean;presentationActive?:boolean};
 const labels=['Sistema','Memória','Conexões','Análise','Configurações'];
 const icons=[Monitor,Cpu,Share2,ChartNoAxesCombined,Settings];
 const sections:CapabilityId[]=['system','memory','connections','analysis','settings'];
 const size=(bytes:number|null|undefined)=>bytes==null?'—':`${(bytes/1073741824).toFixed(1)} GB`;
 const percent=(value:number|null|undefined)=>value==null?'—':`${Math.round(value)}%`;
 
-export function HomeDashboard({connected,preferences,onPreferences,panelOpenRequest,menuOpen,onMenuClose,section,onSection,graphTotal,provider,providerConfigured,onModule,onStudy,onStudio,onEye,onChat,onScreen,onImage,onDocument,onMicrophone,microphoneOn}:Props){
+export function HomeDashboard({connected,preferences,onPreferences,panelOpenRequest,menuOpen,onMenuClose,section,onSection,graphTotal,provider,providerConfigured,onModule,onStudy,onStudio,onEye,onChat,onScreen,onImage,onDocument,onMicrophone,microphoneOn,presentationActive=false}:Props){
+ const [cardsOpen,setCardsOpen]=useState(false);
  const [narrow,setNarrow]=useState(()=>window.matchMedia('(max-width:700px)').matches);
  const [mobileLeftOpen,setMobileLeftOpen]=useState(false);
  const [mobileRightOpen,setMobileRightOpen]=useState(false);
@@ -34,7 +36,7 @@ export function HomeDashboard({connected,preferences,onPreferences,panelOpenRequ
  const toggleCompact=()=>{setRightCompact(value=>!value);persist('home_right_compact',!rightCompact);};
  useEffect(()=>{if(!preferences)return;setLeftClosed(Boolean(preferences.home_left_closed));setRightClosed(Boolean(preferences.home_right_closed));setRightCompact(Boolean(preferences.home_right_compact));},[preferences?.home_left_closed,preferences?.home_right_closed,preferences?.home_right_compact]);
  useEffect(()=>{const query=window.matchMedia('(max-width:700px)');const update=()=>setNarrow(query.matches);query.addEventListener('change',update);return()=>query.removeEventListener('change',update);},[]);
- useEffect(()=>{if(panelOpenRequest){setRightClosed(false);persist('home_right_closed',false);}},[panelOpenRequest]);
+ useEffect(()=>{if(panelOpenRequest){setCardsOpen(true);setRightClosed(false);persist('home_right_closed',false);}},[panelOpenRequest]);
  useEffect(()=>{
    if(!connected){setMetrics(null);setCpuHistory([]);setRamHistory([]);setGpuHistory([]);setNetworkHistory([]);setStatus('Sem conexão');return;}
    let alive=true;
@@ -54,8 +56,11 @@ export function HomeDashboard({connected,preferences,onPreferences,panelOpenRequ
    {label:'Temperatura',short:'Temp.',value:metrics?.temperature_celsius==null?'Indisponível':`${Math.round(metrics.temperature_celsius)} °C`,detail:'Sensor do sistema',icon:Thermometer,bar:null,onClick:()=>onModule(11)},
    {label:'Bateria',short:'Bateria',value:metrics?.battery_percent==null?'Indisponível':percent(metrics.battery_percent),detail:metrics?.battery_percent==null?'Sem medição':metrics.battery_plugged?'Carregando':'Energia restante',icon:Battery,bar:metrics?.battery_percent,onClick:()=>onModule(10)},
  ].filter(card=>card.label!=='Bateria'||!metrics||metrics.battery_percent!=null);
- return <div className={`cronos-home-hud ${rightDetailed?'telemetry-open':''}`}>
+ return <div className={`cronos-home-hud ${rightDetailed?'telemetry-open':''}`} data-panels={cardsOpen||presentationActive||Boolean(section)}>
    <header className="home-brand"><span className="home-brand-mark" aria-hidden="true">◌</span><span>CRONOS</span><span className="home-brand-line"/></header>
+   <section className="reference-processing" aria-label="Processamento em tempo real"><header><Cpu size={16}/> PROCESSAMENTO <span>{connected?'CONECTADO':'OFFLINE'}</span></header><div className="reference-meters">{[{label:'CPU',value:metrics?.cpu_percent},{label:'MEMÓRIA',value:metrics?.ram_percent},{label:'DISCO',value:metrics?.disk_percent}].map(item=><div key={item.label}><span>{item.label}<b>{percent(item.value)}</b></span><meter min={0} max={100} value={item.value??0} aria-label={item.label} aria-valuetext={percent(item.value)}/></div>)}</div><footer><span>PROCESSO INTELIGENTE</span><strong>{providerConfigured?provider:'Provedor não configurado'}</strong><button onClick={()=>onModule(0)}>Ver processamento <ChevronRight size={14}/></button></footer></section>
+   <button className="reference-panels-toggle" aria-pressed={cardsOpen||presentationActive} onClick={()=>setCardsOpen(value=>!value)} disabled={presentationActive}><Monitor size={13}/> {cardsOpen?'RECOLHER PAINÉIS':'ABRIR PAINÉIS'}</button>
+   {cardsOpen&&!presentationActive&&<ReferenceCards onClose={()=>setCardsOpen(false)} connected={connected} graphTotal={graphTotal} onModule={onModule} onMemory={()=>onSection('memory')}/>}
    <aside className={`home-nav ${leftVisible?'':'closed'}`} aria-label="Navegação principal">
      <button className="home-collapse" onClick={toggleLeft} aria-label={leftVisible?'Recolher menu esquerdo':'Expandir menu esquerdo'} title={leftVisible?'Recolher':'Expandir'}>{leftVisible?<ChevronLeft size={17}/>:<ChevronRight size={17}/>}</button>
      {labels.map((label,index)=>{const Icon=icons[index];return <button key={label} className={section===sections[index]||(!section&&index===0)?'selected':''} onClick={()=>onSection(section===sections[index]?null:sections[index])} title={label} aria-label={label}><Icon size={19}/><span>{label}</span></button>;})}

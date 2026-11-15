@@ -16,5 +16,10 @@ assert.ok(spoken.rate>loud.rate&&spoken.expansion>loud.expansion);
 for(const state of ['IDLE','LISTENING','SPEAKING']){
  const value=orbMotionTarget(state,NaN);
  assert.ok(Object.values(value).every(Number.isFinite));
+ for(const level of [0,.08,.25,.6,1,10,-1,Infinity]){
+  const motion=orbMotionTarget(state,level);
+  assert.ok(motion.rate>=.65&&motion.rate<=1.2,'reference playback must stay close to its natural speed');
+  assert.ok(motion.expansion>=0&&motion.expansion<=.015,'audio must not balloon the complete silhouette');
+ }
 }
 console.log('Orb voice response: ok');

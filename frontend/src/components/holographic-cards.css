@@ -22,3 +22,15 @@
 .answer-card-deck,.answer-card-deck *,.spoken-question,.card-composer,.holo-tool-deck{scrollbar-width:none!important}
 .answer-card-deck::-webkit-scrollbar,.answer-card-deck *::-webkit-scrollbar,.spoken-question::-webkit-scrollbar,.card-composer::-webkit-scrollbar,.holo-tool-deck::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}
 @media(max-width:700px){.answer-card-deck{inset:0;width:100%;height:100%;max-height:none;overflow:visible;padding:0;display:block}.floating-answer-card .holo-surface{padding:12px}.floating-answer-card .holo-text{font-size:12px}}
+
+/* Reference panels: thin blue glass, distinct text and no decorative ghost cards. */
+.holo-card{filter:drop-shadow(0 3px 10px #00102c80);animation:holo-arrive .28s ease-out both}
+.holo-depth,.holo-trails,.holo-accent-pink{display:none}
+.holo-shell,.holo-compact .holo-shell{clip-path:none;border-radius:5px;background:linear-gradient(135deg,#42c8e9b0,#185b9a99 45%,#339cc7b0);filter:none}
+.holo-surface,.holo-compact .holo-surface{clip-path:none;border-radius:4px;background:radial-gradient(ellipse at 15% 0,#0c3c7670,transparent 65%),linear-gradient(150deg,#041b3bf5,#020e26f5);box-shadow:inset 0 0 14px #1572c017}
+.holo-content h2{font-family:'Rajdhani',sans-serif;letter-spacing:.08em;color:#b9f4ff;text-shadow:0 0 5px #1dbbde55}
+.holo-accent-cyan{height:1px;width:24px;left:13px;top:0;box-shadow:0 0 5px #43d9f780}
+.floating-answer-card .holo-content h2{font-size:13px;letter-spacing:.07em}
+.holo-text{color:#dbeefa}
+@keyframes holo-arrive{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+@media(prefers-reduced-motion:reduce){.holo-card{animation:none}}

@@ -11,7 +11,8 @@
     "test:long-capture": "node scripts/test-long-capture.mjs",
     "test:capabilities": "node --experimental-strip-types scripts/test-capability-routing.mjs",
     "test:orb-resolution": "node --experimental-strip-types scripts/test-orb-resolution.mjs",
-    "test:orb-dynamics": "node --experimental-strip-types scripts/test-orb-dynamics.mjs"
+    "test:orb-dynamics": "node --experimental-strip-types scripts/test-orb-dynamics.mjs",
+    "test:reference-deck": "node --experimental-strip-types scripts/test-reference-deck.mjs"
   },
   "dependencies": {
     "@echogarden/fvad-wasm": "0.2.0",

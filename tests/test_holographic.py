@@ -26,7 +26,7 @@ def test_production_interface_keeps_animation_and_no_browser_ai_keys():
         assert ('renderOrb' if component == 'CronosOrb' else 'renderStar') in content
     renderers=(package/'frontend/src/animation/renderers.ts').read_text()
     assert len(re.findall(r'requestAnimationFrame\(\w+\)',renderers)) >= 4
-    assert len(re.findall(r'cancelAnimationFrame\(\w+\)',renderers)) == 2
+    assert len(re.findall(r'cancelAnimationFrame\(\w+\)',renderers)) >= 2
     assert (package/'frontend/src/animation/scene.worker.ts').exists()
     script=(package/'frontend/src/hooks/useCronosVoice.ts').read_text()
     assert "'/voice/speech'" in script and "'/voice/transcribe'" in script

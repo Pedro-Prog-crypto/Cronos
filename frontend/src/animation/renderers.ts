@@ -1,155 +1,106 @@
 import {CronosState} from '../types/cronos';
-import orbMotionUrl from '../assets/images/orb-motion-field.png?url';
+import orbMotionUrl from '../assets/images/orb-front-field.png?url';
 import {orbMotionTarget} from './orbDynamics';
-export type SceneInput={state:CronosState;audio:number;hidden:boolean;links:boolean;fps?:number};
+export type SceneInput={state:CronosState;audio:number;hidden:boolean;links:boolean;fps?:number;referenceTime?:number};
 type SceneCanvas=HTMLCanvasElement|OffscreenCanvas;
 function context(canvas:SceneCanvas){return canvas.getContext('2d') as CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D|null;}
 
-/** Replay a polar light field extracted from the supplied video, interpolated in time. */
+/** Replay camera-aligned reference filaments, preserving their individual gaps. */
 export function renderOrb(canvas:SceneCanvas,size:number,density:number,pixelRatio:number,input:()=>SceneInput){
  const bitmap=Math.min(900,Math.round(size*Math.min(pixelRatio,900/size)));
  canvas.width=canvas.height=bitmap;
- const gl=(canvas as HTMLCanvasElement).getContext('webgl',{alpha:true,antialias:true,premultipliedAlpha:false}) as WebGLRenderingContext|null;
+ const gl=canvas.getContext('webgl',{alpha:true,antialias:true,premultipliedAlpha:false}) as WebGLRenderingContext|null;
  if(!gl)return renderOrbVectors(canvas,size,density,pixelRatio,input);
  const vertex=`attribute vec2 position;varying vec2 uv;void main(){uv=(position+1.0)*0.5;gl_Position=vec4(position,0.0,1.0);}`;
  const fragment=`precision highp float;
- varying vec2 uv;uniform float phase;uniform float energy;uniform float expansion;
+ varying vec2 uv;uniform float phase;uniform float energy;uniform float expansion;uniform float stateGain;
  uniform sampler2D motionField;uniform float sourceBlend;uniform float videoTime;
  vec3 readField(float index,float azimuth,float radial){
-   float column=mod(index,8.0),row=floor(index/8.0);
-   vec2 at=vec2((column*256.0+azimuth*255.0+.5)/2048.0,
-                (row*64.0+radial*63.0+.5)/896.0);
-   return texture2D(motionField,at).rgb;
+   float column=mod(index,6.0),row=floor(index/6.0);
+   float along=azimuth*640.0,first=floor(along);
+   float y=(row*96.0+clamp(radial,0.0,1.0)*95.0+.5)/3456.0;
+   vec3 a=texture2D(motionField,vec2((column*640.0+mod(first,640.0)+.5)/3840.0,y)).rgb;
+   vec3 b=texture2D(motionField,vec2((column*640.0+mod(first+1.0,640.0)+.5)/3840.0,y)).rgb;
+   return mix(a,b,fract(along));
  }
  void main(){
    vec2 p=uv-vec2(.5);float angle=atan(p.y,p.x);float radius=length(p)/(1.0+expansion);
-   // The silhouette undulates continuously. Three separate paths cross it at
-   // different speeds; no bitmap or complete-ring rotation is involved.
-   float contour=(.013+energy*.008)*sin(2.0*angle+phase*.91)
-     +(.010+energy*.006)*sin(3.0*angle-phase*.64+.4)
-     +.007*sin(5.0*angle+phase*.59+1.2)
-     +.003*sin(7.0*angle-phase*.37+.8);
-   float middle=.31+contour;
-   float filament=0.0;float halo=0.0;float sparks=0.0;
-   for(int strand=0;strand<3;strand++){
-     float layer=float(strand);
-     float path=middle+(layer-1.0)*.007
-       +(.013+energy*.007)*sin(2.0*angle+phase*(.76+layer*.14)+layer*1.7)
-       +(.009+energy*.004)*sin(3.0*angle-phase*(.57+layer*.11)+layer*2.1)
-       +.005*sin(5.0*angle+phase*(.52+layer*.07)+layer)
-       +.0035*sin(9.0*angle-phase*(.61+layer*.08)+layer*2.6)
-       +.002*sin(13.0*angle+phase*(.42+layer*.04)+layer*1.3);
-     float width=.0013+energy*.0005;
-     float distanceToPath=abs(radius-path);
-     float highlight=pow(max(0.0,cos(angle-phase*(.65+layer*.11)-layer*2.1)),36.0);
-     float flux=.56+.16*sin(5.0*angle+phase*.91+layer*1.4)
-       +.08*sin(13.0*angle-phase*.72+layer*2.3)+1.15*highlight;
-     filament+=(1.0-smoothstep(width*.45,width*1.7,distanceToPath))*flux;
-     halo+=(1.0-smoothstep(width*1.4,width*18.0,distanceToPath))*flux;
-     sparks+=pow(max(0.0,cos(angle-phase*(.65+layer*.11)-layer*2.1)),180.0)
-       *(1.0-smoothstep(.002,.016,distanceToPath));
-   }
-   float distanceToBand=abs(radius-middle);
-   float body=(1.0-smoothstep(.012,.050,distanceToBand))
-     *(.24+.07*sin(2.0*angle+phase*.58)+energy*.10);
-   vec3 light=vec3(.016,.42,.98)*body
-     +vec3(.018,.42,.96)*halo*.60
-     +vec3(.13,.82,1.0)*filament*.95
-     +vec3(.46,.91,1.0)*sparks*.85;
-   float alpha=clamp(body*.8+halo*.31+filament*.63+sparks*.30,0.0,.94);
    float azimuth=fract((angle+3.14159265)/6.2831853);
-   float radial=(63.0+(radius-.31)*210.0-35.0)/60.0;
-   float sourceFrame=mod(videoTime*30.0,90.0)+15.0;
-   float frameA=floor(sourceFrame),fraction=fract(sourceFrame);
-   float frameB=mod(frameA+1.0,105.0);
-   vec3 sampledField=mix(readField(frameA,azimuth,radial),
-     readField(frameB,azimuth,radial),fraction);
-   // The last half second folds into the first half second without a hard cut.
-   float closure=smoothstep(90.0,105.0,sourceFrame);
-   float startIndex=sourceFrame-90.0;
-   float startA=floor(startIndex),startB=startA+1.0;
-   vec3 fromStart=mix(readField(startA,azimuth,radial),
-     readField(startB,azimuth,radial),fract(startIndex));
-   sampledField=mix(sampledField,fromStart,closure);
-   float sampled=sampledField.r;
-   sampled*=step(0.0,radial)*(1.0-step(1.0,radial));
-   float distanceToRails=min(abs(radial-sampledField.g),abs(radial-sampledField.b));
-   float isolate=1.0-smoothstep(.045,.105,distanceToRails);
-   float emission=pow(sampled,1.05)*isolate;
-   float neighborInner=readField(frameA,azimuth,clamp(radial-.025,0.0,1.0)).r;
-   float neighborOuter=readField(frameA,azimuth,clamp(radial+.025,0.0,1.0)).r;
-   float ridge=clamp((sampled-.5*(neighborInner+neighborOuter))*3.0,0.0,1.0)*isolate;
-   float railInner=1.0-smoothstep(.010,.035,abs(radial-sampledField.g));
-   float railOuter=1.0-smoothstep(.010,.035,abs(radial-sampledField.b));
-   float repair=max(railInner,railOuter)*(.74+.26*(1.0-smoothstep(.18,.55,sampled)));
-   repair*=step(0.0,radial)*(1.0-step(1.0,radial));
-   vec3 captured=vec3(.025,.40,.92)*emission*(1.05+energy*.18)
-     +vec3(.28,.89,1.0)*pow(emission,2.1)*1.08
-     +vec3(.27,.86,1.0)*ridge*.31+vec3(.09,.75,1.0)*repair*.92;
-   float capturedAlpha=clamp(emission*.90+pow(emission,2.1)*.24+ridge*.11+repair*.88,0.0,.96);
-   float particles=0.0;
-   for(int particleIndex=0;particleIndex<3;particleIndex++){
-     float identity=float(particleIndex);
-     float orbit=phase*(.45+identity*.09)+identity*2.15;
-     float along=pow(max(0.0,cos(angle-orbit)),520.0);
-     float across=1.0-smoothstep(.006,.040,abs(radial-sampledField.g));
-     particles+=along*across*(.22+energy*.65);
+   float radial=(radius*180.0/.31-112.0)/126.0;
+   float frame=mod(videoTime*30.0,212.0);
+   vec3 field=mix(readField(floor(frame),azimuth,radial),readField(mod(floor(frame)+1.0,212.0),azimuth,radial),fract(frame));
+   float band=step(0.0,radial)*(1.0-step(1.0,radial));
+   float emission=field.r*band,halo=field.g*band,blueLight=field.b*band;
+   // The moving glints already belong to the source. Do not add a second orbit
+   // of fake particles or a bright continuous outline over the fine filaments.
+   float cyanShare=emission/(emission+blueLight*.55+.0001);
+   vec3 captured=mix(vec3(.025,.28,.86),vec3(.035,.62,.98)+vec3(.27,.36,.02)*pow(emission,1.25),cyanShare);
+   float capturedAlpha=clamp(pow(emission,.65)*(1.45+energy*.16)+blueLight*.55+halo*.18,0.0,.96)*stateGain;
+   float light=0.0,glow=0.0;
+   // A quiet procedural start while the local atlas loads, including devices
+   // whose maximum texture size cannot fit the reference atlas.
+   for(int strand=0;strand<7;strand++){
+     float k=float(strand);
+     float path=.31+.022*sin(2.0*angle+phase*(.65+k*.04)+k*1.6)
+       +.016*sin(3.0*angle-phase*(.53+k*.03)+k*2.1)
+       +.006*sin(5.0*angle+phase*.45+k);
+     float d=abs(radius-path);
+     float flux=.35+.22*sin(angle*3.0-phase*.8+k)+.7*pow(max(0.0,cos(angle-phase*(.5+k*.04)-k*2.1)),70.0);
+     light+=(1.0-smoothstep(.0005,.0015,d))*flux;
+     glow+=(1.0-smoothstep(.001,.006,d))*flux;
    }
-   captured+=vec3(.18,.76,1.0)*particles*.7;
-   capturedAlpha=clamp(capturedAlpha+particles*.30,0.0,.96);
-   gl_FragColor=vec4(mix(min(light,1.0),captured,sourceBlend),
-     mix(alpha,capturedAlpha,sourceBlend));
+   vec3 fallback=vec3(.08,.56,.96)+vec3(.1,.25,.04)*min(light,1.0);
+   float fallbackAlpha=clamp(light*.7+glow*.10,0.0,.9);
+   gl_FragColor=vec4(mix(fallback,captured,sourceBlend),mix(fallbackAlpha,capturedAlpha,sourceBlend));
  }`;
- const shader=(type:number,source:string)=>{const value=gl.createShader(type);if(!value)throw new Error('Hologram shader unavailable');gl.shaderSource(value,source);gl.compileShader(value);if(!gl.getShaderParameter(value,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(value)||'Hologram shader failed');return value;};
+ const shader=(type:number,source:string)=>{const value=gl.createShader(type);if(!value)throw new Error('Hologram shader unavailable');gl.shaderSource(value,source);gl.compileShader(value);if(!gl.getShaderParameter(value,gl.COMPILE_STATUS)){const message=gl.getShaderInfoLog(value);gl.deleteShader(value);throw new Error(message||'Hologram shader failed');}return value;};
  const program=gl.createProgram();if(!program)throw new Error('Hologram program unavailable');
- gl.attachShader(program,shader(gl.VERTEX_SHADER,vertex));gl.attachShader(program,shader(gl.FRAGMENT_SHADER,fragment));gl.linkProgram(program);
+ const shaders=[shader(gl.VERTEX_SHADER,vertex),shader(gl.FRAGMENT_SHADER,fragment)];
+ shaders.forEach(value=>gl.attachShader(program,value));gl.linkProgram(program);shaders.forEach(value=>gl.deleteShader(value));
  if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(program)||'Hologram link failed');
  gl.useProgram(program);
  const quad=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,quad);
  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
  const position=gl.getAttribLocation(program,'position');gl.enableVertexAttribArray(position);gl.vertexAttribPointer(position,2,gl.FLOAT,false,0,0);
  const phaseUniform=gl.getUniformLocation(program,'phase'),energyUniform=gl.getUniformLocation(program,'energy');
- const expansionUniform=gl.getUniformLocation(program,'expansion');
- const sourceBlendUniform=gl.getUniformLocation(program,'sourceBlend');
+ const gainUniform=gl.getUniformLocation(program,'stateGain');
+ const expansionUniform=gl.getUniformLocation(program,'expansion'),sourceBlendUniform=gl.getUniformLocation(program,'sourceBlend');
  const videoTimeUniform=gl.getUniformLocation(program,'videoTime');
  const texture=gl.createTexture();gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,texture);
- gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
- gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
- gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
- gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
- gl.uniform1i(gl.getUniformLocation(program,'motionField'),0);
- gl.viewport(0,0,bitmap,bitmap);
- let active=true,ready=false,blend=0,frame=0,timer=0,last=performance.now(),motion=0,videoTime=0,velocity=.22,energy=.018,expansion=0,audioEnvelope=0;
- void (async()=>{
-  const response=await fetch(orbMotionUrl);if(!response.ok)throw new Error(`Motion field ${response.status}`);
-  const bitmap=await createImageBitmap(await response.blob());
-  try{if(!active)return;gl.bindTexture(gl.TEXTURE_2D,texture);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,1);
-   gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,bitmap);ready=true;}
-  finally{bitmap.close();}
- })().catch(error=>console.warn('Hologram motion field unavailable.',error));
+ gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+ gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+ // Keep a complete texture bound during the initial vector fade-in.
+ gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,1,1,0,gl.RGB,gl.UNSIGNED_BYTE,new Uint8Array([0,0,0]));
+ gl.uniform1i(gl.getUniformLocation(program,'motionField'),0);gl.viewport(0,0,bitmap,bitmap);
+ let active=true,ready=false,blend=0,frame=0,timer=0,last=performance.now(),motion=0,videoTime=0,velocity=.72,energy=.035,expansion=0,audioEnvelope=0,gain=.56;
+ const controller=new AbortController();
+ if(gl.getParameter(gl.MAX_TEXTURE_SIZE)>=3840)void (async()=>{
+  const response=await fetch(orbMotionUrl,{signal:controller.signal});if(!response.ok)throw new Error(`Motion field ${response.status}`);
+  const image=await createImageBitmap(await response.blob(),{premultiplyAlpha:'none',colorSpaceConversion:'none',imageOrientation:'none'});
+  try{if(!active)return;gl.bindTexture(gl.TEXTURE_2D,texture);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,0);
+   gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,image);ready=true;}
+  finally{image.close();}
+ })().catch(error=>{if(active)console.warn('Hologram reference unavailable; using independent filaments.',error);});
  const schedule=(delay=0)=>{if(!active)return;if(delay)timer=self.setTimeout(()=>{if(active)frame=requestAnimationFrame(draw);},delay);else frame=requestAnimationFrame(draw);};
  const draw=()=>{
   if(!active)return;const value=input(),now=performance.now();
   if(value.hidden){last=now;schedule(180);return;}
   if(now-last<1000/(value.fps||60)-1){schedule();return;}
-  const dt=Math.min(.05,(now-last)/1000);last=now;
-  const level=Math.max(0,Math.min(1,value.audio));
+  const dt=Math.min(.1,(now-last)/1000);last=now;
+  const level=Number.isFinite(value.audio)?Math.max(0,Math.min(1,value.audio)):0;
   audioEnvelope+=(level-audioEnvelope)*Math.min(1,dt*(level>audioEnvelope?8:2.3));
   const target=orbMotionTarget(value.state,audioEnvelope);
-  velocity+=(target.rate-velocity)*Math.min(1,dt*3.2);
-  energy+=(target.energy-energy)*Math.min(1,dt*3.6);
+  velocity+=(target.rate-velocity)*Math.min(1,dt*3.2);energy+=(target.energy-energy)*Math.min(1,dt*3.6);
   expansion+=(target.expansion-expansion)*Math.min(1,dt*3.0);
-  motion+=dt*velocity;
-  videoTime+=dt*velocity;
-  blend+=dt*(ready?2.5:-3.0);blend=Math.min(1,Math.max(0,blend));
+  gain+=((value.state==='SPEAKING'?1:value.state==='LISTENING'?.8:.56)-gain)*Math.min(1,dt*4);
+  motion+=dt*velocity;videoTime=(videoTime+dt*velocity)%(212/30);
+  blend=Math.min(1,Math.max(0,blend+dt*(ready?2.5:-3.0)));
   gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);gl.uniform1f(phaseUniform,motion);
-  gl.uniform1f(energyUniform,energy);gl.uniform1f(expansionUniform,expansion);
-  gl.uniform1f(sourceBlendUniform,blend);
-  gl.uniform1f(videoTimeUniform,videoTime);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
-  schedule();
+  gl.uniform1f(energyUniform,energy);gl.uniform1f(expansionUniform,expansion);gl.uniform1f(gainUniform,gain);gl.uniform1f(sourceBlendUniform,blend);
+  gl.uniform1f(videoTimeUniform,Number.isFinite(value.referenceTime)?value.referenceTime!:videoTime);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);schedule();
  };
  frame=requestAnimationFrame(draw);
- return ()=>{active=false;self.clearTimeout(timer);cancelAnimationFrame(frame);gl.deleteTexture(texture);gl.deleteBuffer(quad);gl.deleteProgram(program);};
+ return ()=>{active=false;controller.abort();self.clearTimeout(timer);cancelAnimationFrame(frame);gl.deleteTexture(texture);gl.deleteBuffer(quad);gl.deleteProgram(program);};
 }
 
 /** Vector fallback for devices where the graphic driver does not expose WebGL. */
@@ -157,11 +108,11 @@ function renderOrbVectors(canvas:SceneCanvas,size:number,_density:number,pixelRa
  const ctx=context(canvas);if(!ctx)return;
  const logical=600,ratio=Math.min(pixelRatio,900/size),bitmap=Math.min(900,Math.round(size*ratio)),scale=bitmap/logical;
  canvas.width=canvas.height=bitmap;ctx.setTransform(scale,0,0,scale,0,0);
- const count=3,steps=240,tau=Math.PI*2;
+ const count=7,steps=360,tau=Math.PI*2;
  const circle=Array.from({length:steps+1},(_,i)=>{const u=i*tau/steps;return {u,c:Math.cos(u),s:Math.sin(u)};});
  const paths=Array.from({length:count},()=>new Float32Array((steps+1)*2));
  const bodyPath=new Float32Array((steps+1)*2);
- let active=true,frame=0,timer=0,last=performance.now(),phase=0,velocity=.22,energy=.018,expansion=0,audioEnvelope=0;
+ let active=true,frame=0,timer=0,last=performance.now(),phase=0,velocity=.72,energy=.035,expansion=0,audioEnvelope=0;
  const schedule=(delay=0)=>{if(!active)return;if(delay)timer=self.setTimeout(()=>{if(active)frame=requestAnimationFrame(draw);},delay);else frame=requestAnimationFrame(draw);};
  const trace=(path:Float32Array)=>{ctx.beginPath();ctx.moveTo(path[0],path[1]);for(let j=2;j<path.length;j+=2)ctx.lineTo(path[j],path[j+1]);ctx.closePath();};
  const highlight=(path:Float32Array,angle:number,halfWidth:number)=>{
@@ -181,7 +132,7 @@ function renderOrbVectors(canvas:SceneCanvas,size:number,_density:number,pixelRa
   const fps=value.fps||60;
   if(now-last<1000/fps-1){schedule();return;}
   const dt=Math.min(.05,(now-last)/1000);last=now;
-  const level=Math.max(0,Math.min(1,value.audio));
+  const level=Number.isFinite(value.audio)?Math.max(0,Math.min(1,value.audio)):0;
   audioEnvelope+=(level-audioEnvelope)*Math.min(1,dt*(level>audioEnvelope?8:2.3));
   const target=orbMotionTarget(value.state,audioEnvelope);
   velocity+=(target.rate-velocity)*Math.min(1,dt*3.4);
@@ -199,7 +150,7 @@ function renderOrbVectors(canvas:SceneCanvas,size:number,_density:number,pixelRa
    bodyPath[i*2]=300+c*baseRadius;bodyPath[i*2+1]=300+s*baseRadius;
    for(let strand=0;strand<count;strand++){
     const path=paths[strand];
-    const radial=baseRadius+(strand-1)*4.2
+    const radial=baseRadius+(strand-3)*.85
      +(7.8+energy*4.2)*Math.sin(2*u+phase*(.76+strand*.14)+strand*1.7)
      +(5.4+energy*2.4)*Math.sin(3*u-phase*(.57+strand*.11)+strand*2.1)
      +3*Math.sin(5*u+phase*(.52+strand*.07)+strand)
@@ -208,18 +159,15 @@ function renderOrbVectors(canvas:SceneCanvas,size:number,_density:number,pixelRa
     path[i*2]=300+c*radial;path[i*2+1]=300+s*radial;
    }
   }
-  ctx.save();ctx.globalCompositeOperation='screen';ctx.lineJoin='round';ctx.lineCap='round';
-  trace(bodyPath);ctx.shadowColor='#008dff';ctx.shadowBlur=20;
-  ctx.strokeStyle='rgba(0,68,228,.14)';ctx.lineWidth=51+energy*4;ctx.stroke();
-  ctx.shadowBlur=10;ctx.strokeStyle='rgba(0,124,255,.13)';ctx.lineWidth=33+energy*3;ctx.stroke();
+  ctx.save();ctx.globalCompositeOperation='screen';ctx.globalAlpha=value.state==='SPEAKING'?1:value.state==='LISTENING'?.8:.56;ctx.lineJoin='round';ctx.lineCap='round';
   for(let strand=0;strand<count;strand++){
    const path=paths[strand];trace(path);
    ctx.shadowColor='#0089ff';ctx.shadowBlur=10+energy*4;
    ctx.strokeStyle=strand%2?'rgba(0,108,230,.44)':'rgba(0,161,255,.45)';
-   ctx.lineWidth=3.6;ctx.stroke();
+   ctx.lineWidth=1.6;ctx.stroke();
    ctx.shadowBlur=0;
    ctx.strokeStyle=strand%3===0?'rgba(148,241,255,.83)':'rgba(28,197,255,.72)';
-   ctx.lineWidth=1.35;ctx.stroke();
+   ctx.lineWidth=.65;ctx.stroke();
   }
   for(let strand=0;strand<count;strand++){
    const path=paths[strand];
@@ -228,9 +176,9 @@ function renderOrbVectors(canvas:SceneCanvas,size:number,_density:number,pixelRa
    const strength=strand%3===0?.94:.58;
    highlight(path,angle,.38+energy*.06);
    ctx.shadowColor='#13d9ff';ctx.shadowBlur=15+energy*8;
-   ctx.strokeStyle=`rgba(6,191,255,${strength})`;ctx.lineWidth=4.4;ctx.stroke();
+   ctx.strokeStyle=`rgba(6,191,255,${strength})`;ctx.lineWidth=2;ctx.stroke();
    ctx.shadowBlur=2;
-   ctx.strokeStyle=`rgba(211,250,255,${strength*.92})`;ctx.lineWidth=1.6;ctx.stroke();
+   ctx.strokeStyle=`rgba(211,250,255,${strength*.92})`;ctx.lineWidth=.8;ctx.stroke();
   }
   ctx.restore();schedule();
  };

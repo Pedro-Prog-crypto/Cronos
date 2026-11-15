@@ -1,0 +1,12 @@
+{
+  "frames": 212,
+  "columns": 6,
+  "angles": 640,
+  "rows": 96,
+  "width": 3840,
+  "height": 3456,
+  "duration": 7.066666666666666,
+  "source": "v05 frames 127\u2013362; camera-aligned",
+  "loop_overlap_frames": 24,
+  "curve_fitting": false
+}
