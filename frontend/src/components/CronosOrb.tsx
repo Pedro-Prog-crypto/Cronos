@@ -75,7 +75,7 @@ export const CronosOrb: React.FC<CronosOrbProps> = ({
         className={`w-full h-full max-w-none cursor-pointer relative z-10 filament-glow transition-all duration-500 ${
           state === 'SPEAKING' ? 'speaking' : ''
         }`}
-        title="CRONOS // Holograma ativo (clique para testar voz)"
+        title="CRONOS // Clique para ativar ou desligar a escuta"
       />
     </div>
   );

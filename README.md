@@ -1,6 +1,6 @@
 # Cronos — assistente Windows (v0.5)
 
-Atualização R52: interface reorganizada pelos vídeos, filamentos captados da filmagem frontal e cards em apresentação. O download `INSTALAR-CRONOS-COMPLETO-R52.bat` inclui o aplicativo completo e instala em uma pasta própria. Veja [alterações e limites da validação](docs/NOVA-INTERFACE-REFERENCIA.md).
+Atualização R53: tela inicial limpa com holograma e botão azul do microfone; os cards e módulos abrem por voz. As linhas do holograma têm movimento mais suave e cor ciano. O download `INSTALAR-CRONOS-COMPLETO-R53.bat` inclui o aplicativo completo e instala em uma pasta própria. Veja [alterações e limites da validação](docs/NOVA-INTERFACE-REFERENCIA.md).
 
 Programa Windows com backend independente da interface. A versão anterior
 foi analisada como referência de arquitetura; sua interface, imagens, avatar e

@@ -12,7 +12,8 @@
     "test:capabilities": "node --experimental-strip-types scripts/test-capability-routing.mjs",
     "test:orb-resolution": "node --experimental-strip-types scripts/test-orb-resolution.mjs",
     "test:orb-dynamics": "node --experimental-strip-types scripts/test-orb-dynamics.mjs",
-    "test:reference-deck": "node --experimental-strip-types scripts/test-reference-deck.mjs"
+    "test:reference-deck": "node --experimental-strip-types scripts/test-reference-deck.mjs",
+    "test:home-voice": "node --experimental-strip-types scripts/test-home-voice-command.mjs"
   },
   "dependencies": {
     "@echogarden/fvad-wasm": "0.2.0",

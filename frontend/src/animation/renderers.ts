@@ -34,7 +34,7 @@ export function renderOrb(canvas:SceneCanvas,size:number,density:number,pixelRat
    // The moving glints already belong to the source. Do not add a second orbit
    // of fake particles or a bright continuous outline over the fine filaments.
    float cyanShare=emission/(emission+blueLight*.55+.0001);
-   vec3 captured=mix(vec3(.025,.28,.86),vec3(.035,.62,.98)+vec3(.27,.36,.02)*pow(emission,1.25),cyanShare);
+   vec3 captured=mix(vec3(.012,.48,.75),vec3(.035,.79,.93)+vec3(.16,.18,.03)*pow(emission,1.25),cyanShare);
    float capturedAlpha=clamp(pow(emission,.65)*(1.45+energy*.16)+blueLight*.55+halo*.18,0.0,.96)*stateGain;
    float light=0.0,glow=0.0;
    // A quiet procedural start while the local atlas loads, including devices
@@ -72,7 +72,7 @@ export function renderOrb(canvas:SceneCanvas,size:number,density:number,pixelRat
  // Keep a complete texture bound during the initial vector fade-in.
  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,1,1,0,gl.RGB,gl.UNSIGNED_BYTE,new Uint8Array([0,0,0]));
  gl.uniform1i(gl.getUniformLocation(program,'motionField'),0);gl.viewport(0,0,bitmap,bitmap);
- let active=true,ready=false,blend=0,frame=0,timer=0,last=performance.now(),motion=0,videoTime=0,velocity=.72,energy=.035,expansion=0,audioEnvelope=0,gain=.56;
+ let active=true,ready=false,blend=0,frame=0,timer=0,last=performance.now(),motion=0,videoTime=0,velocity=.42,energy=.035,expansion=0,audioEnvelope=0,gain=.56;
  const controller=new AbortController();
  if(gl.getParameter(gl.MAX_TEXTURE_SIZE)>=3840)void (async()=>{
   const response=await fetch(orbMotionUrl,{signal:controller.signal});if(!response.ok)throw new Error(`Motion field ${response.status}`);
@@ -112,7 +112,7 @@ function renderOrbVectors(canvas:SceneCanvas,size:number,_density:number,pixelRa
  const circle=Array.from({length:steps+1},(_,i)=>{const u=i*tau/steps;return {u,c:Math.cos(u),s:Math.sin(u)};});
  const paths=Array.from({length:count},()=>new Float32Array((steps+1)*2));
  const bodyPath=new Float32Array((steps+1)*2);
- let active=true,frame=0,timer=0,last=performance.now(),phase=0,velocity=.72,energy=.035,expansion=0,audioEnvelope=0;
+ let active=true,frame=0,timer=0,last=performance.now(),phase=0,velocity=.42,energy=.035,expansion=0,audioEnvelope=0;
  const schedule=(delay=0)=>{if(!active)return;if(delay)timer=self.setTimeout(()=>{if(active)frame=requestAnimationFrame(draw);},delay);else frame=requestAnimationFrame(draw);};
  const trace=(path:Float32Array)=>{ctx.beginPath();ctx.moveTo(path[0],path[1]);for(let j=2;j<path.length;j+=2)ctx.lineTo(path[j],path[j+1]);ctx.closePath();};
  const highlight=(path:Float32Array,angle:number,halfWidth:number)=>{

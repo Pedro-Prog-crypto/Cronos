@@ -12,6 +12,6 @@ export const IntegratedNeuralStage=React.memo(function Stage({state,audioLevelSo
    <CronosOrb state={state} audioLevel={audioLevel} audioLevelSource={audioLevelSource} onOrbClick={onOrbClick} size={620} weaveDensity={1} showCrossLinks={false}/>
    <div className="reference-voice-status" data-state={state} role="status"><span>{label}</span><i aria-hidden="true"/></div>
   </div>
-  <button className="reference-voice-control" onClick={onOrbClick} aria-label={state==='LISTENING'?'Desligar escuta do Cronos':'Ativar controle de voz do Cronos'}><AudioWaveform size={32}/></button>
+  <button className="reference-voice-control" onClick={onOrbClick} aria-label={state==='LISTENING'?'Desligar escuta do Cronos':'Ativar controle de voz do Cronos'}><AudioWaveform size={30}/></button>
  </div>;
 });

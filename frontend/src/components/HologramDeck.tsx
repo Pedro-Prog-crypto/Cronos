@@ -1,12 +1,13 @@
 import {useEffect,useLayoutEffect,useRef,useState,type CSSProperties,type ReactNode} from 'react';
 import {ChevronLeft,ChevronRight,FileText,LayoutGrid,X} from 'lucide-react';
 import {deckPlacement} from '../animation/referenceDeck';
-export type HologramDeckCard={id:string;title:string;kicker:string;body:string;icon?:ReactNode;action?:string;open?:()=>void};
-type Props={cards:HologramDeckCard[];label:string;onClose:()=>void;activeCue?:number|null;finished?:boolean};
+export type HologramDeckCard={id:string;title:string;kicker:string;body:string;icon?:ReactNode;visual?:ReactNode;badge?:string;action?:string;open?:()=>void};
+type Props={cards:HologramDeckCard[];label:string;onClose:()=>void;activeCue?:number|null;finished?:boolean;initialActive?:number};
 
 /** One DOM card moves from focus into history, then into the final horizontal row. */
-export function HologramDeck({cards,label,onClose,activeCue,finished=false}:Props){
- const [active,setActive]=useState<number|null>(0),[visited,setVisited]=useState<number[]>([0]);
+export function HologramDeck({cards,label,onClose,activeCue,finished=false,initialActive=0}:Props){
+ const initial=Math.min(Math.max(0,initialActive),Math.max(0,cards.length-1));
+ const [active,setActive]=useState<number|null>(initial),[visited,setVisited]=useState<number[]>([initial]);
  const [viewport,setViewport]=useState({width:window.innerWidth,height:window.innerHeight});
  const lastCue=useRef<number|null|undefined>(undefined),controls=useRef<HTMLElement|null>(null);
  const choose=(index:number)=>{setActive(index);setVisited(old=>old.includes(index)?old:[...old,index].sort((a,b)=>a-b));};
@@ -25,9 +26,9 @@ export function HologramDeck({cards,label,onClose,activeCue,finished=false}:Prop
   <div className="hologram-deck-plane">{visited.filter(i=>i<cards.length&&(active===null||active===i||visibleHistory.includes(i))).map(index=>{
    const card=cards[index],focused=active===index;
    const p=deckPlacement((active===null?visited:visibleHistory).indexOf(index),active===null?visited.length:visibleHistory.length,focused,active===null,viewport.width,viewport.height);
-   return <article key={card.id} className="hologram-deck-card" data-miniature={!focused} aria-label={card.title} style={{'--deck-x':`${p.x}px`,'--deck-y':`${p.y}px`,'--deck-scale':p.scale,'--deck-width':`${p.cardWidth}px`,'--deck-height':`${p.cardHeight}px`} as CSSProperties}>
-    <header><span className="deck-card-icon">{card.icon||<FileText size={20}/>}</span><div><small>{card.kicker}</small><h2>{card.title}</h2></div></header>
-    <div className="deck-card-body" tabIndex={focused?0:-1}>{card.body}</div>
+   return <article key={card.id} className="hologram-deck-card" data-kind={card.id} data-miniature={!focused} aria-label={card.title} style={{'--deck-x':`${p.x}px`,'--deck-y':`${p.y}px`,'--deck-scale':p.scale,'--deck-width':`${p.cardWidth}px`,'--deck-height':`${p.cardHeight}px`} as CSSProperties}>
+    <header><span className="deck-card-icon">{card.icon||<FileText size={20}/>}</span><div><small>{card.kicker}</small><h2>{card.title}</h2></div>{card.badge&&<span className="deck-card-badge">{card.badge}</span>}</header>
+    <div className="deck-card-body" tabIndex={focused?0:-1}>{card.visual}<p>{card.body}</p></div>
     {card.open&&<button className="deck-card-action" tabIndex={focused?0:-1} onClick={card.open}>{card.action}<ChevronRight size={14}/></button>}
     {!focused&&<button className="deck-card-restore" aria-label={`Mostrar ${card.title}`} onClick={()=>choose(index)}/>}
    </article>;

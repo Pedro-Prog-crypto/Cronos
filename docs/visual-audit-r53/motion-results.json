@@ -1,0 +1,21 @@
+{
+  "checks": [
+    {
+      "state": "IDLE",
+      "motion_mean_absolute_difference": 8.337,
+      "cyan_ring_pixels": 15116
+    },
+    {
+      "state": "LISTENING",
+      "motion_mean_absolute_difference": 6.686,
+      "cyan_ring_pixels": 12754
+    },
+    {
+      "state": "SPEAKING",
+      "motion_mean_absolute_difference": 17.099,
+      "cyan_ring_pixels": 25134
+    }
+  ],
+  "javascript_errors": [],
+  "limitations": "Controlled states and audio levels; no physical microphone or remote voice provider."
+}

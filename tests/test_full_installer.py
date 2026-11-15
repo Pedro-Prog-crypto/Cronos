@@ -15,7 +15,7 @@ def test_direct_installer_embeds_complete_verified_archive():
     assert b'ABRIR-CRONOS.bat' in header
     assert b'restore_existing_data.py' in header
     assert build_full_installer.INSTALL_FOLDER.encode() in header
-    assert b'Cronos-R52' in header
+    assert b'Cronos-R53' in header
     assert header.index(b'restore_existing_data.py') < header.index(b'Instalar-Cronos.bat')
     assert b'Nenhuma pasta antiga foi alterada' in header
     assert b'if (Test-Path -LiteralPath $target)' in header

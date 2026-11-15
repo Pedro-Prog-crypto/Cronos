@@ -31,7 +31,7 @@ def main():
   # Persistent camera/monitor pattern is weaker than the moving filaments.
   baseline=np.quantile(values,.15,axis=0)
   values=np.maximum(values-baseline[None]*.2,0)
-  return gaussian_filter(values,(.30,.30,.38),mode=('nearest','nearest','wrap'))
+  return gaussian_filter(values,(1.15,.48,.62),mode=('nearest','nearest','wrap'))
  cyan,blue=clean(fields),clean(blues)
  # Retain local radial peaks: broad screen glare and compression blocks are
  # not strands. This does not interpolate across genuine gaps in the footage.

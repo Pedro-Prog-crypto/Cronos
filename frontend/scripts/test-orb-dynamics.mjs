@@ -18,8 +18,8 @@ for(const state of ['IDLE','LISTENING','SPEAKING']){
  assert.ok(Object.values(value).every(Number.isFinite));
  for(const level of [0,.08,.25,.6,1,10,-1,Infinity]){
   const motion=orbMotionTarget(state,level);
-  assert.ok(motion.rate>=.65&&motion.rate<=1.2,'reference playback must stay close to its natural speed');
-  assert.ok(motion.expansion>=0&&motion.expansion<=.015,'audio must not balloon the complete silhouette');
+  assert.ok(motion.rate>=.4&&motion.rate<=.65,'the filmed lines must remain calm');
+  assert.ok(motion.expansion>=0&&motion.expansion<=.006,'audio must not balloon the complete silhouette');
  }
 }
 console.log('Orb voice response: ok');
