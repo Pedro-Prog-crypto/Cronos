@@ -6,7 +6,7 @@ The grid/text are rejected by chroma and an annulus, never by deleting short pat
 from pathlib import Path
 import argparse,json
 import numpy as np
-from scipy.ndimage import gaussian_filter,map_coordinates,maximum_filter
+from scipy.ndimage import gaussian_filter,map_coordinates
 from PIL import Image,ImageDraw
 
 def main():
@@ -20,10 +20,10 @@ def main():
   # Neutral grid and editorial white lettering cancel in chroma. A broad
   # local background is removed without projecting curves onto Fourier fits.
   cyan=g-r-.08*b;blue=b-1.15*r
-  cyan=np.maximum(cyan-gaussian_filter(cyan,6)-.6,0)
-  blue=np.maximum(blue-gaussian_filter(blue,8),0)
+  cyan=np.maximum(cyan-gaussian_filter(cyan,9)*.65-2,0)
+  blue=np.maximum(blue-gaussian_filter(blue,9)*.8-2,0)
   # Captions are burned into the filmed footage and are never part of the orb.
-  cyan[457:,:]=0;blue[457:,:]=0
+  cyan[470:,:]=0;blue[470:,:]=0
   fields.append(map_coordinates(cyan,[yy,xx],order=1,mode='nearest'))
   blues.append(map_coordinates(blue,[yy,xx],order=1,mode='nearest'))
  def clean(values):
@@ -35,37 +35,39 @@ def main():
  cyan,blue=clean(fields),clean(blues)
  # Retain local radial peaks: broad screen glare and compression blocks are
  # not strands. This does not interpolate across genuine gaps in the footage.
- cyan=np.maximum(cyan-3.5,0);blue=np.maximum(blue-9,0)
- cyan*=np.clip((cyan/(maximum_filter(cyan,size=(1,11,1))+1e-4)-.35)/.65,0,1)
- blue*=np.clip((blue/(maximum_filter(blue,size=(1,13,1))+1e-4)-.35)/.65,0,1)
+ cyan=np.maximum(cyan-gaussian_filter(cyan,(0,4,0),mode=('nearest','nearest','wrap'))*.88-2,0)
+ blue=np.maximum(blue-gaussian_filter(blue,(0,4,0),mode=('nearest','nearest','wrap'))*.9-5,0)
  fade=np.minimum(np.clip((radii-120)/12,0,1),np.clip((236-radii)/10,0,1))
- cyan=np.clip(cyan*fade[None,:,None]/31,0,1)**.9
- blue=np.clip(blue*fade[None,:,None]/24,0,1)**.85
- # A short crossfade is explicit and auditable, not claimed as original motion.
- overlap=24;frames=count-overlap
- def loop(v):
+ cyan=np.clip(cyan*fade[None,:,None]/22,0,1)**.85
+ blue=np.clip(blue*fade[None,:,None]/20,0,1)**.85
+ # Speaking and listening are separate measured sections of the reference.
+ # Replaying the speaking section at idle made the home screen too restless.
+ def loop(v,overlap):
   output=v[overlap:].copy();mix=np.linspace(0,1,overlap);mix=mix*mix*(3-2*mix)
   output[-overlap:]=output[-overlap:]*(1-mix[:,None,None])+v[:overlap]*mix[:,None,None]
   return output
- cyan,blue=loop(cyan),loop(blue)
+ speaking_count,listening_count=155,45
+ cyan=np.concatenate([loop(cyan[:171],16),loop(cyan[181:],10)])
+ blue=np.concatenate([loop(blue[:171],16),loop(blue[181:],10)])
+ frames=len(cyan)
  atlas=np.zeros((((frames+columns-1)//columns)*rows,columns*angles,3),np.uint8)
  for i in range(frames):
   halo=gaussian_filter(cyan[i],(.9,1.1),mode=('nearest','wrap'))
   rgb=np.stack([cyan[i],halo,blue[i]],axis=-1)
   y,x=i//columns*rows,i%columns*angles;atlas[y:y+rows,x:x+angles]=np.uint8(np.clip(rgb,0,1)*255)
  a.output.parent.mkdir(exist_ok=True,parents=True);Image.fromarray(atlas).save(a.output,optimize=True)
- info=dict(frames=frames,columns=columns,angles=angles,rows=rows,width=atlas.shape[1],height=atlas.shape[0],duration=frames/30,source='v05 frames 127–362; camera-aligned',loop_overlap_frames=overlap,curve_fitting=False)
+ info=dict(frames=frames,columns=columns,angles=angles,rows=rows,width=atlas.shape[1],height=atlas.shape[0],source='v05 frames 127–362; camera-aligned',speaking_frames=speaking_count,listening_frames=listening_count,source_segments={'speaking':[127,297],'listening':[308,362]},loop_overlap_frames={'speaking':16,'listening':10},curve_fitting=False)
  a.output.with_suffix('.json').write_text(json.dumps(info,indent=2))
  # Decode diagnostic samples through the same polar mapping as the renderer.
  size=510;gy,gx=np.mgrid[:size,:size];radius=np.hypot(gx-255,gy-255);azimuth=(np.arctan2(-(gy-255),gx-255)+np.pi)/(2*np.pi)*angles
  radial=(radius-112)/126*(rows-1);band=(radial>=0)&(radial<rows-1)
  sheet=Image.new('RGB',(size*3,(size+25)*2),'#03152e');d=ImageDraw.Draw(sheet)
- for j,i in enumerate([0,29,53,100,160,211]):
+ for j,i in enumerate([0,29,53,100,160,199]):
   c=map_coordinates(cyan[i],[radial,azimuth],order=1,mode='grid-wrap')*band;bl=map_coordinates(blue[i],[radial,azimuth],order=1,mode='grid-wrap')*band
   rgb=np.stack([c*.12,c*.75+bl*.10,c*.96+bl*.64],-1)
   rgb=np.maximum(rgb,np.array([.01,.04,.10]));im=Image.fromarray(np.uint8(np.clip(rgb,0,1)*255))
   x,y=j%3*size,j//3*(size+25);sheet.paste(im,(x,y));d.text((x+8,y+size+4),f'Atlas frame {i}',fill='white')
- out=Path('/workspace/Cronos/docs/visual-audit-r52');out.mkdir(exist_ok=True);sheet.save(out/'field-samples.jpg',quality=94)
+ out=Path('/workspace/Cronos/docs/visual-audit-r54');out.mkdir(exist_ok=True);sheet.save(out/'field-samples.jpg',quality=94)
  print(json.dumps(info))
 
 if __name__=='__main__':main()

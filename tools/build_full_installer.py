@@ -14,8 +14,8 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 ARCHIVE = ROOT / 'releases/CRONOS-Completo-Um-Arquivo.zip'
-OUTPUT = ROOT / 'releases/INSTALAR-CRONOS-COMPLETO-R53.bat'
-INSTALL_FOLDER = 'Cronos-R53'
+OUTPUT = ROOT / 'releases/INSTALAR-CRONOS-COMPLETO-R54.bat'
+INSTALL_FOLDER = 'Cronos-R54'
 OFFSET_MARKER = '0000000000'
 
 # No data migration or replacement is performed. A complete existing release folder
@@ -103,8 +103,8 @@ def build() -> tuple[Path, int]:
         if any(name == '.env' or name == 'config/providers.json' or name.startswith(('vault/', '.venv/', '.cronos-local/')) for name in names):
             raise ValueError('Private installation data cannot enter the GitHub installer.')
         revision = json.loads(package.read('tools/interface_update_manifest.json'))['revision']
-    if not re.fullmatch(r'[a-z0-9-]+-2026-11-15-r53', revision):
-        raise ValueError('The full archive is not the verified R53 release.')
+    if not re.fullmatch(r'[a-z0-9-]+-2026-11-15-r54', revision):
+        raise ValueError('The full archive is not the verified R54 release.')
     checksum = hashlib.sha256(ARCHIVE.read_bytes()).hexdigest()
     preliminary = make_header(0, checksum, revision)
     header = make_header(len(preliminary), checksum, revision)

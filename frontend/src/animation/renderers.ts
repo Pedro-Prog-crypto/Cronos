@@ -14,28 +14,34 @@ export function renderOrb(canvas:SceneCanvas,size:number,density:number,pixelRat
  const vertex=`attribute vec2 position;varying vec2 uv;void main(){uv=(position+1.0)*0.5;gl_Position=vec4(position,0.0,1.0);}`;
  const fragment=`precision highp float;
  varying vec2 uv;uniform float phase;uniform float energy;uniform float expansion;uniform float stateGain;
- uniform sampler2D motionField;uniform float sourceBlend;uniform float videoTime;
+ uniform sampler2D motionField;uniform float sourceBlend;uniform float videoTime;uniform float speakingMix;
  vec3 readField(float index,float azimuth,float radial){
    float column=mod(index,6.0),row=floor(index/6.0);
    float along=azimuth*640.0,first=floor(along);
-   float y=(row*96.0+clamp(radial,0.0,1.0)*95.0+.5)/3456.0;
+   float y=(row*96.0+clamp(radial,0.0,1.0)*95.0+.5)/3264.0;
    vec3 a=texture2D(motionField,vec2((column*640.0+mod(first,640.0)+.5)/3840.0,y)).rgb;
    vec3 b=texture2D(motionField,vec2((column*640.0+mod(first+1.0,640.0)+.5)/3840.0,y)).rgb;
    return mix(a,b,fract(along));
+ }
+ vec3 readSequence(float start,float length,float time,float azimuth,float radial){
+   float frame=mod(time*30.0,length),index=floor(frame);
+   return mix(readField(start+index,azimuth,radial),readField(start+mod(index+1.0,length),azimuth,radial),fract(frame));
  }
  void main(){
    vec2 p=uv-vec2(.5);float angle=atan(p.y,p.x);float radius=length(p)/(1.0+expansion);
    float azimuth=fract((angle+3.14159265)/6.2831853);
    float radial=(radius*180.0/.31-112.0)/126.0;
-   float frame=mod(videoTime*30.0,212.0);
-   vec3 field=mix(readField(floor(frame),azimuth,radial),readField(mod(floor(frame)+1.0,212.0),azimuth,radial),fract(frame));
+   vec3 quietField=readSequence(155.0,45.0,videoTime,azimuth,radial);
+   vec3 speechField=readSequence(0.0,155.0,videoTime,azimuth,radial);
+   vec3 field=mix(quietField,speechField,speakingMix);
    float band=step(0.0,radial)*(1.0-step(1.0,radial));
    float emission=field.r*band,halo=field.g*band,blueLight=field.b*band;
    // The moving glints already belong to the source. Do not add a second orbit
    // of fake particles or a bright continuous outline over the fine filaments.
    float cyanShare=emission/(emission+blueLight*.55+.0001);
-   vec3 captured=mix(vec3(.012,.48,.75),vec3(.035,.79,.93)+vec3(.16,.18,.03)*pow(emission,1.25),cyanShare);
-   float capturedAlpha=clamp(pow(emission,.65)*(1.45+energy*.16)+blueLight*.55+halo*.18,0.0,.96)*stateGain;
+   float core=pow(emission,2.5);
+   vec3 captured=mix(vec3(.025,.58,.91),vec3(.07,.88,1.0),cyanShare)+vec3(.38,.14,.07)*core;
+   float capturedAlpha=clamp(pow(emission,.95)*(1.5+energy*.16)+blueLight*.42+halo*.12,0.0,1.0)*stateGain;
    float light=0.0,glow=0.0;
    // A quiet procedural start while the local atlas loads, including devices
    // whose maximum texture size cannot fit the reference atlas.
@@ -65,14 +71,14 @@ export function renderOrb(canvas:SceneCanvas,size:number,density:number,pixelRat
  const phaseUniform=gl.getUniformLocation(program,'phase'),energyUniform=gl.getUniformLocation(program,'energy');
  const gainUniform=gl.getUniformLocation(program,'stateGain');
  const expansionUniform=gl.getUniformLocation(program,'expansion'),sourceBlendUniform=gl.getUniformLocation(program,'sourceBlend');
- const videoTimeUniform=gl.getUniformLocation(program,'videoTime');
+ const videoTimeUniform=gl.getUniformLocation(program,'videoTime'),speakingMixUniform=gl.getUniformLocation(program,'speakingMix');
  const texture=gl.createTexture();gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,texture);
  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
  // Keep a complete texture bound during the initial vector fade-in.
  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,1,1,0,gl.RGB,gl.UNSIGNED_BYTE,new Uint8Array([0,0,0]));
  gl.uniform1i(gl.getUniformLocation(program,'motionField'),0);gl.viewport(0,0,bitmap,bitmap);
- let active=true,ready=false,blend=0,frame=0,timer=0,last=performance.now(),motion=0,videoTime=0,velocity=.42,energy=.035,expansion=0,audioEnvelope=0,gain=.56;
+ let active=true,ready=false,blend=0,frame=0,timer=0,last=performance.now(),motion=0,videoTime=0,velocity=.42,energy=.035,expansion=0,audioEnvelope=0,gain=.85,speakingBlend=0;
  const controller=new AbortController();
  if(gl.getParameter(gl.MAX_TEXTURE_SIZE)>=3840)void (async()=>{
   const response=await fetch(orbMotionUrl,{signal:controller.signal});if(!response.ok)throw new Error(`Motion field ${response.status}`);
@@ -92,12 +98,13 @@ export function renderOrb(canvas:SceneCanvas,size:number,density:number,pixelRat
   const target=orbMotionTarget(value.state,audioEnvelope);
   velocity+=(target.rate-velocity)*Math.min(1,dt*3.2);energy+=(target.energy-energy)*Math.min(1,dt*3.6);
   expansion+=(target.expansion-expansion)*Math.min(1,dt*3.0);
-  gain+=((value.state==='SPEAKING'?1:value.state==='LISTENING'?.8:.56)-gain)*Math.min(1,dt*4);
-  motion+=dt*velocity;videoTime=(videoTime+dt*velocity)%(212/30);
+  gain+=((value.state==='SPEAKING'?1:value.state==='LISTENING'?.94:.85)-gain)*Math.min(1,dt*4);
+  speakingBlend+=((value.state==='SPEAKING'?1:0)-speakingBlend)*Math.min(1,dt*2.8);
+  motion+=dt*velocity;videoTime+=dt*velocity;
   blend=Math.min(1,Math.max(0,blend+dt*(ready?2.5:-3.0)));
   gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);gl.uniform1f(phaseUniform,motion);
   gl.uniform1f(energyUniform,energy);gl.uniform1f(expansionUniform,expansion);gl.uniform1f(gainUniform,gain);gl.uniform1f(sourceBlendUniform,blend);
-  gl.uniform1f(videoTimeUniform,Number.isFinite(value.referenceTime)?value.referenceTime!:videoTime);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);schedule();
+  gl.uniform1f(videoTimeUniform,Number.isFinite(value.referenceTime)?value.referenceTime!:videoTime);gl.uniform1f(speakingMixUniform,speakingBlend);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);schedule();
  };
  frame=requestAnimationFrame(draw);
  return ()=>{active=false;controller.abort();self.clearTimeout(timer);cancelAnimationFrame(frame);gl.deleteTexture(texture);gl.deleteBuffer(quad);gl.deleteProgram(program);};
