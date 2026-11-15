@@ -61,3 +61,21 @@ def test_spoken_followup_receives_visible_image_titles(settings):
         response=client.post('/chat/audio/stream',headers=headers,content=wav())
     assert response.status_code==200
     assert 'Busto de Sócrates' in systems[0]
+
+
+def test_detailed_button_mode_reaches_text_and_audio_without_changing_question(settings):
+    turns=[]
+    class Provider:
+        async def reply(self,system,messages):
+            turns.append((system,messages[-1]['content']))
+            return {'recognized_text':'Quem foi Ada Lovelace?',
+                    'reply':'Ada Lovelace estudou matemática.','topics':[],'tool_calls':[]}
+    with TestClient(create_app(replace(settings,gemini_transport='live'),Provider())) as client:
+        ordinary=client.post('/chat/stream',headers=AUTH,json={'message':'Conte sobre Ada Lovelace.'})
+        detailed=client.post('/chat/stream',headers=AUTH,json={'message':'Conte sobre Ada Lovelace.','detailed_explanation':True})
+        spoken=client.post('/chat/audio/stream',headers={**AUTH,'Content-Type':'audio/wav','X-Cronos-Detailed-Explanation':'1'},content=wav())
+    assert ordinary.status_code==detailed.status_code==spoken.status_code==200
+    assert 'MODO DETALHADO ATIVADO PELO BOTÃO' not in turns[0][0]
+    assert 'MODO DETALHADO ATIVADO PELO BOTÃO' in turns[1][0]
+    assert 'MODO DETALHADO ATIVADO PELO BOTÃO' in turns[2][0]
+    assert turns[0][1]==turns[1][1]=='Conte sobre Ada Lovelace.'

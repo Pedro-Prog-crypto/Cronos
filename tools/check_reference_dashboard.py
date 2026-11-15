@@ -7,7 +7,7 @@ from threading import Thread
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / 'docs/visual-audit-r58'
+OUT = ROOT / 'docs/visual-audit-r59'
 
 class Handler(SimpleHTTPRequestHandler):
     def log_message(self, *args):
@@ -33,6 +33,14 @@ def main():
             assert not page.locator('.reference-panels-toggle').is_visible()
             assert not page.locator('.home-nav').is_visible()
             assert page.get_by_role('button', name='Ativar controle de voz do Cronos').is_visible()
+            detailed = page.get_by_role('button', name='Ativar explicação detalhada')
+            assert detailed.is_visible() and detailed.get_attribute('aria-pressed') == 'false'
+            detailed.click()
+            active = page.get_by_role('button', name='Voltar à explicação normal')
+            assert active.get_attribute('aria-pressed') == 'true'
+            page.screenshot(path=str(OUT / 'detailed-mode.png'))
+            active.click()
+            assert detailed.get_attribute('aria-pressed') == 'false'
             assert page.locator('.cronos-quick-actions').count() == 0
             assert page.locator('.cronos-utility-actions').count() == 0
             bitmap = page.locator('canvas.filament-glow').evaluate('(node)=>node.width')
