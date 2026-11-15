@@ -58,7 +58,7 @@
 .cronos-home-hud:has(.home-inspector) .reference-processing,.cronos-home-hud:has(.home-inspector) .home-stats{visibility:hidden;opacity:0;pointer-events:none}
 
 /* Fine source filaments sit over a softly lit HUD, including the lower voice rail. */
-.reference-grid-background{background-color:#010919;background-image:linear-gradient(#2d75b722 1px,transparent 1px),linear-gradient(90deg,#2d75b722 1px,transparent 1px),radial-gradient(ellipse 44% 60% at 50% 47%,#074592 0%,#052d67 48%,transparent 100%),radial-gradient(ellipse 48% 18% at 50% 93%,#0b4f9766,transparent 100%),linear-gradient(110deg,#010819,#031735 46%,#010b1d);background-size:36px 36px,36px 36px,100% 100%,100% 100%,100% 100%}
+.reference-grid-background{background-color:#010919;background-image:linear-gradient(#327ec022 1px,transparent 1px),linear-gradient(90deg,#327ec022 1px,transparent 1px),radial-gradient(ellipse 44% 60% at 50% 47%,#092b93 0%,#0a419e 48%,transparent 100%),radial-gradient(ellipse 48% 18% at 50% 93%,#0c72c7aa,transparent 100%),linear-gradient(110deg,#010819,#031735 46%,#010b1d);background-size:36px 36px,36px 36px,100% 100%,100% 100%,100% 100%}
 .cronos-reference-scene:before,.cronos-reference-scene:after{content:'';position:absolute;left:21%;right:21%;height:1px;pointer-events:none;z-index:2}
 .cronos-reference-scene:before{bottom:60px;background:linear-gradient(90deg,transparent,#137aca99 22%,#3dc8ff80 41%,transparent 46% 54%,#3dc8ff80 59%,#137aca99 78%,transparent);box-shadow:0 0 8px #0685e888}
 .cronos-reference-scene:after{bottom:13px;left:36%;right:36%;background:linear-gradient(90deg,transparent,#176fb577 28%,#5ecbff8a 50%,#176fb577 72%,transparent);box-shadow:0 0 8px #0982d566}

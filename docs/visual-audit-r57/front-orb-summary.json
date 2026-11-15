@@ -1,0 +1,48 @@
+{
+  "total_video_frames": 9920,
+  "front_orb_frames": 236,
+  "states": {
+    "FALANDO": {
+      "frames": 171,
+      "median_led_pixels": 2591,
+      "median_dim_blue_pixels": 34425,
+      "median_led_rgb": [
+        43,
+        178,
+        244
+      ],
+      "median_apparent_width_px": 4.0,
+      "p90_apparent_width_px": 6.0,
+      "median_outer_led_radius_px": 212.34,
+      "median_bright_local_peaks_proxy": 12
+    },
+    "EM ESPERA": {
+      "frames": 7,
+      "median_led_pixels": 337,
+      "median_dim_blue_pixels": 19455,
+      "median_led_rgb": [
+        36,
+        151,
+        240
+      ],
+      "median_apparent_width_px": 2.0,
+      "p90_apparent_width_px": 6.0,
+      "median_outer_led_radius_px": 200.56,
+      "median_bright_local_peaks_proxy": 1
+    },
+    "OUVINDO": {
+      "frames": 55,
+      "median_led_pixels": 766,
+      "median_dim_blue_pixels": 22767,
+      "median_led_rgb": [
+        40,
+        164,
+        235
+      ],
+      "median_apparent_width_px": 3.0,
+      "p90_apparent_width_px": 7.0,
+      "median_outer_led_radius_px": 198.07,
+      "median_bright_local_peaks_proxy": 3
+    }
+  }
+}

@@ -10,7 +10,7 @@ from playwright.sync_api import sync_playwright
 import numpy as np
 
 ROOT=Path(__file__).resolve().parents[1]
-OUT=ROOT/'docs/visual-audit-r56'
+OUT=ROOT/'docs/visual-audit-r57'
 INPUT=r"""(() => {
  const NativeWorker=window.Worker;
  window.__orbInput={};
@@ -44,7 +44,7 @@ def main():
     OUT.mkdir(exist_ok=True,parents=True)
     server=ThreadingHTTPServer(('127.0.0.1',0),partial(Handler,directory=str(ROOT/'cronos')))
     Thread(target=server.serve_forever,daemon=True).start()
-    errors=[];checks=[]
+    errors=[];checks=[];performance={}
     try:
         with sync_playwright() as p:
             browser=p.chromium.launch(executable_path='/usr/bin/chromium',args=['--no-sandbox','--enable-unsafe-swiftshader'])
@@ -59,12 +59,14 @@ def main():
                 page.wait_for_timeout(600)
                 checks.append({'state':state,**motion(page)})
                 page.screenshot(path=str(OUT/f'motion-{state.lower()}.png'))
+            orb_worker=next(worker for worker in page.workers if 'scene.worker' in worker.url)
+            performance=orb_worker.evaluate('self.__cronosOrbDiagnostics')
             assert not errors,errors
             context.close()
             browser.close()
     finally:
         server.shutdown();server.server_close()
-    (OUT/'motion-results.json').write_text(json.dumps({'checks':checks,'javascript_errors':errors,'limitations':'Controlled states and audio levels; no physical microphone or remote voice provider.'},indent=2))
-    print(json.dumps(checks))
+    (OUT/'motion-results.json').write_text(json.dumps({'checks':checks,'worker_performance':performance,'javascript_errors':errors,'limitations':'Controlled states and audio levels; no physical microphone or remote voice provider.'},indent=2))
+    print(json.dumps({'checks':checks,'worker_performance':performance}))
 
 if __name__=='__main__':main()

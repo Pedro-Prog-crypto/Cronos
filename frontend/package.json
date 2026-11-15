@@ -12,6 +12,7 @@
     "test:capabilities": "node --experimental-strip-types scripts/test-capability-routing.mjs",
     "test:orb-resolution": "node --experimental-strip-types scripts/test-orb-resolution.mjs",
     "test:orb-dynamics": "node --experimental-strip-types scripts/test-orb-dynamics.mjs",
+    "test:orb-geometry": "node --experimental-strip-types scripts/test-orb-geometry.mjs",
     "test:reference-deck": "node --experimental-strip-types scripts/test-reference-deck.mjs",
     "test:home-voice": "node --experimental-strip-types scripts/test-home-voice-command.mjs"
   },

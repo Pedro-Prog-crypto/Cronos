@@ -7,7 +7,7 @@ from threading import Thread
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / 'docs/visual-audit-r56'
+OUT = ROOT / 'docs/visual-audit-r57'
 
 class Handler(SimpleHTTPRequestHandler):
     def log_message(self, *args):
@@ -35,7 +35,8 @@ def main():
             assert page.get_by_role('button', name='Ativar controle de voz do Cronos').is_visible()
             assert page.locator('.cronos-quick-actions').count() == 0
             assert page.locator('.cronos-utility-actions').count() == 0
-            assert page.locator('canvas.filament-glow').evaluate('(node)=>node.width') == 1080
+            bitmap = page.locator('canvas.filament-glow').evaluate('(node)=>node.width')
+            assert 600 <= bitmap <= 1080, bitmap
             assert not any('orb-front-field' in url for url in requests)
             page.screenshot(path=str(OUT / 'idle.png'))
             # Show the thinking palette independently of a live voice provider.

@@ -1,0 +1,28 @@
+{
+  "checks": [
+    {
+      "state": "IDLE",
+      "motion_mean_absolute_difference": 2.085,
+      "cyan_ring_pixels": 11863
+    },
+    {
+      "state": "LISTENING",
+      "motion_mean_absolute_difference": 3.418,
+      "cyan_ring_pixels": 18018
+    },
+    {
+      "state": "SPEAKING",
+      "motion_mean_absolute_difference": 5.36,
+      "cyan_ring_pixels": 23760
+    }
+  ],
+  "worker_performance": {
+    "frames": 184,
+    "lastRenderMs": 1.8999999985098839,
+    "averageRenderMs": 1.8470018654217044,
+    "averageFrameMs": 36.50595252269772,
+    "canvasPixels": 600
+  },
+  "javascript_errors": [],
+  "limitations": "Controlled states and audio levels; no physical microphone or remote voice provider."
+}
