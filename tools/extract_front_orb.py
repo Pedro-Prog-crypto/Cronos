@@ -10,36 +10,44 @@ from scipy.ndimage import gaussian_filter,map_coordinates
 from PIL import Image,ImageDraw
 
 def main():
- p=argparse.ArgumentParser(description=__doc__);p.add_argument('--source',type=Path,default=Path('/workspace/Cronos-reference-complete/v05/stabilized'));p.add_argument('--output',type=Path,default=Path('/workspace/Cronos/frontend/src/assets/images/orb-front-field.png'));a=p.parse_args()
- count,angles,rows,columns=236,640,96,6
+ root=Path(__file__).resolve().parents[1]
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('--source',type=Path,default=Path('/workspace/Cronos-reference-complete/v05/stabilized'));p.add_argument('--output',type=Path,default=root/'frontend/src/assets/images/orb-front-field.png');a=p.parse_args()
+ count,angles,rows,columns=236,640,120,6
  theta=np.linspace(-np.pi,np.pi,angles,endpoint=False);radii=np.linspace(112,238,rows)
  xx=255+np.cos(theta)[None,:]*radii[:,None];yy=255-np.sin(theta)[None,:]*radii[:,None]
- fields=[];blues=[]
+ fields=[];blues=[];glints=[]
  for n in range(127,363):
   rgb=np.asarray(Image.open(a.source/f'{n:05d}.jpg'),dtype=np.float32);r,g,b=rgb.transpose(2,0,1)
   # Neutral grid and editorial white lettering cancel in chroma. A broad
   # local background is removed without projecting curves onto Fourier fits.
   cyan=g-r-.08*b;blue=b-1.15*r
-  cyan=np.maximum(cyan-gaussian_filter(cyan,9)*.65-2,0)
-  blue=np.maximum(blue-gaussian_filter(blue,9)*.8-2,0)
+  cyan=np.maximum(cyan-gaussian_filter(cyan,9)*.78-2.5,0)
+  blue=np.maximum(blue-gaussian_filter(blue,9)*.9-2,0)
+  # Pinpoint highlights are measured in the footage, not placed on a fake orbit.
+  glint=np.maximum(g-gaussian_filter(g,3)*1.2-42,0)*np.clip((g-r-12)/36,0,1)
   # Captions are burned into the filmed footage and are never part of the orb.
-  cyan[470:,:]=0;blue[470:,:]=0
+  cyan[470:,:]=0;blue[470:,:]=0;glint[470:,:]=0
   fields.append(map_coordinates(cyan,[yy,xx],order=1,mode='nearest'))
   blues.append(map_coordinates(blue,[yy,xx],order=1,mode='nearest'))
+  glints.append(map_coordinates(glint,[yy,xx],order=1,mode='nearest'))
  def clean(values):
   values=np.asarray(values)
   # Persistent camera/monitor pattern is weaker than the moving filaments.
   baseline=np.quantile(values,.15,axis=0)
   values=np.maximum(values-baseline[None]*.2,0)
-  return gaussian_filter(values,(1.15,.48,.62),mode=('nearest','nearest','wrap'))
+  return gaussian_filter(values,(.65,.32,.42),mode=('nearest','nearest','wrap'))
  cyan,blue=clean(fields),clean(blues)
  # Retain local radial peaks: broad screen glare and compression blocks are
  # not strands. This does not interpolate across genuine gaps in the footage.
- cyan=np.maximum(cyan-gaussian_filter(cyan,(0,4,0),mode=('nearest','nearest','wrap'))*.88-2,0)
- blue=np.maximum(blue-gaussian_filter(blue,(0,4,0),mode=('nearest','nearest','wrap'))*.9-5,0)
+ cyan=np.maximum(cyan-gaussian_filter(cyan,(0,3,0),mode=('nearest','nearest','wrap'))*.8-2.5,0)
+ blue=np.maximum(blue-gaussian_filter(blue,(0,4,0),mode=('nearest','nearest','wrap'))*.8-3,0)
  fade=np.minimum(np.clip((radii-120)/12,0,1),np.clip((236-radii)/10,0,1))
- cyan=np.clip(cyan*fade[None,:,None]/22,0,1)**.85
- blue=np.clip(blue*fade[None,:,None]/20,0,1)**.85
+ cyan=np.clip(cyan*fade[None,:,None]/25,0,1)**1.12
+ blue=np.clip(blue*fade[None,:,None]/18,0,1)**1.08
+ # A narrow radial core restores the crisp LED line washed out by filming.
+ cyan=np.clip((cyan-gaussian_filter(cyan,(0,1.25,.55),mode=('nearest','nearest','wrap'))*.38)*1.75,0,1)
+ glint=np.clip(np.asarray(glints)*fade[None,:,None]/35,0,1)**1.25
+ glint=gaussian_filter(glint,(.35,.55,.55),mode=('nearest','nearest','wrap'))
  # Speaking and listening are separate measured sections of the reference.
  # Replaying the speaking section at idle made the home screen too restless.
  def loop(v,overlap):
@@ -49,11 +57,11 @@ def main():
  speaking_count,listening_count=155,45
  cyan=np.concatenate([loop(cyan[:171],16),loop(cyan[181:],10)])
  blue=np.concatenate([loop(blue[:171],16),loop(blue[181:],10)])
+ glint=np.concatenate([loop(glint[:171],16),loop(glint[181:],10)])
  frames=len(cyan)
  atlas=np.zeros((((frames+columns-1)//columns)*rows,columns*angles,3),np.uint8)
  for i in range(frames):
-  halo=gaussian_filter(cyan[i],(.9,1.1),mode=('nearest','wrap'))
-  rgb=np.stack([cyan[i],halo,blue[i]],axis=-1)
+  rgb=np.stack([cyan[i],glint[i],blue[i]],axis=-1)
   y,x=i//columns*rows,i%columns*angles;atlas[y:y+rows,x:x+angles]=np.uint8(np.clip(rgb,0,1)*255)
  a.output.parent.mkdir(exist_ok=True,parents=True);Image.fromarray(atlas).save(a.output,optimize=True)
  info=dict(frames=frames,columns=columns,angles=angles,rows=rows,width=atlas.shape[1],height=atlas.shape[0],source='v05 frames 127–362; camera-aligned',speaking_frames=speaking_count,listening_frames=listening_count,source_segments={'speaking':[127,297],'listening':[308,362]},loop_overlap_frames={'speaking':16,'listening':10},curve_fitting=False)
@@ -67,7 +75,7 @@ def main():
   rgb=np.stack([c*.12,c*.75+bl*.10,c*.96+bl*.64],-1)
   rgb=np.maximum(rgb,np.array([.01,.04,.10]));im=Image.fromarray(np.uint8(np.clip(rgb,0,1)*255))
   x,y=j%3*size,j//3*(size+25);sheet.paste(im,(x,y));d.text((x+8,y+size+4),f'Atlas frame {i}',fill='white')
- out=Path('/workspace/Cronos/docs/visual-audit-r54');out.mkdir(exist_ok=True);sheet.save(out/'field-samples.jpg',quality=94)
+ out=root/'docs/visual-audit-r55';out.mkdir(exist_ok=True);sheet.save(out/'field-samples.jpg',quality=94)
  print(json.dumps(info))
 
 if __name__=='__main__':main()

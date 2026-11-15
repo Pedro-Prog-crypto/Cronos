@@ -3,7 +3,8 @@ import type {SceneInput} from './renderers';
 export function orbRenderRatio(canvas:HTMLCanvasElement,size:number){
   const displayed=canvas.getBoundingClientRect().width||size;
   const density=Math.min(window.devicePixelRatio||1,3);
-  return Math.max(.5,Math.min(900,Math.ceil(displayed*density))/size);
+  const requested=displayed>=500?1080:Math.ceil(displayed*density);
+  return Math.max(.5,Math.min(1080,requested)/size);
 }
 export function startCanvasWorker(canvas:HTMLCanvasElement,kind:'orb'|'star',size:number,density:number,input:()=>SceneInput,onFailure:()=>void):(()=>void)|null{
   if(!canvas.transferControlToOffscreen||!window.Worker)return null;
@@ -12,7 +13,7 @@ export function startCanvasWorker(canvas:HTMLCanvasElement,kind:'orb'|'star',siz
   try{worker=new Worker(new URL('./scene.worker.ts',import.meta.url),{type:'module'});}catch{return null;}
   try{
     const pixelRatio=kind==='orb'?orbRenderRatio(canvas,size):Math.min(window.devicePixelRatio||1,1.25);
-    canvas.width=canvas.height=kind==='orb'?Math.min(900,Math.round(size*pixelRatio)):Math.ceil(size*pixelRatio);
+    canvas.width=canvas.height=kind==='orb'?Math.min(1080,Math.round(size*pixelRatio)):Math.ceil(size*pixelRatio);
     const offscreen=canvas.transferControlToOffscreen();
     worker.postMessage({type:'input',input:read()});
     worker.postMessage({type:'init',canvas:offscreen,kind,size,density,pixelRatio},[offscreen]);

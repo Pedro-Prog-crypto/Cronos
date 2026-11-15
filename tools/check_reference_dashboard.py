@@ -7,7 +7,7 @@ from threading import Thread
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / 'docs/visual-audit-r54'
+OUT = ROOT / 'docs/visual-audit-r55'
 
 class Handler(SimpleHTTPRequestHandler):
     def log_message(self, *args):
@@ -33,7 +33,17 @@ def main():
             assert page.get_by_role('button', name='Ativar controle de voz do Cronos').is_visible()
             assert page.locator('.cronos-quick-actions').count() == 0
             assert page.locator('.cronos-utility-actions').count() == 0
+            assert page.locator('canvas.filament-glow').evaluate('(node)=>node.width') == 1080
             page.screenshot(path=str(OUT / 'idle.png'))
+            # Show the thinking palette independently of a live voice provider.
+            status = page.locator('.reference-voice-status')
+            control = page.locator('.reference-voice-control')
+            status.evaluate("node=>{node.dataset.state='THINKING';node.querySelector('span').textContent='PENSANDO'}")
+            control.evaluate("node=>node.dataset.state='THINKING'")
+            assert page.get_by_text('PENSANDO', exact=True).is_visible()
+            page.screenshot(path=str(OUT / 'thinking.png'))
+            status.evaluate("node=>{node.dataset.state='IDLE';node.querySelector('span').textContent='EM ESPERA'}")
+            control.evaluate("node=>node.dataset.state='IDLE'")
             # The hidden DOM trigger exercises the same state change as the spoken command.
             page.locator('.reference-panels-toggle').evaluate('(node)=>node.click()')
             deck = page.get_by_role('region', name='Cards principais do Cronos')

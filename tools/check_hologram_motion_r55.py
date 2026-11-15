@@ -1,4 +1,4 @@
-"""Exercise the state-specific R54 motion in the compiled hologram."""
+"""Exercise the state-specific motion in the compiled hologram."""
 import json
 import io
 from functools import partial
@@ -10,7 +10,7 @@ from playwright.sync_api import sync_playwright
 import numpy as np
 
 ROOT=Path(__file__).resolve().parents[1]
-OUT=ROOT/'docs/visual-audit-r54'
+OUT=ROOT/'docs/visual-audit-r55'
 INPUT=r"""(() => {
  const NativeWorker=window.Worker;
  window.__orbInput={};

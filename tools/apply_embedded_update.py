@@ -21,7 +21,7 @@ from zipfile import ZipFile
 
 PRIVATE = {'providers.json', 'api_keys.json', 'credentials.json', 'token.json',
            'fish_audio.json', 'ai_council.json'}
-REVISION = 'cronos-interface-referencia-2026-11-15-r54'
+REVISION = 'cronos-interface-referencia-2026-11-15-r55'
 
 
 def regular(path: Path) -> Path:
@@ -105,7 +105,7 @@ def apply(archive_path: Path, target: Path) -> tuple[Path | None, int]:
         manifest_bytes = package.read('tools/interface_update_manifest.json')
         manifest = json.loads(manifest_bytes)
         if manifest.get('revision') != REVISION:
-            raise ValueError('Esta nao e a revisao R54 verificada.')
+            raise ValueError('Esta nao e a revisao R55 verificada.')
         files = manifest['files']
         if 'cronos/ui/index.html' not in files:
             raise ValueError('Pacote sem a interface do Cronos.')
@@ -212,7 +212,7 @@ def main() -> int:
         target = Path(os.environ['CRONOS_PATCH_TARGET'])
         backup, count = apply(archive, target)
         if backup is None:
-            print('O Cronos R54 ja esta atualizado; nenhum arquivo foi copiado.')
+            print('O Cronos R55 ja esta atualizado; nenhum arquivo foi copiado.')
         else:
             print(f'Atualizacao concluida: {count} arquivos de codigo. Backup em {backup}.')
         print('Integracoes, .env, provedores, cofre e memorias preservados na pasta original.')

@@ -7,7 +7,7 @@ function context(canvas:SceneCanvas){return canvas.getContext('2d') as CanvasRen
 
 /** Replay camera-aligned reference filaments, preserving their individual gaps. */
 export function renderOrb(canvas:SceneCanvas,size:number,density:number,pixelRatio:number,input:()=>SceneInput){
- const bitmap=Math.min(900,Math.round(size*Math.min(pixelRatio,900/size)));
+ const bitmap=Math.min(1080,Math.round(size*Math.min(pixelRatio,1080/size)));
  canvas.width=canvas.height=bitmap;
  const gl=canvas.getContext('webgl',{alpha:true,antialias:true,premultipliedAlpha:false}) as WebGLRenderingContext|null;
  if(!gl)return renderOrbVectors(canvas,size,density,pixelRatio,input);
@@ -18,7 +18,7 @@ export function renderOrb(canvas:SceneCanvas,size:number,density:number,pixelRat
  vec3 readField(float index,float azimuth,float radial){
    float column=mod(index,6.0),row=floor(index/6.0);
    float along=azimuth*640.0,first=floor(along);
-   float y=(row*96.0+clamp(radial,0.0,1.0)*95.0+.5)/3264.0;
+   float y=(row*120.0+clamp(radial,0.0,1.0)*119.0+.5)/4080.0;
    vec3 a=texture2D(motionField,vec2((column*640.0+mod(first,640.0)+.5)/3840.0,y)).rgb;
    vec3 b=texture2D(motionField,vec2((column*640.0+mod(first+1.0,640.0)+.5)/3840.0,y)).rgb;
    return mix(a,b,fract(along));
@@ -35,13 +35,12 @@ export function renderOrb(canvas:SceneCanvas,size:number,density:number,pixelRat
    vec3 speechField=readSequence(0.0,155.0,videoTime,azimuth,radial);
    vec3 field=mix(quietField,speechField,speakingMix);
    float band=step(0.0,radial)*(1.0-step(1.0,radial));
-   float emission=field.r*band,halo=field.g*band,blueLight=field.b*band;
-   // The moving glints already belong to the source. Do not add a second orbit
-   // of fake particles or a bright continuous outline over the fine filaments.
-   float cyanShare=emission/(emission+blueLight*.55+.0001);
-   float core=pow(emission,2.5);
-   vec3 captured=mix(vec3(.025,.58,.91),vec3(.07,.88,1.0),cyanShare)+vec3(.38,.14,.07)*core;
-   float capturedAlpha=clamp(pow(emission,.95)*(1.5+energy*.16)+blueLight*.42+halo*.12,0.0,1.0)*stateGain;
+   float emission=field.r*band,glint=clamp(field.g*2.3,0.0,1.0)*band,blueLight=field.b*band;
+   // The blue strands and bright traveling glints both come from the footage.
+   float cyanShare=emission/(emission+blueLight*.8+.0001);
+   vec3 captured=mix(vec3(.015,.30,.78),vec3(.035,.80,.97),cyanShare);
+   captured=mix(captured,vec3(.44,.92,1.0),clamp(glint*1.4,0.0,.8));
+   float capturedAlpha=clamp(pow(emission,1.32)*(1.12+energy*.12)+pow(blueLight,1.35)*.67+glint*.8,0.0,1.0)*stateGain;
    float light=0.0,glow=0.0;
    // A quiet procedural start while the local atlas loads, including devices
    // whose maximum texture size cannot fit the reference atlas.
@@ -80,7 +79,7 @@ export function renderOrb(canvas:SceneCanvas,size:number,density:number,pixelRat
  gl.uniform1i(gl.getUniformLocation(program,'motionField'),0);gl.viewport(0,0,bitmap,bitmap);
  let active=true,ready=false,blend=0,frame=0,timer=0,last=performance.now(),motion=0,videoTime=0,velocity=.42,energy=.035,expansion=0,audioEnvelope=0,gain=.85,speakingBlend=0;
  const controller=new AbortController();
- if(gl.getParameter(gl.MAX_TEXTURE_SIZE)>=3840)void (async()=>{
+ if(gl.getParameter(gl.MAX_TEXTURE_SIZE)>=4080)void (async()=>{
   const response=await fetch(orbMotionUrl,{signal:controller.signal});if(!response.ok)throw new Error(`Motion field ${response.status}`);
   const image=await createImageBitmap(await response.blob(),{premultiplyAlpha:'none',colorSpaceConversion:'none',imageOrientation:'none'});
   try{if(!active)return;gl.bindTexture(gl.TEXTURE_2D,texture);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,0);
@@ -91,7 +90,7 @@ export function renderOrb(canvas:SceneCanvas,size:number,density:number,pixelRat
  const draw=()=>{
   if(!active)return;const value=input(),now=performance.now();
   if(value.hidden){last=now;schedule(180);return;}
-  if(now-last<1000/(value.fps||60)-1){schedule();return;}
+  if(now-last<1000/Math.min(value.fps||60,bitmap>=1000?30:60)-1){schedule();return;}
   const dt=Math.min(.1,(now-last)/1000);last=now;
   const level=Number.isFinite(value.audio)?Math.max(0,Math.min(1,value.audio)):0;
   audioEnvelope+=(level-audioEnvelope)*Math.min(1,dt*(level>audioEnvelope?8:2.3));
@@ -113,7 +112,7 @@ export function renderOrb(canvas:SceneCanvas,size:number,density:number,pixelRat
 /** Vector fallback for devices where the graphic driver does not expose WebGL. */
 function renderOrbVectors(canvas:SceneCanvas,size:number,_density:number,pixelRatio:number,input:()=>SceneInput){
  const ctx=context(canvas);if(!ctx)return;
- const logical=600,ratio=Math.min(pixelRatio,900/size),bitmap=Math.min(900,Math.round(size*ratio)),scale=bitmap/logical;
+ const logical=600,ratio=Math.min(pixelRatio,1080/size),bitmap=Math.min(1080,Math.round(size*ratio)),scale=bitmap/logical;
  canvas.width=canvas.height=bitmap;ctx.setTransform(scale,0,0,scale,0,0);
  const count=7,steps=360,tau=Math.PI*2;
  const circle=Array.from({length:steps+1},(_,i)=>{const u=i*tau/steps;return {u,c:Math.cos(u),s:Math.sin(u)};});
