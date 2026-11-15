@@ -12,11 +12,12 @@ EXTRA=['docs/ENTREGA-REAL-2026-10-30-R10.md','docs/VERIFICACAO-2026-10-30-R10.js
 
 def build_patch():
     manifest=json.loads((ROOT/'tools/interface_update_manifest.json').read_text())
-    names=[*manifest['files'],'tools/apply_interface_update.py','tools/interface_update_manifest.json','Atualizar-Cronos-Preservando-Dados.bat','Criar-Atalho-Cronos.vbs']
+    names=[*manifest['files'],'tools/apply_interface_update.py','tools/apply_embedded_update.py','tools/interface_update_manifest.json','Atualizar-Cronos-Preservando-Dados.bat','Criar-Atalho-Cronos.vbs']
     output=ROOT/'releases/CRONOS-Atualizacao-Preservando-Dados.zip';output.parent.mkdir(exist_ok=True)
     with zipfile.ZipFile(output,'w',zipfile.ZIP_DEFLATED) as package:
         for name in names:package.write(ROOT/name,name)
-        package.writestr('LEIA-PRIMEIRO.txt',(ROOT/'docs/ATUALIZAR_SEM_RECADASTRAR.md').read_text())
+        guide=zipfile.ZipInfo('LEIA-PRIMEIRO.txt',date_time=(2026,11,15,0,0,0));guide.compress_type=zipfile.ZIP_DEFLATED
+        package.writestr(guide,(ROOT/'docs/ATUALIZAR_SEM_RECADASTRAR.md').read_text())
 
 
 def build():
@@ -33,7 +34,7 @@ def build():
     missing=[name for name in tracked if name and not name.startswith(('releases/',*historical_visual_audits)) and not (ROOT/name).is_file()]
     if missing:
         raise ValueError('Checkout incompleto; materialize os arquivos antes de empacotar: '+', '.join(missing[:12]))
-    names=sorted(name for name in set(filter(None,tracked))|set(EXTRA)|set(CURRENT_REPORTS)|ui_assets|set(manifest['files'])|{'tools/restore_existing_data.py'} if not name.startswith(('releases/',*historical_visual_audits)) and (ROOT/name).is_file())
+    names=sorted(name for name in set(filter(None,tracked))|set(EXTRA)|set(CURRENT_REPORTS)|ui_assets|set(manifest['files'])|{'tools/restore_existing_data.py'} if name!='instalador.bat' and not name.startswith(('releases/',*historical_visual_audits)) and (ROOT/name).is_file())
     names=sorted(set(names)|{p.relative_to(ROOT).as_posix() for p in (ROOT/'examples/3d-product-demo').rglob('*') if p.is_file()})
     for name in names:
         parts=Path(name).parts

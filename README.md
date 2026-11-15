@@ -1,6 +1,6 @@
 # Cronos — assistente Windows (v0.5)
 
-Atualização R54: tela inicial limpa com holograma e botão azul do microfone; os cards e módulos abrem por voz. Os filamentos do holograma preservam mais linhas do vídeo e usam trechos distintos para escuta e fala. O download `INSTALAR-CRONOS-COMPLETO-R54.bat` inclui o aplicativo completo e importa localmente as integrações da pasta R50 instalada. Para manter a mesma pasta e suas integrações, use `CRONOS-Atualizacao-Preservando-Dados.zip`. Veja [alterações e limites da validação](docs/NOVA-INTERFACE-REFERENCIA.md) e [atualização preservando dados](docs/ATUALIZAR_SEM_RECADASTRAR.md).
+Atualização R54: tela inicial limpa com holograma e botão azul do microfone; os cards e módulos abrem por voz. Os filamentos do holograma preservam mais linhas do vídeo e usam trechos distintos para escuta e fala. Para uma R50 já instalada, o `instalador.bat` da branch `feature/cronos-r54-installer` aplica a atualização diretamente na pasta existente: lê o ZIP embutido no próprio BAT, copia apenas código diferente e preserva integrações e memórias. O instalador completo cria uma nova pasta e exige muito mais espaço livre. Veja [alterações e limites da validação](docs/NOVA-INTERFACE-REFERENCIA.md) e [atualização preservando dados](docs/ATUALIZAR_SEM_RECADASTRAR.md).
 
 Programa Windows com backend independente da interface. A versão anterior
 foi analisada como referência de arquitetura; sua interface, imagens, avatar e
