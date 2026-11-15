@@ -385,7 +385,7 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
         resources.current.timer=setInterval(()=>{
           if(latest.current.blocked||(processing.current&&!latest.current.collecting))resumeAfter.current=performance.now()+250;
           const blocked=latest.current.blocked||(processing.current&&!latest.current.collecting)||performance.now()<resumeAfter.current;
-          node.port.postMessage({blocked,waiting:Boolean(latest.current.interrupt?.wakeOnly&&wakeUntil.current<performance.now()),keyword:keywordReady.current,sensitivity:latest.current.preferences?.microphone_sensitivity??70,gain:latest.current.preferences?.microphone_gain??2,silenceMs:latest.current.collecting?1900:1400});meter.getByteTimeDomainData(values);let sum=0;for(const value of values)sum+=((value-128)/128)**2;audioLevelSource.current=blocked?0:Math.min(1,Math.sqrt(sum/values.length)*4);
+          node.port.postMessage({blocked,waiting:Boolean(latest.current.interrupt?.wakeOnly&&wakeUntil.current<performance.now()),keyword:keywordReady.current,sensitivity:latest.current.preferences?.microphone_sensitivity??70,gain:latest.current.preferences?.microphone_gain??2,silenceMs:latest.current.collecting?1900:1050});meter.getByteTimeDomainData(values);let sum=0;for(const value of values)sum+=((value-128)/128)**2;audioLevelSource.current=blocked?0:Math.min(1,Math.sqrt(sum/values.length)*4);
         },80);
         return;
         }catch(error){
@@ -458,8 +458,8 @@ export function useMicrophone(onTranscript:(text:string,metrics?:{recognition_ms
         if(speech){voiceLevel=voiceLevel?voiceLevel*.8+rms*.2:rms;voiceReference=Math.max(voiceReference,voiceLevel);}
         speechRun=speech?speechRun+80:0;
         if(speechRun>=160){if(!heard){beginPreview();for(const part of recent)preview.current?.push(part);recent.length=0;setCapturing(!latest.current.interrupt?.wakeOnly||wakeUntil.current>now);}heard=true;lastSpeech=now;}
-        const normalPause=latest.current.collecting?1900:1400;
-        const pauseLimit=now-started>8000?Math.max(normalPause,2500):normalPause;
+        const normalPause=latest.current.collecting?1900:1050;
+        const pauseLimit=now-started>8000?Math.max(normalPause,1800):normalPause;
         if((heard&&now-lastSpeech>pauseLimit)||(now-started>(heard||!vad?180000:3000)))recorder.stop();
       },80);
     }catch(error){const cancelled=!enabled.current;stop();if(!cancelled){const name=error instanceof DOMException?error.name:'';latest.current.onError(name==='NotAllowedError'||name==='SecurityError'?'Permita o microfone para o Cronos no navegador e tente novamente.':name==='NotReadableError'?'O Windows não liberou o microfone. Feche o aplicativo que está usando o dispositivo e tente novamente.':name==='NotFoundError'?'Nenhum microfone foi encontrado. Conecte um dispositivo e tente novamente.':error instanceof Error?error.message.slice(0,220):'Não foi possível abrir o microfone.');}}

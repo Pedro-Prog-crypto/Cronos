@@ -197,6 +197,7 @@ def test_news_timeout_never_speaks_a_discarded_model_draft(settings, monkeypatch
             lambda args: {'articles': [{'title': 'Fonte conferível', 'url': 'https://example.org/news'}]})
         events = [json.loads(line) for line in client.post('/chat/stream', headers=AUTH,
                   json={'message': 'Notícias do dia'}).text.splitlines()]
-    assert [event['type'] for event in events] == ['reply', 'result']
-    assert 'Fonte conferível' in events[0]['reply']
+    assert [event['type'] for event in events] == ['tool', 'reply', 'result']
+    assert events[0]['tool']['result']['articles'][0]['title']=='Fonte conferível'
+    assert 'Fonte conferível' in events[1]['reply']
     assert 'Rascunho' not in str(events)

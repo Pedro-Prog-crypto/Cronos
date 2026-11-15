@@ -18,7 +18,7 @@ _LOCK = threading.RLock()
 # Bound silence before the first useful sentence, then allow the configured
 # generation budget to finish a detailed answer. Five seconds is a UI target,
 # not a deadline that truncates an active explanation.
-FIRST_REPLY_TIMEOUT_SECONDS = 8
+FIRST_REPLY_TIMEOUT_SECONDS = 4
 FIRST_OUTPUT_TIMEOUT_SECONDS = 30
 FALLBACK_ATTEMPT_TIMEOUT_SECONDS = 45
 FALLBACK_TOTAL_TIMEOUT_SECONDS = 300

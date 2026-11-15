@@ -1,6 +1,6 @@
 # Cronos — assistente Windows (v0.5)
 
-Atualização R57: o holograma é desenhado inteiramente por código, com curvas LED luminosas à frente, dezesseis fios azuis finos ao fundo e pontos de luz em movimento. A tela inicial continua limpa; os cards e módulos abrem por voz. Para uma R50 já instalada, o `instalador.bat` da branch `feature/cronos-r57-hologram-motion` atualiza a pasta existente e preserva integrações e memórias. Veja [o modelo do holograma](docs/HOLOGRAMA-R57.md) e [a atualização preservando dados](docs/ATUALIZAR_SEM_RECADASTRAR.md).
+Atualização R58: o holograma R57 permanece, com a iluminação do fundo concentrada ao redor dele. “Notícias do dia” abre cards com dados reais da busca; os cards seguem a fala, podem ser fixados por voz e a resposta escrita aparece ao lado. A transcrição provisória aparece no alto à esquerda enquanto você fala, e um botão de envio surge ao lado do microfone. A busca e a síntese de notícias agora têm limites de espera menores. Para atualizar uma R50 instalada, use o `instalador.bat` da branch `feature/cronos-r58-live-cards-fast-voice`, que preserva integrações e memórias. Veja [as mudanças nos cards e na voz](docs/CARDS-E-VOZ-R58.md) e [a atualização preservando dados](docs/ATUALIZAR_SEM_RECADASTRAR.md).
 
 Programa Windows com backend independente da interface. A versão anterior
 foi analisada como referência de arquitetura; sua interface, imagens, avatar e

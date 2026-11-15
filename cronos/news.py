@@ -2,6 +2,17 @@
 import re
 import unicodedata
 from urllib.parse import urlsplit
+from ipaddress import ip_address
+
+
+def public_news_url(value, *, image=False):
+    if not isinstance(value,str):return False
+    try:parsed=urlsplit(value)
+    except ValueError:return False
+    host=(parsed.hostname or '').lower()
+    if parsed.scheme not in ({'https'} if image else {'http','https'}) or not host or parsed.username or parsed.password or host=='localhost' or host.endswith(('.localhost','.local')):return False
+    try:return ip_address(host).is_global
+    except ValueError:return True
 
 
 def current_news_query(message):
@@ -26,12 +37,9 @@ def verified_news_fallback(outcome):
             continue
         title = str(article.get('title') or '').strip()
         url = str(article.get('url') or '').strip()
-        try:
-            parsed = urlsplit(url)
-        except ValueError:
+        if not title or not public_news_url(url):
             continue
-        if not title or parsed.scheme not in {'http', 'https'} or not parsed.hostname:
-            continue
+        parsed = urlsplit(url)
         source = str(article.get('source') or parsed.hostname).strip()
         published = str(article.get('published') or '').strip()
         label = f'{source}; {published}' if published else source

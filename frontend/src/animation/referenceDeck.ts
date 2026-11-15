@@ -1,6 +1,6 @@
 /** Viewport geometry: a filmed camera's zoom is not part of the UI animation. */
 export function deckPlacement(slot:number,total:number,active:boolean,overview:boolean,width:number,height:number){
- const cardWidth=Math.min(390,width-36),cardHeight=Math.min(256,Math.max(190,height*.30));
+ const cardWidth=Math.min(450,width-36),cardHeight=Math.min(256,Math.max(190,height*.30));
  if(active)return {cardWidth,cardHeight,x:0,y:0,scale:1};
  if(overview){
   // Small screens need legible cards and touch targets; a single row only works on wide video frames.

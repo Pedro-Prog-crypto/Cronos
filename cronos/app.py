@@ -77,10 +77,10 @@ class ApprovalInput(BaseModel):
 
 VOICE_REQUEST_TIMEOUT_SECONDS = 30
 TRANSCRIPTION_TIMEOUT_SECONDS = 30
-TRANSCRIPTION_TOTAL_TIMEOUT_SECONDS = 40
+TRANSCRIPTION_TOTAL_TIMEOUT_SECONDS = 25
 ASR_HEDGE_SECONDS = 2
 # Recovery ceiling, not the latency target. Each route has its own timeout;
-# a reserve is hedged after eight seconds without cancelling a valid primary.
+# a reserve is hedged after four seconds without cancelling a valid primary.
 CONVERSATION_FIRST_REPLY_TIMEOUT_SECONDS = 120
 
 
@@ -91,9 +91,9 @@ def transcription_deadline(audio: bytes, mime_type: str, duration_seconds: float
     else:
         import math
         duration = duration_seconds if duration_seconds is not None and math.isfinite(duration_seconds) and 0 <= duration_seconds <= 180 else 0
-    if duration <= 30:
+    if duration <= 12:
         return TRANSCRIPTION_TOTAL_TIMEOUT_SECONDS
-    return min(120, max(TRANSCRIPTION_TOTAL_TIMEOUT_SECONDS, 20 + duration * .55))
+    return min(120, max(40, 20 + duration * .55))
 
 
 def first_reply_deadline(message: str) -> int:
@@ -434,11 +434,14 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                 delivery.mark('question_recognized',characters=len(text))
                 delivery.mark('question_received',characters=len(text))
                 await queue.put({'type':'transcript','text':text})
+            async def tool(outcome):
+                await queue.put({'type':'tool','tool':outcome})
             async def run():
                 with delivery.scope(request.app.state.delivery,request.headers.get('x-cronos-turn')):
                     delivery.mark('audio_received',bytes=len(audio)) if audio is not None else delivery.mark('question_received',characters=len(message))
                     nonlocal first_response_deadline
-                    token=reply_sink.set(ready);intro_token=intro_sink.set(intro);transcript_token=transcript_sink.set(transcript)
+                    from cronos.reply_stream import tool_sink
+                    token=reply_sink.set(ready);intro_token=intro_sink.set(intro);transcript_token=transcript_sink.set(transcript);tool_token=tool_sink.set(tool)
                     try:
                         async with asyncio.timeout(first_reply_deadline(message)) as deadline:
                             first_response_deadline=deadline
@@ -486,7 +489,7 @@ def create_app(settings: Settings | None = None, provider=None, fish_factory=Non
                                                                        'phase':safe_phase,'error_type':type(exc).__name__}})
                     finally:
                         request.app.state.engine.phase='idle'
-                        reply_sink.reset(token);intro_sink.reset(intro_token);transcript_sink.reset(transcript_token)
+                        reply_sink.reset(token);intro_sink.reset(intro_token);transcript_sink.reset(transcript_token);tool_sink.reset(tool_token)
             task=asyncio.create_task(run())
             try:
                 while True:

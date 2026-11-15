@@ -7,7 +7,7 @@ from threading import Thread
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / 'docs/visual-audit-r57'
+OUT = ROOT / 'docs/visual-audit-r58'
 
 class Handler(SimpleHTTPRequestHandler):
     def log_message(self, *args):
@@ -53,6 +53,8 @@ def main():
             deck = page.get_by_role('region', name='Cards principais do Cronos')
             assert deck.is_visible() and deck.get_attribute('data-mode') == 'focus'
             assert page.locator('.hologram-deck-card').count() == 1
+            page.get_by_role('button', name='Manter Resumo do sistema').click()
+            assert page.locator('.hologram-deck-card[data-pinned="true"]').count() == 1
             page.wait_for_timeout(600)
             page.screenshot(path=str(OUT / 'focus.png'))
             page.get_by_role('button', name='Próximo card').click()

@@ -46,7 +46,7 @@ if(!getToken())void fetch('/connection',{headers:{Accept:'application/json'}}).t
 
 // Deliver the finished answer while its memory metadata is still arriving.
 // No automatic retry: a repeated request could repeat tools or consume quota.
-export async function streamChat(body:unknown,signal:AbortSignal,onReply:(reply:string)=>void,onIntro?:(reply:string)=>void,onTranscript?:(text:string)=>void,audio?:Blob){
+export async function streamChat(body:unknown,signal:AbortSignal,onReply:(reply:string)=>void,onIntro?:(reply:string)=>void,onTranscript?:(text:string)=>void,audio?:Blob,onTool?:(tool:unknown)=>void){
   const session=(body as any)?.session_id;
   const heardContext=(body as any)?.heard_context;
   const visualContext=(body as any)?.visual_context;
@@ -58,6 +58,7 @@ export async function streamChat(body:unknown,signal:AbortSignal,onReply:(reply:
     if(!line.trim())return;
     const data=JSON.parse(line);
     if(data.type==='transcript')onTranscript?.(data.text);
+    if(data.type==='tool')onTool?.(data.tool);
     if(data.type==='intro')onIntro?.(data.reply);
     if(data.type==='reply')onReply(data.reply);
     if(data.type==='result')result=data.result;

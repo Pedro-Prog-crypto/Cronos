@@ -3,6 +3,13 @@ from contextvars import ContextVar
 import json
 
 reply_sink = ContextVar('reply_sink', default=None)
+tool_sink = ContextVar('tool_sink', default=None)
+
+
+async def deliver_tool(outcome):
+    """Send a completed, sourced search result before answer generation."""
+    sink=tool_sink.get()
+    if sink is not None:await sink(outcome)
 
 
 def ready_reply(raw):

@@ -40,7 +40,7 @@ class CronosCapture extends AudioWorkletProcessor {
     // Isolated clicks and short noise detections cannot renew the phrase forever.
     this.silent=this.speechRun>=sampleRate*.12?0:this.silent+data.length;
     if(speech)this.voiced+=data.length;
-    const pauseMs=this.frames>sampleRate*8?Math.max(this.silenceMs,2500):this.silenceMs;
+    const pauseMs=this.frames>sampleRate*8?Math.max(this.silenceMs,1800):this.silenceMs;
     if(this.silent>sampleRate*pauseMs/1000||this.frames>=sampleRate*180){if(this.voiced>=sampleRate*.35){const kept=Math.min(sampleRate*180,this.frames,this.frames-this.silent+Math.ceil(sampleRate*.25));const output=new Int16Array(kept);let offset=0;for(const chunk of this.chunks){const count=Math.min(chunk.length,kept-offset);if(count<=0)break;output.set(chunk.subarray(0,count),offset);offset+=count;}this.flushLive();this.port.postMessage({samples:output,rate:sampleRate,endpoint_ms:Math.round(this.silent/sampleRate*1000)},[output.buffer]);}this.clear();}
     return true;
   }

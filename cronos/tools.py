@@ -399,7 +399,7 @@ def create_registry(settings, memory, monitor=None, windows=None, missions=None,
 
     news_cache = {}
     def news(args):
-        from cronos.news import current_news_query
+        from cronos.news import current_news_query,public_news_url
         query=current_news_query(args.query) or args.query.strip()
         now=time.monotonic();key=(query.casefold(),args.limit)
         cached=news_cache.get(key)
@@ -414,11 +414,12 @@ def create_registry(settings, memory, monitor=None, windows=None, missions=None,
             articles=[]
             for item in raw:
                 url=item.get('url') or item.get('href') or ''
-                parsed=urlsplit(url)
-                if parsed.scheme not in {'http','https'} or not parsed.hostname or parsed.username or parsed.password:continue
+                if not public_news_url(url):continue
+                image=item.get('image') or item.get('thumbnail') or ''
+                safe_image=image[:2000] if public_news_url(image,image=True) else ''
                 articles.append({'title':str(item.get('title',''))[:400], 'url':url[:2000],
                                  'excerpt':str(item.get('body',''))[:1200], 'published':str(item.get('date',''))[:100],
-                                 'source':str(item.get('source',''))[:200]})
+                                 'source':str(item.get('source',''))[:200], 'image':safe_image})
             if not articles:raise ToolError('O buscador não retornou notícias recentes. Nenhuma manchete foi inventada.')
             result={'articles':articles, 'fetched_at':datetime.now(timezone.utc).isoformat(), 'cached':False,
                     'scope':'Resultados do filtro das últimas 24 horas; confira as datas publicadas e as fontes.'}
