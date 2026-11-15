@@ -1,5 +1,8 @@
 # Cronos — assistente Windows (v0.5)
 
+Atualização R60: “abrir painel de funções” mostra uma grade pesquisável com os módulos e ações já existentes. Durante notícias do dia, a telemetria e os cards do computador ficam ocultos; a apresentação mostra somente as notícias recebidas. O holograma e a tela inicial não foram alterados. Atualize pela branch `feature/cronos-r60-functions-news-only` usando `instalador.bat`, preservando dados da instalação.
+
+
 Atualização R59: o ícone de livro à esquerda do microfone alterna entre explicação normal e detalhada. No modo detalhado, a resposta aprofunda o tema e o mural procura imagens relacionadas; se nenhuma imagem carregar, o Cronos mantém a explicação sem afirmar que mostrou algo. Se houver fala pronta, clicar no livro também a envia. O botão de envio à direita continua disponível. Para atualizar uma R50 instalada, use o `instalador.bat` da branch `feature/cronos-r59-detailed-explanation-toggle`, que preserva integrações e memórias. Veja [o modo detalhado](docs/EXPLICACAO-DETALHADA-R59.md), [as mudanças anteriores nos cards e na voz](docs/CARDS-E-VOZ-R58.md) e [a atualização preservando dados](docs/ATUALIZAR_SEM_RECADASTRAR.md).
 
 Programa Windows com backend independente da interface. A versão anterior

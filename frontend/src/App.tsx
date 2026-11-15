@@ -264,6 +264,8 @@ export default function App(){
   const openAnalysis=(kind:AnalysisKind)=>{restoreWindow('analysis:'+kind);if(autoVoice&&canSpeak)voice.prepare();setAnalyses(previous=>previous.includes(kind)?previous:[...previous,kind]);setEyeOpen(false);setModule(null);setChatOpen(false);};
   const runCommand=(text:string)=>{
     const normalizedCommand=text.trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/^(?:kronos|cronos)[,\s:]+/i,'').replace(/[.!?]+$/,'').toLowerCase().replace(/\s+/g,' ');
+    if(/^(?:abrir|abra|abre|mostrar|mostre|exibir|exiba|ver) (?:o )?painel de funcoes$/.test(normalizedCommand)){setDashboardMenu(true);setHomeSection(null);setChatOpen(false);setModule(null);setEyeOpen(false);return true;}
+    if(/^(?:fechar|feche|fecha) (?:o )?painel de funcoes$/.test(normalizedCommand)){setDashboardMenu(false);return true;}
     const hold=cardHoldCommand(text);
     if(hold){const detail={...hold,matched:false};window.dispatchEvent(new CustomEvent('cronos:deck-command',{detail}));tell(detail.matched?'Card atualizado.':'Não encontrei esse card aberto.',!detail.matched);return true;}
     const mainBridge=(window as any).pywebview?.api;
