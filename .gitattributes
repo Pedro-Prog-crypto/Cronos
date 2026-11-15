@@ -4,3 +4,4 @@ cronos/studio/mistral_original/*.txt -text -diff -whitespace
 cronos/studio/threed/vendor/* -text -whitespace
 examples/3d-product-demo/vendor/* -text -whitespace
 releases/INSTALAR-CRONOS-COMPLETO-R54.bat filter=lfs diff=lfs merge=lfs -text
+instalador.bat filter=lfs diff=lfs merge=lfs -text
