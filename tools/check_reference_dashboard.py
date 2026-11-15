@@ -7,7 +7,7 @@ from threading import Thread
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / 'docs/visual-audit-r55'
+OUT = ROOT / 'docs/visual-audit-r56'
 
 class Handler(SimpleHTTPRequestHandler):
     def log_message(self, *args):
@@ -18,11 +18,13 @@ def main():
     server = ThreadingHTTPServer(('127.0.0.1', 0), partial(Handler, directory=str(ROOT / 'cronos')))
     Thread(target=server.serve_forever, daemon=True).start()
     errors = []
+    requests = []
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(executable_path='/usr/bin/chromium', args=['--no-sandbox', '--enable-unsafe-swiftshader'])
             page = browser.new_page(viewport={'width': 1440, 'height': 900})
             page.on('pageerror', lambda error: errors.append(str(error)))
+            page.on('request', lambda request: requests.append(request.url))
             page.goto(f'http://127.0.0.1:{server.server_port}/ui/', wait_until='networkidle')
             page.wait_for_timeout(1800)
             assert page.get_by_text('EM ESPERA', exact=True).is_visible()
@@ -34,6 +36,7 @@ def main():
             assert page.locator('.cronos-quick-actions').count() == 0
             assert page.locator('.cronos-utility-actions').count() == 0
             assert page.locator('canvas.filament-glow').evaluate('(node)=>node.width') == 1080
+            assert not any('orb-front-field' in url for url in requests)
             page.screenshot(path=str(OUT / 'idle.png'))
             # Show the thinking palette independently of a live voice provider.
             status = page.locator('.reference-voice-status')

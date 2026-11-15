@@ -3,7 +3,7 @@
 .reference-grid-background{position:absolute;inset:0;background-color:#020b19;background-image:linear-gradient(#2583cc26 1px,transparent 1px),linear-gradient(90deg,#2583cc26 1px,transparent 1px),radial-gradient(ellipse at 50% 48%,#073c88 0%,#031e4a 34%,#020b1b 75%);background-size:36px 36px,36px 36px,100% 100%;background-position:center}
 .cronos-reference-scene .cronos-central-hologram{left:50%;top:var(--hud-center);transform:translate(-50%,-50%)!important;scale:1!important;filter:none}
 .cronos-reference-scene .cronos-central-hologram>div:first-child{width:var(--hud-orb)!important;height:var(--hud-orb)!important}
-.cronos-reference-scene .filament-aura{background:radial-gradient(circle,transparent 26%,#006bff15 39%,transparent 60%);background-size:auto;mask-image:none;opacity:.5}
+.cronos-reference-scene .filament-aura{background:radial-gradient(circle,transparent 25%,#0a53c51f 33%,#178aff1d 44%,transparent 62%);background-size:auto;mask-image:none;opacity:.7}
 .reference-voice-status{position:absolute;top:3%;left:50%;transform:translateX(-50%);display:grid;gap:10px;justify-items:center;color:#46ecff;font:600 14px 'Rajdhani',sans-serif;letter-spacing:.42em;white-space:nowrap;text-shadow:0 0 9px #00bfff90;pointer-events:none}
 .reference-voice-status i{width:160px;height:7px;background:repeating-linear-gradient(90deg,#44d8ff 0 1px,transparent 1px 4px);opacity:.5}
 .reference-voice-status[data-state=SPEAKING] i{animation:reference-voice 800ms ease-in-out infinite alternate;opacity:1}

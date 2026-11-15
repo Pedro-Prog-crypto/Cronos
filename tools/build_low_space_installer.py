@@ -1,4 +1,4 @@
-"""Build a self-contained, streaming R50 to R55 Windows updater.
+"""Build a self-contained, streaming R50 to R56 Windows updater.
 
 The ZIP is appended to the BAT and read there by Python's ZipFile. The user
 does not need a second temporary ZIP or a second full Cronos installation.
@@ -18,7 +18,7 @@ except ModuleNotFoundError:
 ROOT = Path(__file__).resolve().parents[1]
 ARCHIVE = ROOT / 'releases/CRONOS-Atualizacao-Preservando-Dados.zip'
 OUTPUT = ROOT / 'releases/INSTALADOR-CRONOS-R50-PRESERVANDO-DADOS.bat'
-REVISION = 'cronos-interface-referencia-2026-11-15-r55'
+REVISION = 'cronos-interface-referencia-2026-11-15-r56'
 
 HEADER = r"""@echo off
 setlocal
@@ -61,7 +61,7 @@ def build() -> tuple[Path, int]:
             raise ValueError('The update ZIP is missing required files.')
         manifest = json.loads(package.read('tools/interface_update_manifest.json'))
         if manifest.get('revision') != REVISION:
-            raise ValueError('The update ZIP is not the verified R55 revision.')
+            raise ValueError('The update ZIP is not the verified R56 revision.')
         if '.env' in names or 'config/providers.json' in names or any(name.startswith('vault/') for name in names):
             raise ValueError('Private data cannot enter the installer.')
     header = HEADER.replace('\n', '\r\n').encode('ascii')

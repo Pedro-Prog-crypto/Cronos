@@ -10,7 +10,7 @@ from playwright.sync_api import sync_playwright
 import numpy as np
 
 ROOT=Path(__file__).resolve().parents[1]
-OUT=ROOT/'docs/visual-audit-r55'
+OUT=ROOT/'docs/visual-audit-r56'
 INPUT=r"""(() => {
  const NativeWorker=window.Worker;
  window.__orbInput={};

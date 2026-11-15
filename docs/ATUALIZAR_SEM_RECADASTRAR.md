@@ -1,8 +1,8 @@
 # Atualização local preservando os dados
 
-O pacote `releases/CRONOS-Atualizacao-Preservando-Dados.zip` contém a atualização da interface e do holograma R55 e um aplicador local. Pode atualizar a pasta Cronos-R50 que já está instalada, sem alterar dependências. Ele preserva as integrações, mas não contém as chaves ou memórias do usuário; esses dados continuam na instalação original.
+O pacote `releases/CRONOS-Atualizacao-Preservando-Dados.zip` contém a atualização da interface e do holograma R56 e um aplicador local. Pode atualizar a pasta Cronos-R50 que já está instalada, sem alterar dependências. Ele preserva as integrações, mas não contém as chaves ou memórias do usuário; esses dados continuam na instalação original.
 
-Para quem já tem a R50 instalada e recebeu “Espaço insuficiente no disco” com o instalador completo, use `instalador.bat` da branch `feature/cronos-r55-hologram`. Ele contém a atualização no próprio arquivo, procura `%USERPROFILE%\Cronos-R50` ou deixa selecionar outra pasta, lê o conteúdo embutido sem gravar outro ZIP temporário e atualiza apenas arquivos de código diferentes. O aplicador verifica espaço antes de substituir arquivos e mantém backup dos arquivos alterados. Apague o download anterior de aproximadamente 146 MB para liberar espaço antes de baixar o novo BAT.
+Para quem já tem a R50 instalada e recebeu “Espaço insuficiente no disco” com o instalador completo, use `instalador.bat` da branch `feature/cronos-r56-procedural-hologram`. Ele contém a atualização no próprio arquivo, procura `%USERPROFILE%\Cronos-R50` ou deixa selecionar outra pasta, lê o conteúdo embutido sem gravar outro ZIP temporário e atualiza apenas arquivos de código diferentes. O aplicador verifica espaço antes de substituir arquivos e mantém backup dos arquivos alterados. Apague o download anterior de aproximadamente 146 MB para liberar espaço antes de baixar o novo BAT.
 
 1. Extraia em uma pasta temporária.
 2. Execute `Atualizar-Cronos-Preservando-Dados.bat`.

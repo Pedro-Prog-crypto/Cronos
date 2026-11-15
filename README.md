@@ -1,6 +1,6 @@
 # Cronos — assistente Windows (v0.5)
 
-Atualização R55: tela inicial limpa com holograma e botão azul do microfone; os cards e módulos abrem por voz. Os filamentos do holograma preservam mais linhas do vídeo e usam trechos distintos para escuta e fala. Para uma R50 já instalada, o `instalador.bat` da branch `feature/cronos-r55-hologram` aplica a atualização diretamente na pasta existente: lê o ZIP embutido no próprio BAT, copia apenas código diferente e preserva integrações e memórias. O instalador completo cria uma nova pasta e exige muito mais espaço livre. Veja [alterações e limites da validação](docs/NOVA-INTERFACE-REFERENCIA.md) e [atualização preservando dados](docs/ATUALIZAR_SEM_RECADASTRAR.md).
+Atualização R56: o holograma é desenhado inteiramente por código, com curvas LED luminosas à frente, dezesseis fios azuis finos ao fundo e pontos de luz em movimento. A tela inicial continua limpa; os cards e módulos abrem por voz. Para uma R50 já instalada, o `instalador.bat` da branch `feature/cronos-r56-procedural-hologram` atualiza a pasta existente e preserva integrações e memórias. Veja [o modelo do holograma](docs/HOLOGRAMA-R56.md) e [a atualização preservando dados](docs/ATUALIZAR_SEM_RECADASTRAR.md).
 
 Programa Windows com backend independente da interface. A versão anterior
 foi analisada como referência de arquitetura; sua interface, imagens, avatar e
