@@ -4,7 +4,7 @@ import {UpdateNotice} from './components/UpdateNotice';
 import React,{Suspense,lazy,useCallback,useEffect,useRef,useState} from 'react';
 import {Mic,X,Send,RotateCw,ImagePlus,FileArchive,MonitorUp,BookOpen,FileText,PanelsTopLeft,LayoutGrid,Globe2,ChartNoAxesColumn,SlidersHorizontal,Settings,UserRound,Folder} from 'lucide-react';
 import {ActionRouter,type CapabilityId} from './capabilities';
-import {routeHomeVoiceCommand,routeModuleVoiceCommand} from './homeVoiceCommand';
+import {routeModuleVoiceCommand} from './homeVoiceCommand';
 import {IntegratedNeuralStage} from './components/IntegratedNeuralStage';
 import {SpokenReferenceCards} from './components/SpokenReferenceCards';
 import {NewsReferenceCards} from './components/NewsReferenceCards';
@@ -64,6 +64,7 @@ export default function App(){
   const [notice,setNotice]=useState(''),[error,setError]=useState(false);
   const [chatOpen,setChatOpen]=useState(false),[module,setModule]=useState<string|null>(null);
   const [dashboardMenu,setDashboardMenu]=useState(false);
+  useEffect(()=>{const open=(event:KeyboardEvent)=>{if(event.ctrlKey&&event.shiftKey&&event.code==='KeyF'){event.preventDefault();setModule(null);setChatOpen(false);setEyeOpen(false);setStudyOpen(false);setDashboardMenu(value=>!value);}};window.addEventListener('keydown',open);return()=>window.removeEventListener('keydown',open);},[]);
   const [homeSection,setHomeSection]=useState<CapabilityId|null>(null);
   const [homePanelRequest,setHomePanelRequest]=useState(0);
   const [homePanelCloseRequest,setHomePanelCloseRequest]=useState(0);
@@ -106,7 +107,7 @@ export default function App(){
   const visualState=useRef<{topic:string;status:'loading'|'ready'|'failed';loaded_images:number;image_titles:string[]}|null>(null);
   const rememberVisualState=useCallback((state:{topic:string;status:'loading'|'ready'|'failed';loaded_images:number;image_titles:string[]})=>{visualState.current=state;},[]);
   const activeStudyPanel=useRef<string|null>(null),expectedStudyTurn=useRef<string|null>(null);
-  const changeStudyPanels=(update:(items:StudyPanelItem[])=>StudyPanelItem[])=>{const next=update(studyPanelsRef.current);studyPanelsRef.current=next;setStudyPanels(next);};
+  const changeStudyPanels=(update:(items:StudyPanelItem[])=>StudyPanelItem[])=>{const next=update(studyPanelsRef.current);const kept=next.filter(panel=>panel.locked||!panel.minimized);const old=next.filter(panel=>!panel.locked&&panel.minimized).slice(-12);const limited=next.filter(panel=>kept.includes(panel)||old.includes(panel));studyPanelsRef.current=limited;setStudyPanels(limited);};
   const addStudyPanel=(question:string,reply='',mode:'text'|'visual'='text',started=false)=>{
     const current=studyPanelsRef.current;
     const visible=current.filter(panel=>!panel.minimized);
@@ -264,17 +265,14 @@ export default function App(){
   const openAnalysis=(kind:AnalysisKind)=>{restoreWindow('analysis:'+kind);if(autoVoice&&canSpeak)voice.prepare();setAnalyses(previous=>previous.includes(kind)?previous:[...previous,kind]);setEyeOpen(false);setModule(null);setChatOpen(false);};
   const runCommand=(text:string)=>{
     const normalizedCommand=text.trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/^(?:kronos|cronos)[,\s:]+/i,'').replace(/[.!?]+$/,'').toLowerCase().replace(/\s+/g,' ');
-    if(/^(?:abrir|abra|abre|mostrar|mostre|exibir|exiba|ver) (?:o )?painel de funcoes$/.test(normalizedCommand)){setDashboardMenu(true);setHomeSection(null);setChatOpen(false);setModule(null);setEyeOpen(false);return true;}
+    if(/^(?:abrir|abra|abre|mostrar|mostre|exibir|exiba|ver) (?:(?:o )?painel de )?funcoes$/.test(normalizedCommand)){setDashboardMenu(true);setHomeSection(null);setChatOpen(false);setModule(null);setEyeOpen(false);return true;}
     if(/^(?:fechar|feche|fecha) (?:o )?painel de funcoes$/.test(normalizedCommand)){setDashboardMenu(false);return true;}
     const hold=cardHoldCommand(text);
     if(hold){const detail={...hold,matched:false};window.dispatchEvent(new CustomEvent('cronos:deck-command',{detail}));tell(detail.matched?'Card atualizado.':'Não encontrei esse card aberto.',!detail.matched);return true;}
     const mainBridge=(window as any).pywebview?.api;
-    const openSection=(section:CapabilityId)=>{setHomeSection(section);setDashboardMenu(false);setModule(null);setEyeOpen(false);setChatOpen(false);};
+    const openSection=(section:CapabilityId)=>{const target={system:'monitoring',memory:'database',connections:'integrations',analysis:'vision',settings:'security'} as const;setDashboardMenu(false);setModule(target[section as keyof typeof target]||'tools');setEyeOpen(false);setChatOpen(false);};
     const actions=new ActionRouter({system:()=>openSection('system'),memory:()=>openSection('memory'),connections:()=>openSection('connections'),analysis:()=>openSection('analysis'),settings:()=>openSection('settings'),studio:()=>{restoreWindow('studio');if(!studio)setStudio({brief:'',request:Date.now()});setModule(null);setEyeOpen(false);setChatOpen(false);},study:()=>{restoreWindow('study');setStudyOpen(true);setModule(null);setEyeOpen(false);setChatOpen(false);},internet:()=>{setModule('internet');},files:()=>openAnalysis('document'),chat:()=>{restoreWindow('chat');setChatOpen(true);}});
     if(actions.route(text))return true;
-    const homeCommand=routeHomeVoiceCommand(text);
-    if(homeCommand?.action==='open'){setHomePanelTarget(homeCommand.index);setHomeSection(null);setHomePanelRequest(value=>value+1);setChatOpen(false);setModule(null);setEyeOpen(false);return true;}
-    if(homeCommand?.action==='close'){newsVisible.current=false;setHomeSection(null);setHomePanelCloseRequest(value=>value+1);setShowSpokenCards(false);setNewsTurn(null);setModule(null);setModuleActivity('IDLE');setChatOpen(false);return true;}
     const moduleTarget=routeModuleVoiceCommand(text);
     if(moduleTarget!==null){restoreWindow('module');setModule(moduleIds[moduleTarget]);setHomeSection(null);setChatOpen(false);setEyeOpen(false);return true;}
     if(asksToReplayImages(text)){
@@ -361,7 +359,7 @@ export default function App(){
     const text=value.trim();if(!text)return;if(!audio&&localCommand(text,eyeOpen)?.type==='presence'){runCommand(text);setDraft('');return;}if(inFlight.current){setDraft(text);tell('Sua pergunta foi reconhecida e está guardada no campo. Aguarde a resposta atual ou pressione Esc antes de enviar.',true);return;}if(!audio&&runCommand(text)){setDraft('');return;}
     const detailedTurn=detailedExplanationRef.current;
     if(!connected){tell('A conexão automática ainda não está disponível. Feche e abra o Kronos novamente.',true);return;}
-    const newsRequest=isDailyNewsRequest(text);
+    let newsRequest=isDailyNewsRequest(text);
     newsVisible.current=newsRequest;
     setNewsTurn(newsRequest?{loading:true,articles:[]}:null);
     const previousVisualState=visualState.current?{...visualState.current,visible:Boolean(studyPanelsRef.current.some(panel=>panel.id===focusedStudyPanel&&panel.mode==='visual')&&!chatOpen&&!moduleActive&&!eyeActive&&!studyActive&&!studioActive)}:undefined;
@@ -424,9 +422,9 @@ export default function App(){
         if(stremioCommand(recognized)){controller.abort();runCommand(recognized);return;}if(music.current?.handle(recognized)){controller.abort();voice.stop();setChatOpen(false);return;}
         voiceAllowed=true;if(audio)turnLatency.recognition_ms=Math.round(performance.now()-turnLatency.started);
         if(runCommand(recognized)){controller.abort();return;}
-        applyCardRequest(recognized);question=recognized;presentationMode=cardRequest(recognized)===true?null:detailedTurn?'visual':explanationMode(recognized);showStudyText=Boolean(presentationMode);if(!showStudyText)focusStudyPanel(null);if(showStudyText){if(!studyPanelId)studyPanelId=addStudyPanel(question,previewIntro,presentationMode||'text');if(studyPanelId)updateStudyPanel(studyPanelId,question,previewIntro);}else if(studyPanelId&&!studyPanelsRef.current.find(panel=>panel.id===studyPanelId)?.reply){closeStudyPanel(studyPanelId);studyPanelId=null;}setDisplayTurn({question,source,reply:previewIntro});
+        newsRequest=isDailyNewsRequest(recognized);newsVisible.current=newsRequest;setNewsTurn(newsRequest?{loading:true,articles:[]}:null);applyCardRequest(recognized);question=recognized;presentationMode=cardRequest(recognized)===true?null:detailedTurn?'visual':explanationMode(recognized);showStudyText=Boolean(presentationMode);if(!showStudyText)focusStudyPanel(null);if(showStudyText){if(!studyPanelId)studyPanelId=addStudyPanel(question,previewIntro,presentationMode||'text');if(studyPanelId)updateStudyPanel(studyPanelId,question,previewIntro);}else if(studyPanelId&&!studyPanelsRef.current.find(panel=>panel.id===studyPanelId)?.reply){closeStudyPanel(studyPanelId);studyPanelId=null;}setDisplayTurn({question,source,reply:previewIntro});
       },audio,tool=>{if(version!==turnVersion.current||controller.signal.aborted||!newsRequest||!newsVisible.current)return;setNewsTurn({loading:false,articles:newsArticlesFromTools([tool as ToolResult])});});if(version!==turnVersion.current||controller.signal.aborted)return;if(audio&&result.recognized_text)microphone.acknowledge();if(result.ignored){turnLatency.status='cancelled';saveLatency(turnLatency);const heard=result.recognized_text||text;if(studyPanelId&&!studyPanelsRef.current.find(panel=>panel.id===studyPanelId)?.reply)closeStudyPanel(studyPanelId);setDisplayTurn({question:heard,source,reply:''});tell(prefsRef.current?.called_only?'Ouvi sua fala, mas “Responder só após ser chamado” está ligado. Comece a frase com “Cronos” ou desligue essa opção no painel de Entendimento de Linguagem.':'Ouvi a fala, mas não consegui concluir a resposta. Tente novamente.',true);return;}if(audio&&!voiceAllowed&&result.recognized_text){if(runCommand(result.recognized_text))return;voiceAllowed=true;}textArrived();if(!voiced)turnLatency.chat_ms=Math.round(performance.now()-turnLatency.started);if(!turnLatency.voiceExpected)turnLatency.status='completed';saveLatency(turnLatency);session.current=result.session_id;const finalQuestion=result.recognized_text||text;presentationMode=cardRequest(finalQuestion)===true?null:detailedTurn?'visual':explanationMode(finalQuestion);showStudyText=Boolean(presentationMode);if(!showStudyText)focusStudyPanel(null);if(showStudyText){if(!studyPanelId)studyPanelId=addStudyPanel(finalQuestion,result.reply,presentationMode||'text');if(studyPanelId)updateStudyPanel(studyPanelId,finalQuestion,result.reply);}else if(studyPanelId&&!studyPanelsRef.current.find(panel=>panel.id===studyPanelId)?.reply){closeStudyPanel(studyPanelId);studyPanelId=null;}lastAnswer.current={question:finalQuestion,source,reply:result.reply};if(pendingHeardContext===interruptedContext.current)interruptedContext.current=null;if(result.recognized_text)applyCardRequest(result.recognized_text);setDisplayTurn({question:finalQuestion,source,reply:result.reply});setGraphRevision(value=>value+1);
-      const turnTools:ToolResult[]=result.tool_results||[];setTools(old=>[...old,...turnTools]);
+      const turnTools:ToolResult[]=result.tool_results||[];setTools(old=>[...old,...turnTools].slice(-100));
       if(newsRequest&&newsVisible.current)setNewsTurn({loading:false,articles:newsArticlesFromTools(turnTools)});
       if(showStudyText&&studyPanelId){const references=studyReferences(turnTools);if(references.length)changeStudyPanels(items=>items.map(panel=>panel.id===studyPanelId?{...panel,references}:panel));}
       const filmResult=result.tool_results?.find((r:any)=>r.name==='stremio_search'&&r.status==='completed');if(filmResult?.result){setStremio(filmResult.result);setModule(null);setChatOpen(false);}

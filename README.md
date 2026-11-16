@@ -1,5 +1,7 @@
 # Cronos — assistente Windows (v0.5)
 
+Atualização R61: a tela inicial não carrega mais cards predefinidos nem telemetria. “Notícias do dia” mostra um card central por vez, com manchetes reais retornadas pela busca. O painel de funções abre por voz (“abrir painel de funções”) ou Ctrl+Shift+F e permite pesquisar os módulos existentes. O histórico visual é limitado para evitar acúmulo após muitas perguntas. Instale pela branch `feature/cronos-r61-dynamic-cards-clean-home` com `instalador.bat`.
+
 Atualização R60: “abrir painel de funções” mostra uma grade pesquisável com os módulos e ações já existentes. Durante notícias do dia, a telemetria e os cards do computador ficam ocultos; a apresentação mostra somente as notícias recebidas. O holograma e a tela inicial não foram alterados. Atualize pela branch `feature/cronos-r60-functions-news-only` usando `instalador.bat`, preservando dados da instalação.
 
 

@@ -20,7 +20,7 @@ export function HologramDeck({cards,label,onClose,activeCue,finished=false,initi
   lastCue.current=activeCue;setActive(activeCue);
   setVisited(old=>Array.from(new Set([...old,...Array.from({length:activeCue+1},(_,i)=>i)])).sort((a,b)=>a-b));
  },[activeCue,cards.length]);
- useEffect(()=>{if(finished){setVisited(cards.map((_,i)=>i));setActive(null);}},[finished,cards.length]);
+ useEffect(()=>{if(finished&&variant!=='news'){setVisited(cards.map((_,i)=>i));setActive(null);}},[finished,cards.length,variant]);
  useEffect(()=>{
   const command=(event:Event)=>{
    const detail=(event as CustomEvent<{mode:'pin'|'unpin';target:string;matched?:boolean}>).detail;
@@ -35,7 +35,7 @@ export function HologramDeck({cards,label,onClose,activeCue,finished=false,initi
  },[cards,active]);
  useLayoutEffect(()=>{if(document.activeElement?.closest('[data-miniature="true"]'))controls.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();},[active]);
  const history=visited.filter(i=>i!==active&&i<cards.length);
- const visibleHistory=active!==null&&viewport.width<700?history.filter(i=>pinned.has(cards[i].id)||history.slice(-3).includes(i)):history;
+ const visibleHistory=variant==='news'?[]:active!==null&&viewport.width<700?history.filter(i=>pinned.has(cards[i].id)||history.slice(-3).includes(i)):history;
  return <section className="hologram-deck" aria-label={label} data-mode={active===null?'overview':'focus'} data-variant={variant}>
   <div className="hologram-deck-plane">{visited.filter(i=>i<cards.length&&(active===null||active===i||visibleHistory.includes(i))).map(index=>{
    const card=cards[index],focused=active===index;
@@ -52,8 +52,8 @@ export function HologramDeck({cards,label,onClose,activeCue,finished=false,initi
   <nav className="hologram-deck-controls" aria-label="Navegar entre os cards" ref={controls}>
    <button aria-label="Card anterior" disabled={active===0} onClick={()=>choose(active===null?cards.length-1:Math.max(0,active-1))}><ChevronLeft size={16}/></button>
    <span role="status">{active===null?'VISÃO GERAL':`${String((active??0)+1).padStart(2,'0')} / ${String(cards.length).padStart(2,'0')}`}</span>
-   <button aria-label={active===cards.length-1?'Concluir apresentação':'Próximo card'} disabled={active===null} onClick={()=>{if(active===cards.length-1)overview();else choose((active??-1)+1);}}><ChevronRight size={16}/></button>
-   <button aria-label="Ver todos os cards" aria-pressed={active===null} onClick={overview}><LayoutGrid size={16}/></button>
+   <button aria-label={active===cards.length-1?'Concluir apresentação':'Próximo card'} disabled={active===null||variant==='news'&&active===cards.length-1} onClick={()=>{if(active===cards.length-1)overview();else choose((active??-1)+1);}}><ChevronRight size={16}/></button>
+   {variant!=='news'&&<button aria-label="Ver todos os cards" aria-pressed={active===null} onClick={overview}><LayoutGrid size={16}/></button>}
    <button aria-label="Fechar cards" onClick={onClose}><X size={16}/></button>
   </nav>
  </section>;
