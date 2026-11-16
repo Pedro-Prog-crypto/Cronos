@@ -79,7 +79,7 @@ export default function App(){
   const [newsTurn,setNewsTurn]=useState<{loading:boolean;articles:NewsArticle[]}|null>(null);
   const newsVisible=useRef(false);
   const spokenCards=useRef(false);
-  const applyCardRequest=(text:string,_typed=false)=>{const requested=cardRequest(text);spokenCards.current=requested===true;setShowSpokenCards(requested===true);};
+  const applyCardRequest=(text:string,_typed=false)=>{const requested=cardRequest(text);const subject=/\b(?:clima|tempo|previs[aã]o do tempo|pol[ií]tica|pol[ií]tico)\b/i.test(text);const question=/\?|\b(?:qual|quais|como|quando|explique|explica|fale|conte|not[ií]cias|hoje|agora)\b/i.test(text);const show=requested===true||(requested!==false&&subject&&question);spokenCards.current=show;setShowSpokenCards(show);};
   const [displayTurn,setDisplayTurn]=useState<{question:string;source:'text'|'transcription';reply:string}|null>(null);
   const lastAnswer=useRef<{question:string;source:'text'|'transcription';reply:string}|null>(null);
   const interruptedContext=useRef<string|null>(null);
